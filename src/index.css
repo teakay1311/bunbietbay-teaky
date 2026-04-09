@@ -1,0 +1,82 @@
+@import "tailwindcss";
+
+@theme {
+  --color-secondary: #4d616c;
+  --color-outline-variant: #bec8cb;
+  --color-secondary-fixed: #d0e6f3;
+  --color-tertiary-fixed: #7af7e1;
+  --color-error-container: #ffdad6;
+  --color-primary: #00515f;
+  --color-surface-dim: #d9dadb;
+  --color-tertiary-container: #006e61;
+  --color-primary-fixed: #aaedff;
+  --color-on-primary-fixed: #001f26;
+  --color-on-primary: #ffffff;
+  --color-surface-container-highest: #e1e3e4;
+  --color-primary-container: #006b7d;
+  --color-on-error: #ffffff;
+  --color-on-secondary-fixed: #081e27;
+  --color-surface-container-lowest: #ffffff;
+  --color-on-tertiary-container: #75f2dc;
+  --color-outline: #6f797c;
+  --color-inverse-primary: #84d2e6;
+  --color-on-secondary-container: #536772;
+  --color-surface-variant: #e1e3e4;
+  --color-on-tertiary-fixed: #00201b;
+  --color-secondary-container: #d0e6f3;
+  --color-surface: #f8f9fa;
+  --color-tertiary-fixed-dim: #5bdac6;
+  --color-on-tertiary: #ffffff;
+  --color-on-secondary-fixed-variant: #364954;
+  --color-surface-container-high: #e7e8e9;
+  --color-inverse-surface: #2e3132;
+  --color-on-secondary: #ffffff;
+  --color-on-surface: #191c1d;
+  --color-on-error-container: #93000a;
+  --color-surface-bright: #f8f9fa;
+  --color-surface-tint: #006879;
+  --color-surface-container-low: #f3f4f5;
+  --color-secondary-fixed-dim: #b4cad6;
+  --color-on-tertiary-fixed-variant: #005046;
+  --color-on-background: #191c1d;
+  --color-on-primary-container: #9be9fe;
+  --color-inverse-on-surface: #f0f1f2;
+  --color-tertiary: #005449;
+  --color-background: #f8f9fa;
+  --color-on-surface-variant: #3f484b;
+  --color-on-primary-fixed-variant: #004e5c;
+  --color-primary-fixed-dim: #84d2e6;
+  --color-surface-container: #edeeef;
+  --color-error: #ba1a1a;
+
+  --font-headline: "Be Vietnam Pro", sans-serif;
+  --font-body: "Be Vietnam Pro", sans-serif;
+  --font-label: "Manrope", sans-serif;
+}
+
+@layer utilities {
+  .editorial-gradient {
+    background: linear-gradient(135deg, #00515f 0%, #006b7d 100%);
+  }
+  .glass-panel {
+    background: rgba(255, 255, 255, 0.8);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+  }
+  .editorial-shadow {
+    box-shadow: 0 12px 24px rgba(25, 28, 29, 0.06);
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
+
+body {
+  font-family: 'Be Vietnam Pro', sans-serif;
+  background-color: var(--color-surface);
+  color: var(--color-on-surface);
+}
