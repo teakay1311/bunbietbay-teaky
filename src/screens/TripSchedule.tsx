@@ -72,7 +72,9 @@ export function TripSchedule() {
 
   if (!trip) return <Layout><div>Trip not found</div></Layout>;
 
-  const filteredActivities = tripActivities.filter(a => a.date === selectedDate);
+  const filteredActivities = tripActivities
+    .filter(a => a.date === selectedDate)
+    .sort((a, b) => normalizeTimeForInput(a.time).localeCompare(normalizeTimeForInput(b.time)));
 
   const formatDateLabel = (dateString: string) => {
     return formatLocalDate(dateString, { day: '2-digit', month: '2-digit' });

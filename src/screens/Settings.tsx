@@ -15,7 +15,7 @@ export function Settings() {
   ];
 
   return (
-    <Layout hideNavLinks>
+    <Layout>
       <div className="max-w-3xl mx-auto">
         <div className="mb-8">
           <h1 className="font-headline text-4xl font-extrabold tracking-tighter text-primary">Cài đặt hệ thống</h1>
