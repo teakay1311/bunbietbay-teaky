@@ -463,6 +463,14 @@ export function Settings() {
                           Đăng xuất tài khoản
                         </button>
                       )}
+                      {!session && isConfigured && (
+                        <Link
+                          to="/login"
+                          className="rounded-2xl bg-slate-950 px-4 py-3 text-center font-semibold text-white transition hover:opacity-95"
+                        >
+                          Đăng nhập tài khoản cloud
+                        </Link>
+                      )}
                     </div>
                   </div>
 

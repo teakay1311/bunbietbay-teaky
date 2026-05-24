@@ -70,13 +70,13 @@ function ProtectedRoutes() {
 }
 
 function PublicLoginRoute() {
-  const { requiresAuth, session, isAuthLoading } = useAuth();
+  const { isConfigured, session, isAuthLoading } = useAuth();
 
   if (isAuthLoading) {
     return <BootLoadingFallback />;
   }
 
-  if (!requiresAuth) {
+  if (!isConfigured) {
     return <Navigate to="/trips" replace />;
   }
 
