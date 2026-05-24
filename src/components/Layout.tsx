@@ -1,37 +1,173 @@
-import type { ReactNode } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { ReactNode, useState, useEffect, useLayoutEffect } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Icons } from './Icons';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { useSettings } from '../context/SettingsContext';
+import { useAppContext } from '../context/AppContext';
+import { useAuth } from '../context/AuthContext';
+import { useNotebook } from '../context/NotebookContext';
+import { motion, AnimatePresence } from 'framer-motion';
 
 export function cn(...inputs: (string | undefined | null | false)[]) {
   return twMerge(clsx(inputs));
 }
 
-export function TopNav({ hideNavLinks = false }: { hideNavLinks?: boolean }) {
-  const { language } = useSettings();
-  
+function ThemeToggleButton() {
+  const { themeMode, setThemeMode } = useSettings();
+
+  const handleToggle = () => {
+    if (themeMode === 'light') setThemeMode('dark');
+    else if (themeMode === 'dark') setThemeMode('system');
+    else setThemeMode('light');
+  };
+
+  const Icon = themeMode === 'system' ? Icons.Laptop : themeMode === 'dark' ? Icons.Moon : Icons.Sun;
+
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 bg-slate-50/80 dark:bg-slate-950/80 backdrop-blur-xl border-none">
-      <div className="flex justify-between items-center w-full px-6 py-4 max-w-7xl mx-auto">
-        <div className="flex items-center gap-8">
-          <span className="text-2xl font-bold tracking-tighter text-teal-900 dark:text-teal-50 font-headline">Bunbietbay & Teakay's Trips</span>
+    <button
+      type="button"
+      onClick={handleToggle}
+      className="flex h-11 w-11 items-center justify-center rounded-2xl bg-surface-container-low text-primary dark:text-white transition-all hover:scale-105 active:scale-95 hover:bg-surface-container hover:shadow-md"
+      title={`Giao diện: ${themeMode === 'system' ? 'Hệ thống' : themeMode === 'dark' ? 'Tối' : 'Sáng'}`}
+    >
+      <Icon className="h-5 w-5" />
+    </button>
+  );
+}
+
+export function TopNav({ hideNavLinks = false }: { hideNavLinks?: boolean }) {
+  const { language, isPrivacyMode, setIsPrivacyMode } = useSettings();
+  const { currentUserProfile } = useAppContext();
+  const { session, requiresAuth, pendingInvitations } = useAuth();
+  const { pendingNotebookInvitations } = useNotebook();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const logoSrc = `${import.meta.env.BASE_URL}app-logo.svg`;
+  const isTripsHome = location.pathname === '/' || location.pathname === '/trips';
+  const shouldShowBackButton = !isTripsHome;
+  const pendingAccessCount = pendingInvitations.length + pendingNotebookInvitations.length;
+
+  const handleGoBack = () => {
+    if (window.history.length > 1) {
+      navigate(-1);
+      return;
+    }
+
+    navigate('/trips');
+  };
+
+  return (
+    <header className="fixed left-0 right-0 top-0 z-50 border-b border-white/10 dark:border-white/5 bg-surface/75 backdrop-blur-2xl shadow-[0_4px_32px_-12px_rgba(0,0,0,0.1)]">
+      <div className="mx-auto flex w-full max-w-[92rem] items-center justify-between px-4 py-4 md:px-6">
+        <div className="flex min-w-0 items-center gap-3 md:gap-6">
+          {shouldShowBackButton && (
+            <button
+              type="button"
+              onClick={handleGoBack}
+              aria-label={language === 'vi' ? 'Quay lại' : 'Go back'}
+              className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-surface-container-low text-primary dark:text-white transition-all hover:scale-105 active:scale-95 hover:bg-surface-container hover:shadow-md"
+            >
+              <Icons.ChevronLeft className="h-5 w-5" />
+            </button>
+          )}
+          <Link to="/trips" className="group flex min-w-0 items-center gap-3 active:scale-95 transition-transform">
+            <img src={logoSrc} alt="Bunbietbay Trips" className="h-11 w-11 rounded-2xl shadow-sm transition-transform group-hover:scale-105" />
+            <div className="min-w-0">
+              <span className="block truncate font-headline text-xl font-black tracking-[-0.04em] text-on-surface md:text-2xl">
+                Bunbietbay Trips
+              </span>
+              <span className="block truncate font-label text-[11px] uppercase tracking-[0.2em] text-secondary dark:text-gray-300">
+                {session ? 'Workspace có phân quyền' : requiresAuth ? 'Đăng nhập để vào workspace' : 'Local + cloud ready'}
+              </span>
+            </div>
+          </Link>
           {!hideNavLinks && (
-            <nav className="hidden md:flex gap-6">
-              <Link to="/trips" className="text-teal-700 dark:text-teal-300 font-semibold border-b-2 border-teal-700 dark:border-teal-300 pb-1 font-headline">
-                {language === 'vi' ? 'Chuyến đi của tôi' : 'My Trips'}
+            <nav className="hidden items-center gap-6 md:flex">
+              <Link
+                to="/trips"
+                className={cn(
+                  'font-headline text-sm font-semibold transition-colors',
+                  location.pathname.startsWith('/trips') ? 'text-on-surface' : 'text-secondary dark:text-gray-300 hover:text-primary dark:text-white',
+                )}
+              >
+                {language === 'vi' ? 'Chuyến đi' : 'Trips'}
+              </Link>
+              <Link
+                to="/notebook"
+                className={cn(
+                  'font-headline text-sm font-semibold transition-colors flex items-center gap-2',
+                  location.pathname.startsWith('/notebook') ? 'text-on-surface' : 'text-secondary dark:text-gray-300 hover:text-primary dark:text-white',
+                )}
+              >
+                <Icons.MapPin className="w-4 h-4" />
+                Sổ tay
+              </Link>
+              <Link
+                to="/settings"
+                className={cn(
+                  'font-headline text-sm font-semibold transition-colors',
+                  location.pathname.startsWith('/settings') ? 'text-on-surface' : 'text-secondary dark:text-gray-300 hover:text-primary dark:text-white',
+                )}
+              >
+                {language === 'vi' ? 'Cài đặt' : 'Settings'}
               </Link>
             </nav>
           )}
         </div>
-        <div className="flex items-center gap-4">
-          <Link to="/settings" className="p-2 hover:bg-slate-200/50 dark:hover:bg-slate-800/50 rounded-lg transition-all active:scale-95 duration-200 text-teal-900 dark:text-teal-100">
-            <Icons.Settings className="w-5 h-5" />
-          </Link>
-          <div className="h-10 w-10 rounded-full overflow-hidden border-2 border-primary-container">
-            <img alt="User profile avatar" className="h-full w-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAjwOJoLBnX2JUwc6BEa1Cn1c3_UWWgZ7Afkm8Fu91xEhtIyApn6Ixv7fFndNqHZ-c4nDmsVjUFlQOPQrYsWPJ3CzKGevXo9czk8AlAIj31yc6SZ1563yCVcLFUL6-mUm5BJ5b7zI_eHID_1OtdT0AUUGQGYMOrYMhq8lbcfETnLjaWLOLtv3UTPraASuYiqtD1qGrBnUFXm2ihpNGJLzOY2cmIsi8Go6KgtC4wLXigJzz4m7idh74Oc-O2bq1JK4DAlS7sTpE7eVs" />
-          </div>
+
+        <div className="flex items-center gap-3">
+          {!session && requiresAuth ? (
+            <Link
+              to="/login"
+              className="rounded-2xl bg-slate-950 px-4 py-2.5 font-headline text-sm font-bold text-white transition hover:opacity-95"
+            >
+              Đăng nhập
+            </Link>
+          ) : (
+            <>
+              <ThemeToggleButton />
+              <button
+                type="button"
+                onClick={() => setIsPrivacyMode(!isPrivacyMode)}
+                className="flex h-11 w-11 items-center justify-center rounded-2xl bg-surface-container-low text-primary dark:text-white transition-all hover:scale-105 active:scale-95 hover:bg-surface-container hover:shadow-md"
+                title={isPrivacyMode ? 'Hiện số tiền' : 'Ẩn số tiền'}
+              >
+                {isPrivacyMode ? <Icons.EyeOff className="h-5 w-5" /> : <Icons.Eye className="h-5 w-5" />}
+              </button>
+              <Link
+                to="/settings"
+                className="flex h-11 w-11 items-center justify-center rounded-2xl bg-surface-container-low text-primary dark:text-white transition-all hover:scale-105 active:scale-95 hover:bg-surface-container hover:shadow-md"
+                title="Cài đặt"
+              >
+                <Icons.Settings className="h-5 w-5" />
+              </Link>
+              <Link to="/settings" className="group flex items-center gap-3 rounded-full bg-surface-container-low pl-1 pr-4 py-1 shadow-sm transition-all hover:bg-surface-container active:scale-95">
+                <div className="relative h-10 w-10">
+                  <div className="h-full w-full overflow-hidden rounded-full border-2 border-primary-container">
+                    <img
+                      alt={currentUserProfile?.displayName || 'User profile avatar'}
+                      className="h-full w-full object-cover"
+                      src={currentUserProfile?.avatar || 'https://api.dicebear.com/9.x/glass/svg?seed=traveler'}
+                      loading="lazy"
+                      decoding="async"
+                    />
+                  </div>
+                  {pendingAccessCount > 0 && (
+                    <div className="absolute -right-1 -top-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full border-2 border-surface bg-red-500 px-1 text-[10px] font-bold leading-none text-white shadow-sm">
+                      {pendingAccessCount}
+                    </div>
+                  )}
+                </div>
+                <div className="hidden text-left md:block">
+                  <p className="font-headline text-sm font-bold text-on-surface">{currentUserProfile?.displayName || 'Khách'}</p>
+                  <p className="font-label text-[10px] uppercase tracking-[0.2em] text-secondary dark:text-gray-300">
+                    {session ? 'Đã kết nối tài khoản' : 'Chế độ local'}
+                  </p>
+                </div>
+              </Link>
+            </>
+          )}
         </div>
       </div>
     </header>
@@ -41,7 +177,8 @@ export function TopNav({ hideNavLinks = false }: { hideNavLinks?: boolean }) {
 export function BottomNav({ tripId }: { tripId: string }) {
   const location = useLocation();
   const { language } = useSettings();
-  
+  const activePath = location.pathname;
+
   const navItems = [
     { path: `/trips/${tripId}/overview`, icon: Icons.LayoutDashboard, label: language === 'vi' ? 'Tổng quan' : 'Overview' },
     { path: `/trips/${tripId}/schedule`, icon: Icons.Calendar, label: language === 'vi' ? 'Lịch trình' : 'Schedule' },
@@ -52,24 +189,37 @@ export function BottomNav({ tripId }: { tripId: string }) {
     { path: `/trips/${tripId}/photos`, icon: Icons.Image, label: language === 'vi' ? 'Thư viện' : 'Photos' },
   ];
 
+  useEffect(() => {
+    const nav = document.getElementById('bottom-nav');
+    if (nav) {
+      const active = nav.querySelector('[data-active="true"]');
+      if (active) {
+        requestAnimationFrame(() => {
+          active.scrollIntoView({ behavior: 'auto', inline: 'center', block: 'nearest' });
+        });
+      }
+    }
+  }, [activePath]);
+
   return (
-    <nav className="fixed bottom-0 left-0 w-full flex justify-around items-center px-2 pb-8 pt-4 bg-slate-50/80 dark:bg-slate-950/80 backdrop-blur-xl z-50 rounded-t-3xl shadow-[0_-12px_24px_rgba(0,0,0,0.06)] md:max-w-xl md:left-1/2 md:-translate-x-1/2 md:mb-6 md:rounded-3xl">
+    <nav id="bottom-nav" className="fixed bottom-0 left-0 z-50 flex w-full items-center justify-start overflow-x-auto no-scrollbar md:justify-around rounded-t-3xl bg-surface/85 px-4 pb-[max(env(safe-area-inset-bottom),0.75rem)] pt-4 shadow-[0_-24px_48px_-12px_rgba(0,0,0,0.12)] backdrop-blur-2xl md:left-1/2 md:mb-6 md:max-w-3xl md:-translate-x-1/2 md:rounded-3xl border-t border-white/10 dark:border-white/5 md:border-none ring-1 ring-white/10 dark:ring-white/5">
       {navItems.map((item) => {
-        const isActive = location.pathname === item.path;
+        const isActive = activePath === item.path;
         const Icon = item.icon;
         return (
           <Link
             key={item.path}
             to={item.path}
+            data-active={isActive ? "true" : "false"}
             className={cn(
-              "flex flex-col items-center justify-center px-6 py-2 transition-all duration-300 ease-out active:scale-90",
-              isActive 
-                ? "bg-teal-100 dark:bg-teal-900/40 text-teal-900 dark:text-teal-100 rounded-2xl" 
-                : "text-slate-400 dark:text-slate-500 hover:text-teal-600 dark:hover:text-teal-300"
+              'group flex flex-col min-w-[76px] shrink-0 items-center justify-center rounded-2xl px-3 py-2 transition-all duration-300 ease-out hover:-translate-y-1 hover:bg-surface-container-low active:scale-90',
+              isActive
+                ? 'bg-primary/15 text-primary dark:text-white shadow-inner'
+                : 'text-outline hover:text-primary dark:text-white',
             )}
           >
-            <Icon className={cn("w-6 h-6 mb-1", isActive && "fill-current")} />
-            <span className="font-label text-[10px] uppercase tracking-widest font-bold">{item.label}</span>
+            <Icon className={cn('mb-1 h-6 w-6 transition-transform group-hover:scale-110', isActive && 'fill-current')} />
+            <span className="font-label text-[10px] font-bold uppercase tracking-widest">{item.label}</span>
           </Link>
         );
       })}
@@ -77,14 +227,81 @@ export function BottomNav({ tripId }: { tripId: string }) {
   );
 }
 
-export function Layout({ children, hideNavLinks = false, tripId }: { children: ReactNode, hideNavLinks?: boolean, tripId?: string }) {
+function GlobalBottomNav() {
+  const location = useLocation();
+  const { language } = useSettings();
+
+  const navItems = [
+    { path: '/trips', icon: Icons.Compass, label: language === 'vi' ? 'Chuyến đi' : 'Trips' },
+    { path: '/notebook', icon: Icons.MapPin, label: language === 'vi' ? 'Sổ tay' : 'Notebook' },
+    { path: '/settings', icon: Icons.Settings, label: language === 'vi' ? 'Cài đặt' : 'Settings' },
+  ];
+
   return (
-    <div className="min-h-screen bg-surface font-body text-on-surface pb-32">
-      <TopNav hideNavLinks={hideNavLinks} />
-      <main className="max-w-7xl mx-auto px-6 pt-28">
-        {children}
+    <nav className="fixed bottom-0 left-0 z-50 flex w-full items-center justify-around md:hidden rounded-t-3xl bg-surface/85 px-4 pb-[max(env(safe-area-inset-bottom),0.75rem)] pt-3 shadow-[0_-24px_48px_-12px_rgba(0,0,0,0.12)] backdrop-blur-2xl border-t border-white/10 dark:border-white/5 ring-1 ring-white/10 dark:ring-white/5">
+      {navItems.map((item) => {
+        const isActive = location.pathname === item.path || location.pathname.startsWith(item.path + '/');
+        const Icon = item.icon;
+        return (
+          <Link
+            key={item.path}
+            to={item.path}
+            className={cn(
+              'group flex flex-col items-center justify-center rounded-2xl px-5 py-2 transition-all duration-300 ease-out active:scale-90',
+              isActive
+                ? 'bg-primary/15 text-primary dark:text-white'
+                : 'text-outline hover:text-primary dark:text-white',
+            )}
+          >
+            <Icon className={cn('mb-1 h-6 w-6 transition-transform', isActive && 'fill-current')} />
+            <span className="font-label text-[10px] font-bold uppercase tracking-widest">{item.label}</span>
+          </Link>
+        );
+      })}
+    </nav>
+  );
+}
+
+export function Layout({ children, hideNavLinks = false, tripId }: { children: ReactNode; hideNavLinks?: boolean; tripId?: string }) {
+  const [isOffline, setIsOffline] = useState(!navigator.onLine);
+  const location = useLocation();
+
+  useEffect(() => {
+    const handleOffline = () => setIsOffline(true);
+    const handleOnline = () => setIsOffline(false);
+    window.addEventListener('offline', handleOffline);
+    window.addEventListener('online', handleOnline);
+    return () => {
+      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('online', handleOnline);
+    };
+  }, []);
+
+  return (
+    <div className="min-h-screen w-full overflow-x-hidden bg-surface font-body text-on-surface pb-40 md:pb-32">
+      {isOffline && (
+        <div className="fixed top-0 left-0 right-0 z-[60] bg-[#FA4D56] text-white text-[11px] uppercase tracking-widest font-bold text-center py-1.5 flex items-center justify-center gap-2 shadow-sm">
+          <Icons.AlertTriangle className="w-3.5 h-3.5" /> Đang ngoại tuyến. Dữ liệu sẽ lưu trên máy.
+        </div>
+      )}
+      <div className={isOffline ? "pt-7" : ""}>
+        <TopNav hideNavLinks={hideNavLinks} />
+      </div>
+      <main className={`mx-auto max-w-[92rem] px-4 md:px-6 ${isOffline ? 'pt-[8.5rem]' : 'pt-28'}`}>
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.div
+            key={location.pathname}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15, ease: 'easeOut' }}
+            style={{ willChange: 'opacity' }}
+          >
+            {children}
+          </motion.div>
+        </AnimatePresence>
       </main>
-      {tripId && <BottomNav tripId={tripId} />}
+      {tripId ? <BottomNav tripId={tripId} /> : !hideNavLinks && <GlobalBottomNav />}
     </div>
   );
 }

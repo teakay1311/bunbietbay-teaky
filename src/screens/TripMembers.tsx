@@ -1,173 +1,466 @@
-import { useParams } from 'react-router-dom';
-import type { FormEvent } from 'react';
-import { Layout } from '../components/Layout';
-import { Icons } from '../components/Icons';
-import { useAppContext } from '../context/AppContext';
-import { useEffect, useState } from 'react';
-import { Modal } from '../components/Modal';
-import { Member } from '../context/AppContext';
-import { formatLocalDate } from '../utils/date';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useLocation, useParams } from 'react-router-dom';
 
-const CUTE_AVATARS = [
-  'https://api.dicebear.com/7.x/notionists/svg?seed=Mimi',
-  'https://api.dicebear.com/7.x/notionists/svg?seed=Coco',
-  'https://api.dicebear.com/7.x/notionists/svg?seed=Lola',
-  'https://api.dicebear.com/7.x/notionists/svg?seed=Buster',
-  'https://api.dicebear.com/7.x/notionists/svg?seed=Garfield',
-  'https://api.dicebear.com/7.x/notionists/svg?seed=Felix',
-  'https://api.dicebear.com/7.x/notionists/svg?seed=Salem',
-  'https://api.dicebear.com/7.x/notionists/svg?seed=Oreo',
+import { Icons } from '../components/Icons';
+import { Modal } from '../components/Modal';
+import { CURRENCIES, useAppContext, type CalculatedMember, type TripAccessRole, type TripInvitation } from '../context/AppContext';
+import { useSettings, useFormatMoney } from '../context/SettingsContext';
+import { useFeedback } from '../context/FeedbackContext';
+import { formatLocalDateTime } from '../utils/date';
+import { getErrorMessage } from '../utils/errorMessage';
+import { motion } from 'framer-motion';
+import { SortSelect } from '../components/SortSelect';
+import { chainComparators, compareDate, compareNumber, compareText, stableSort, type SortOption } from '../utils/listSort';
+
+const ROLE_OPTIONS: Array<{ value: Exclude<TripAccessRole, 'owner'>; label: string; description: string }> = [
+  { value: 'admin', label: 'Admin', description: 'Quản lý thành viên, nội dung và thiết lập chuyến đi' },
+  { value: 'editor', label: 'Editor', description: 'Chỉnh sửa lịch trình, chi tiêu, địa điểm, ảnh và hành lý' },
+  { value: 'viewer', label: 'Viewer', description: 'Chỉ xem, không chỉnh sửa nội dung chuyến đi' },
 ];
+
+type MemberSortKey = 'roleAsc' | 'nameAsc' | 'spentDesc' | 'spentAsc' | 'balanceDesc' | 'balanceAsc' | 'joinedDesc' | 'joinedAsc';
+type InvitationSortKey = 'createdDesc' | 'createdAsc' | 'statusAsc' | 'roleAsc' | 'emailAsc';
+
+const MEMBER_SORT_OPTIONS: Array<SortOption<MemberSortKey>> = [
+  { value: 'roleAsc', label: 'Vai trò' },
+  { value: 'nameAsc', label: 'Tên A-Z' },
+  { value: 'spentDesc', label: 'Chi nhiều nhất' },
+  { value: 'spentAsc', label: 'Chi ít nhất' },
+  { value: 'balanceDesc', label: 'Số dư cao nhất' },
+  { value: 'balanceAsc', label: 'Số dư thấp nhất' },
+  { value: 'joinedDesc', label: 'Mới tham gia' },
+  { value: 'joinedAsc', label: 'Cũ nhất' },
+];
+
+const INVITATION_SORT_OPTIONS: Array<SortOption<InvitationSortKey>> = [
+  { value: 'createdDesc', label: 'Mới nhất' },
+  { value: 'createdAsc', label: 'Cũ nhất' },
+  { value: 'statusAsc', label: 'Trạng thái' },
+  { value: 'roleAsc', label: 'Vai trò' },
+  { value: 'emailAsc', label: 'Email A-Z' },
+];
+
+const ROLE_RANK: Record<TripAccessRole, number> = {
+  owner: 0,
+  admin: 1,
+  editor: 2,
+  viewer: 3,
+};
 
 export function TripMembers() {
   const { id } = useParams();
-  const { trips, setCurrentTripId, addMemberToTrip } = useAppContext();
-  const [isAddMemberOpen, setIsAddMemberOpen] = useState(false);
-  const [selectedAvatar, setSelectedAvatar] = useState(CUTE_AVATARS[0]);
-  const [selectedMember, setSelectedMember] = useState<Member | null>(null);
+  const location = useLocation();
+  const {
+    trips,
+    invitations,
+    setCurrentTripId,
+    inviteTripMember,
+    revokeTripInvitation,
+    updateTripMemberRole,
+    removeTripMember,
+    currentUserProfile,
+  } = useAppContext();
+  const { showToast, confirm } = useFeedback();
+  const { uiDensity } = useSettings();
+  const formatMoney = useFormatMoney();
+  const [isInviteOpen, setIsInviteOpen] = useState(false);
+  const [selectedMember, setSelectedMember] = useState<CalculatedMember | null>(null);
+  const [inviteRole, setInviteRole] = useState<Exclude<TripAccessRole, 'owner'>>('editor');
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteError, setInviteError] = useState<string | null>(null);
+  const [isInviting, setIsInviting] = useState(false);
+  const [busyMembershipId, setBusyMembershipId] = useState<string | null>(null);
+  const [memberSortBy, setMemberSortBy] = useState<MemberSortKey>('roleAsc');
+  const [invitationSortBy, setInvitationSortBy] = useState<InvitationSortKey>('createdDesc');
 
-  const handleAddMember = (e: FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const formData = new FormData(e.currentTarget);
-    addMemberToTrip(id!, {
-      name: formData.get('name') as string,
-      role: formData.get('role') as string,
-      avatar: selectedAvatar,
-      phone: formData.get('phone') as string,
-      email: formData.get('email') as string,
-      birthdate: formData.get('birthdate') as string,
-    });
-    setIsAddMemberOpen(false);
-  };
-  
   useEffect(() => {
-    if (id) setCurrentTripId(id);
+    if (id) {
+      setCurrentTripId(id);
+    }
   }, [id, setCurrentTripId]);
 
-  const trip = trips.find(t => t.id === id);
-  if (!trip) return <Layout><div>Trip not found</div></Layout>;
+  useEffect(() => {
+    const state = location.state as { openInviteMemberModal?: boolean } | null;
+    if (state?.openInviteMemberModal) {
+      setIsInviteOpen(true);
+    }
+  }, [location.state]);
+
+  const trip = trips.find((item) => item.id === id);
+  const tripInvitations = useMemo(
+    () => invitations.filter((invitation) => invitation.tripId === id),
+    [id, invitations],
+  );
+
+  if (!trip) {
+    return <div>Trip not found</div>;
+  }
+
+  const canManageMembers = trip.permissions.canManageMembers;
+  const baseCurrencySymbol = CURRENCIES[trip.baseCurrency || 'VND'].symbol;
+  const currentMembership = trip.members.find((member) => member.id === currentUserProfile?.id) ?? null;
+  const sortedMembers = stableSort<CalculatedMember>(trip.members, chainComparators<CalculatedMember>((a, b) => {
+    switch (memberSortBy) {
+      case 'nameAsc': return compareText(a.displayName, b.displayName, 'asc');
+      case 'spentDesc': return compareNumber(a.spent, b.spent, 'desc');
+      case 'spentAsc': return compareNumber(a.spent, b.spent, 'asc');
+      case 'balanceDesc': return compareNumber(a.balance, b.balance, 'desc');
+      case 'balanceAsc': return compareNumber(a.balance, b.balance, 'asc');
+      case 'joinedDesc': return compareDate(a.createdAt, b.createdAt, 'desc');
+      case 'joinedAsc': return compareDate(a.createdAt, b.createdAt, 'asc');
+      case 'roleAsc':
+      default: return compareNumber(ROLE_RANK[a.role], ROLE_RANK[b.role], 'asc');
+    }
+  }, (a, b) => compareText(a.displayName, b.displayName, 'asc')));
+  const sortedInvitations = stableSort<TripInvitation>(tripInvitations, chainComparators<TripInvitation>((a, b) => {
+    switch (invitationSortBy) {
+      case 'createdAsc': return compareDate(a.createdAt, b.createdAt, 'asc');
+      case 'statusAsc': return compareText(a.status, b.status, 'asc');
+      case 'roleAsc': return compareNumber(ROLE_RANK[a.role], ROLE_RANK[b.role], 'asc');
+      case 'emailAsc': return compareText(a.email, b.email, 'asc');
+      case 'createdDesc':
+      default: return compareDate(a.createdAt, b.createdAt, 'desc');
+    }
+  }, (a, b) => compareText(a.email, b.email, 'asc')));
+
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    show: { opacity: 1, transition: { staggerChildren: 0.02 } }
+  };
+
+  const itemVariants = {
+    hidden: { opacity: 0, y: 15 },
+    show: { opacity: 1, y: 0, transition: { ease: 'easeOut', duration: 0.2 } }
+  };
 
   return (
-    <Layout tripId={trip.id}>
-      <section className="mb-12">
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-          <div>
-            <span className="font-label text-xs uppercase tracking-[0.2em] text-secondary font-bold mb-2 block">Thành viên chuyến đi</span>
-            <h1 className="text-4xl md:text-5xl font-extrabold tracking-tighter text-primary font-headline">{trip.title}</h1>
-          </div>
-          <button onClick={() => setIsAddMemberOpen(true)} className="bg-primary text-on-primary px-6 py-3 rounded-lg font-semibold hover:opacity-90 transition-all flex items-center gap-2 editorial-shadow">
-            <Icons.UserPlus className="w-5 h-5" />
-            Mời thành viên
-          </button>
+    <motion.div variants={containerVariants} initial="hidden" animate="show" className="pb-10">
+      <motion.section variants={itemVariants} className="mb-10 flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <p className="font-label text-xs font-bold uppercase tracking-[0.26em] text-secondary dark:text-gray-300">Quản lý truy cập chuyến đi</p>
+          <h1 className="mt-3 font-headline text-4xl font-black tracking-[-0.05em] text-on-surface md:text-5xl">{trip.title}</h1>
+          <p className="mt-3 max-w-2xl text-lg leading-8 text-secondary dark:text-gray-300">
+            Phân quyền theo email và theo vai trò. Chỉ owner hoặc admin mới có thể thêm người, đổi quyền, hoặc thu hồi quyền truy cập.
+          </p>
         </div>
-      </section>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {trip.members.map((member) => (
-          <div key={member.id} onClick={() => setSelectedMember(member)} className="bg-surface-container-lowest p-6 rounded-xl editorial-shadow flex items-center gap-4 group hover:translate-y-[-4px] transition-all duration-300 cursor-pointer">
-            <img alt={member.name} className="w-16 h-16 rounded-full object-cover border-2 border-primary/10 bg-surface-container" src={member.avatar} />
+        {canManageMembers && (
+          <button
+            type="button"
+            onClick={() => setIsInviteOpen(true)}
+            className="inline-flex items-center gap-2 rounded-2xl bg-slate-950 px-6 py-4 font-headline text-lg font-bold text-white transition hover:opacity-95 dark:bg-white dark:text-slate-950"
+          >
+            <Icons.UserPlus className="h-5 w-5" />
+            Mời theo email
+          </button>
+        )}
+      </motion.section>
+
+      <motion.div variants={itemVariants} className="mb-8 grid gap-6 xl:grid-cols-[1fr_0.94fr]">
+        <div className="rounded-[2rem] bg-surface-container-lowest p-6 shadow-[0_18px_40px_rgba(0,0,0,0.06)]">
+          <div className="mb-6 flex flex-col items-start gap-4 md:flex-row md:items-center md:justify-between">
             <div>
-              <h3 className="font-headline font-bold text-xl text-on-surface group-hover:text-primary transition-colors">{member.name}</h3>
-              <p className="font-label text-xs text-on-surface-variant uppercase tracking-wider font-bold mt-1">{member.role}</p>
+              <p className="font-label text-xs font-bold uppercase tracking-[0.24em] text-secondary dark:text-gray-300">Current members</p>
+              <h2 className="mt-2 font-headline text-3xl font-black tracking-[-0.04em] text-on-surface">{trip.members.length} người đang có quyền</h2>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <SortSelect value={memberSortBy} options={MEMBER_SORT_OPTIONS} onChange={setMemberSortBy} />
+              {currentMembership && (
+                <div className="rounded-full bg-slate-950 px-4 py-2 text-xs font-bold uppercase tracking-[0.22em] text-white">
+                  Bạn là {currentMembership.role}
+                </div>
+              )}
             </div>
           </div>
-        ))}
-      </div>
 
-      <Modal isOpen={!!selectedMember} onClose={() => setSelectedMember(null)} title="Thông tin thành viên">
-        {selectedMember && (
-          <div className="space-y-6">
-            <div className="flex flex-col items-center gap-4">
-              <img alt={selectedMember.name} className="w-32 h-32 rounded-full object-cover border-4 border-primary/20 bg-surface-container" src={selectedMember.avatar} />
-              <div className="text-center">
-                <h3 className="font-headline font-bold text-3xl text-on-surface">{selectedMember.name}</h3>
-                <p className="font-label text-sm text-primary uppercase tracking-wider font-bold mt-1">{selectedMember.role}</p>
+          <div className="space-y-4">
+            {sortedMembers.map((member) => (
+              <motion.div variants={itemVariants} key={member.membershipId} className="rounded-[1.5rem] bg-surface-container-low p-4">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="flex min-w-0 items-center gap-4">
+                    <img src={member.avatar} alt={member.displayName} className="h-16 w-16 shrink-0 rounded-full border-4 border-surface-container-lowest object-cover" />
+                    <div className="min-w-0 flex flex-col justify-center gap-0.5">
+                      <div className="flex items-center gap-2">
+                        <p className="truncate font-headline text-xl font-black tracking-[-0.03em] text-on-surface">{member.displayName}</p>
+                        <span className="shrink-0 rounded-full bg-surface-container-lowest px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-on-surface">
+                          {member.role}
+                        </span>
+                      </div>
+                      <p className="truncate text-sm text-secondary dark:text-gray-300">{member.email}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedMember(member)}
+                      className="rounded-xl border border-outline-variant/60 px-3 py-2 text-sm font-semibold text-on-surface transition hover:border-primary hover:text-primary dark:text-white"
+                    >
+                      Xem chi tiết
+                    </button>
+                    {canManageMembers && member.role !== 'owner' && member.id !== currentUserProfile?.id && (
+                      <>
+                        <select
+                          value={member.role}
+                          disabled={busyMembershipId === member.membershipId}
+                          onChange={async (event) => {
+                            try {
+                              setBusyMembershipId(member.membershipId);
+                              await updateTripMemberRole(member.membershipId, event.target.value as TripAccessRole);
+                            } catch (error) {
+                              showToast({
+                                tone: 'error',
+                                title: 'Không thể cập nhật quyền',
+                                message: getErrorMessage(error, 'Không thể cập nhật quyền thành viên.'),
+                              });
+                            } finally {
+                              setBusyMembershipId(null);
+                            }
+                          }}
+                          className="rounded-xl border border-outline-variant/60 bg-surface-container-lowest px-3 py-2 text-sm font-semibold text-on-surface outline-none transition focus:border-primary"
+                        >
+                          {ROLE_OPTIONS.map((option) => (
+                            <option key={option.value} value={option.value}>{option.label}</option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          disabled={busyMembershipId === member.membershipId}
+                          onClick={async () => {
+                            const shouldRemove = await confirm({
+                              title: `Thu hồi quyền của ${member.displayName}`,
+                              message: 'Người này sẽ không còn truy cập được chuyến đi cho tới khi được mời lại.',
+                              confirmLabel: 'Thu hồi quyền',
+                              cancelLabel: 'Giữ lại',
+                              tone: 'danger',
+                            });
+                            if (!shouldRemove) {
+                              return;
+                            }
+
+                            try {
+                              setBusyMembershipId(member.membershipId);
+                              await removeTripMember(member.membershipId);
+                            } catch (error) {
+                              showToast({
+                                tone: 'error',
+                                title: 'Không thể thu hồi quyền',
+                                message: getErrorMessage(error, 'Không thể thu hồi quyền.'),
+                              });
+                            } finally {
+                              setBusyMembershipId(null);
+                            }
+                          }}
+                          className="rounded-xl border border-error px-3 py-2 text-sm font-semibold text-error transition hover:bg-error-container"
+                        >
+                          Thu hồi
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+
+        <div className="space-y-6">
+          <section className="rounded-[2rem] bg-slate-950 p-6 text-white shadow-[0_18px_40px_rgba(0,0,0,0.06)]">
+            <p className="font-label text-xs font-bold uppercase tracking-[0.24em] text-teal-200">Role matrix</p>
+            <div className="mt-5 space-y-4">
+              <div>
+                <p className="font-headline text-xl font-bold">Owner</p>
+                <p className="text-sm leading-7 text-slate-300">Toàn quyền, bao gồm quản trị thành viên, chuyển vai trò, chỉnh sửa toàn bộ nội dung và quản trị thiết lập chuyến đi.</p>
+              </div>
+              {ROLE_OPTIONS.map((option) => (
+                <div key={option.value}>
+                  <p className="font-headline text-xl font-bold">{option.label}</p>
+                  <p className="text-sm leading-7 text-slate-300">{option.description}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section className="rounded-[2rem] bg-surface-container-lowest p-6 shadow-[0_18px_40px_rgba(0,0,0,0.06)]">
+            <div className="mb-5 flex items-center justify-between">
+              <div>
+                <p className="font-label text-xs font-bold uppercase tracking-[0.24em] text-secondary dark:text-gray-300">Pending invitations</p>
+                <h2 className="mt-2 font-headline text-2xl font-black tracking-[-0.04em] text-on-surface">Lời mời đang chờ</h2>
+              </div>
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <SortSelect value={invitationSortBy} options={INVITATION_SORT_OPTIONS} onChange={setInvitationSortBy} className="py-2" />
+                <div className="rounded-full bg-surface-container-low px-3 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-secondary dark:text-gray-300">
+                  {tripInvitations.filter((invitation) => invitation.status === 'pending').length} pending
+                </div>
               </div>
             </div>
-            <div className="bg-surface-container-low rounded-2xl p-6 space-y-4">
-              {selectedMember.phone && (
-                <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary">
-                    <Icons.Phone className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <p className="font-label text-xs font-bold text-secondary">Số điện thoại</p>
-                    <p className="font-body font-medium">{selectedMember.phone}</p>
-                  </div>
+
+            <div className="space-y-3">
+              {tripInvitations.length === 0 && (
+                <div className="rounded-2xl bg-surface-container-low px-4 py-4 text-sm text-secondary dark:text-gray-300">
+                  Chưa có lời mời nào cho chuyến đi này.
                 </div>
               )}
-              {selectedMember.email && (
-                <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary">
-                    <Icons.Mail className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <p className="font-label text-xs font-bold text-secondary">Email</p>
-                    <p className="font-body font-medium">{selectedMember.email}</p>
+              {sortedInvitations.map((invitation) => (
+                <div key={invitation.id} className="rounded-2xl bg-surface-container-low px-4 py-4">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="font-semibold text-on-surface">{invitation.email}</p>
+                      <p className="text-sm text-secondary dark:text-gray-300">Vai trò: {invitation.role} · Trạng thái: {invitation.status}</p>
+                      <p className="mt-1 text-xs uppercase tracking-[0.18em] text-secondary dark:text-gray-300">
+                        {formatLocalDateTime(invitation.createdAt)}
+                      </p>
+                    </div>
+                    {canManageMembers && invitation.status === 'pending' && (
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            try {
+                              await inviteTripMember(trip.id, {
+                                email: invitation.email,
+                                role: invitation.role,
+                              });
+                              showToast({
+                                tone: 'success',
+                                title: 'Đã gửi lại lời mời',
+                                message: `Lời mời đã được gửi lại cho ${invitation.email}.`,
+                              });
+                            } catch (error) {
+                              showToast({
+                                tone: 'error',
+                                title: 'Không thể gửi lại lời mời',
+                                message: getErrorMessage(error, 'Không thể gửi lại lời mời.'),
+                              });
+                            }
+                          }}
+                          className="rounded-xl border border-outline-variant/60 px-3 py-2 text-xs font-bold uppercase tracking-[0.18em] text-on-surface"
+                        >
+                          Gửi lại
+                        </button>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            try {
+                              await revokeTripInvitation(invitation.id);
+                            } catch (error) {
+                              showToast({
+                                tone: 'error',
+                                title: 'Không thể thu hồi lời mời',
+                                message: getErrorMessage(error, 'Không thể thu hồi lời mời.'),
+                              });
+                            }
+                          }}
+                          className="rounded-xl border border-error px-3 py-2 text-xs font-bold uppercase tracking-[0.18em] text-error"
+                        >
+                          Thu hồi
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
-              )}
-              {selectedMember.birthdate && (
-                <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary">
-                    <Icons.Calendar className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <p className="font-label text-xs font-bold text-secondary">Ngày sinh</p>
-                    <p className="font-body font-medium">{formatLocalDate(selectedMember.birthdate, { day: '2-digit', month: '2-digit', year: 'numeric' })}</p>
-                  </div>
-                </div>
-              )}
+              ))}
+            </div>
+          </section>
+        </div>
+      </motion.div>
+
+      <Modal isOpen={isInviteOpen} onClose={() => { if (!isInviting) { setIsInviteOpen(false); setInviteError(null); } }} title="Mời người tham gia bằng email">
+        <form
+          className="space-y-4"
+          onSubmit={async (event: FormEvent<HTMLFormElement>) => {
+            event.preventDefault();
+            try {
+              setIsInviting(true);
+              setInviteError(null);
+              await inviteTripMember(trip.id, { email: inviteEmail, role: inviteRole });
+              setInviteEmail('');
+              setInviteRole('editor');
+              setIsInviteOpen(false);
+            } catch (error) {
+              setInviteError(getErrorMessage(error, 'Không thể gửi lời mời.'));
+            } finally {
+              setIsInviting(false);
+            }
+          }}
+        >
+          {inviteError && (
+            <div className="rounded-xl bg-error-container px-4 py-3 text-sm font-medium text-on-error-container">
+              {inviteError}
+            </div>
+          )}
+          <div>
+            <label className="mb-2 block font-label text-xs font-bold uppercase tracking-[0.2em] text-secondary dark:text-gray-300">Email</label>
+            <input
+              type="email"
+              required
+              value={inviteEmail}
+              onChange={(event) => setInviteEmail(event.target.value)}
+              placeholder="member@example.com"
+              className="density-control w-full rounded-2xl border border-outline-variant/60 bg-surface-container-low outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+            />
+          </div>
+          <div>
+            <label className="mb-2 block font-label text-xs font-bold uppercase tracking-[0.2em] text-secondary dark:text-gray-300">Vai trò</label>
+            <div className="space-y-3">
+              {ROLE_OPTIONS.map((option) => (
+                <label key={option.value} className={`block cursor-pointer rounded-2xl border px-4 py-4 transition ${inviteRole === option.value ? 'border-primary bg-primary/5' : 'border-outline-variant/60 bg-surface-container-low'}`}>
+                  <input
+                    type="radio"
+                    name="role"
+                    value={option.value}
+                    checked={inviteRole === option.value}
+                    onChange={() => setInviteRole(option.value)}
+                    className="sr-only"
+                  />
+                  <p className="font-headline text-lg font-bold text-on-surface">{option.label}</p>
+                  <p className="mt-1 text-sm text-secondary dark:text-gray-300">{option.description}</p>
+                </label>
+              ))}
+            </div>
+          </div>
+          <button type="submit" disabled={isInviting} className="density-button w-full rounded-2xl bg-slate-950 font-headline text-lg font-bold text-white transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-60">
+            {isInviting ? 'Đang gửi lời mời...' : 'Gửi lời mời'}
+          </button>
+        </form>
+      </Modal>
+
+      <Modal isOpen={Boolean(selectedMember)} onClose={() => setSelectedMember(null)} title="Thông tin thành viên">
+        {selectedMember && (
+          <div className="space-y-5">
+            <div className="flex items-center gap-4">
+              <img src={selectedMember.avatar} alt={selectedMember.displayName} className="h-24 w-24 rounded-full border-4 border-surface-container-lowest object-cover" />
+              <div>
+                <p className="font-headline text-3xl font-black tracking-[-0.04em] text-on-surface">{selectedMember.displayName}</p>
+                <p className="mt-2 text-sm text-secondary dark:text-gray-300">{selectedMember.email}</p>
+                <p className="mt-2 inline-flex rounded-full bg-slate-950 px-3 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-white">
+                  {selectedMember.role}
+                </p>
+              </div>
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="rounded-2xl bg-surface-container-low px-4 py-4">
+                <p className="font-label text-xs font-bold uppercase tracking-[0.2em] text-secondary dark:text-gray-300">Số điện thoại</p>
+                <p className="mt-2 font-medium text-on-surface">{selectedMember.phone || 'Chưa cập nhật'}</p>
+              </div>
+              <div className="rounded-2xl bg-surface-container-low px-4 py-4">
+                <p className="font-label text-xs font-bold uppercase tracking-[0.2em] text-secondary dark:text-gray-300">Ngày sinh</p>
+                <p className="mt-2 font-medium text-on-surface">{selectedMember.birthdate || 'Chưa cập nhật'}</p>
+              </div>
+              <div className="rounded-2xl bg-surface-container-low px-4 py-4">
+                <p className="font-label text-xs font-bold uppercase tracking-[0.2em] text-secondary dark:text-gray-300">Đã thanh toán</p>
+                <p className="mt-2 font-medium text-on-surface">{formatMoney(selectedMember.spent, baseCurrencySymbol)}</p>
+              </div>
+              <div className="rounded-2xl bg-surface-container-low px-4 py-4">
+                <p className="font-label text-xs font-bold uppercase tracking-[0.2em] text-secondary dark:text-gray-300">Số dư</p>
+                <p className="mt-2 font-medium text-on-surface">
+                  {selectedMember.balance >= 0 ? '+' : '-'} {formatMoney(Math.abs(selectedMember.balance), baseCurrencySymbol)}
+                </p>
+              </div>
             </div>
           </div>
         )}
       </Modal>
-
-      <Modal isOpen={isAddMemberOpen} onClose={() => setIsAddMemberOpen(false)} title="Thêm thành viên mới">
-        <form onSubmit={handleAddMember} className="space-y-4">
-          <div>
-            <label className="block font-label text-xs font-bold text-secondary mb-2">Chọn Avatar</label>
-            <div className="grid grid-cols-4 gap-2">
-              {CUTE_AVATARS.map((avatar, idx) => (
-                <img 
-                  key={idx} 
-                  src={avatar} 
-                  alt={`Avatar ${idx}`} 
-                  className={`w-14 h-14 rounded-full cursor-pointer border-2 transition-all ${selectedAvatar === avatar ? 'border-primary ring-2 ring-primary ring-offset-2' : 'border-transparent hover:border-primary/50'}`}
-                  onClick={() => setSelectedAvatar(avatar)}
-                />
-              ))}
-            </div>
-          </div>
-          <div>
-            <label className="block font-label text-xs font-bold text-secondary mb-1">Tên thành viên</label>
-            <input required name="name" type="text" placeholder="VD: Nguyễn Văn A" className="w-full px-4 py-3 rounded-xl bg-surface-container-low border border-outline-variant/50 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all" />
-          </div>
-          <div>
-            <label className="block font-label text-xs font-bold text-secondary mb-1">Vai trò</label>
-            <input required name="role" type="text" defaultValue="Thành viên" className="w-full px-4 py-3 rounded-xl bg-surface-container-low border border-outline-variant/50 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all" />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block font-label text-xs font-bold text-secondary mb-1">Số điện thoại</label>
-              <input name="phone" type="tel" placeholder="VD: 0901234567" className="w-full px-4 py-3 rounded-xl bg-surface-container-low border border-outline-variant/50 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all" />
-            </div>
-            <div>
-              <label className="block font-label text-xs font-bold text-secondary mb-1">Ngày sinh</label>
-              <input name="birthdate" type="date" className="w-full px-4 py-3 rounded-xl bg-surface-container-low border border-outline-variant/50 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all" />
-            </div>
-          </div>
-          <div>
-            <label className="block font-label text-xs font-bold text-secondary mb-1">Email</label>
-            <input name="email" type="email" placeholder="VD: email@example.com" className="w-full px-4 py-3 rounded-xl bg-surface-container-low border border-outline-variant/50 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all" />
-          </div>
-          <div className="pt-4">
-            <button type="submit" className="w-full bg-primary text-on-primary py-4 rounded-xl font-bold hover:opacity-90 transition-opacity">
-              Thêm thành viên
-            </button>
-          </div>
-        </form>
-      </Modal>
-    </Layout>
+    </motion.div>
   );
 }

@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
   --color-secondary: #4d616c;
@@ -56,27 +57,195 @@
 
 @layer utilities {
   .editorial-gradient {
-    background: linear-gradient(135deg, #00515f 0%, #006b7d 100%);
+    background: linear-gradient(135deg, var(--color-editorial-start, #00515f) 0%, var(--color-editorial-end, #006b7d) 100%);
   }
+
   .glass-panel {
     background: rgba(255, 255, 255, 0.8);
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
   }
+
   .editorial-shadow {
     box-shadow: 0 12px 24px rgba(25, 28, 29, 0.06);
   }
+
+  .motion-lift {
+    transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
+  }
+
+  .motion-lift:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 16px 32px rgba(25, 28, 29, 0.08);
+  }
+
+  .image-sheen {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .image-sheen::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(110deg, transparent 0%, rgba(255, 255, 255, 0.22) 42%, transparent 58%);
+    transform: translateX(-120%);
+    pointer-events: none;
+  }
+
+  .focus-ring {
+    outline: 2px solid transparent;
+    outline-offset: 2px;
+  }
+
+  .focus-ring:focus-visible {
+    outline-color: var(--color-primary);
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .image-sheen:hover::after {
+      animation: sheen 900ms ease;
+    }
+
+    .soft-pulse {
+      animation: softPulse 2.6s ease-in-out infinite;
+    }
+  }
+
+  @keyframes sheen {
+    to {
+      transform: translateX(120%);
+    }
+  }
+
+  @keyframes softPulse {
+    0%, 100% {
+      box-shadow: 0 0 0 0 rgba(0, 81, 95, 0.16);
+    }
+    50% {
+      box-shadow: 0 0 0 8px rgba(0, 81, 95, 0);
+    }
+  }
+
   .no-scrollbar::-webkit-scrollbar {
     display: none;
   }
+
   .no-scrollbar {
     -ms-overflow-style: none;
     scrollbar-width: none;
   }
 }
 
+html.light {
+  color-scheme: light;
+}
+
+html.dark {
+  color-scheme: dark;
+  --color-surface-dim: #0b0f10;
+  --color-surface-bright: #1a2224;
+  --color-surface: #11181a;
+  --color-surface-container-lowest: #162022;
+  --color-surface-container-low: #1a2628;
+  --color-surface-container: #223033;
+  --color-surface-container-high: #2b3a3d;
+  --color-surface-container-highest: #36484c;
+  --color-surface-variant: #314145;
+  --color-background: #0f1517;
+  --color-on-background: #edf4f4;
+  --color-on-surface: #edf4f4;
+  --color-on-surface-variant: #bed0d3;
+  --color-outline: #8ea4a8;
+  --color-outline-variant: #4f666a;
+  --color-secondary: #c5dbe6;
+  --color-secondary-container: #2d414b;
+  --color-on-secondary: #ffffff;
+  --color-on-secondary-container: #dcecf5;
+
+  --color-primary: #ffffff;
+  --color-on-primary: #000000;
+  --color-primary-container: #004e5c;
+  --color-on-primary-container: #9ee9fe;
+
+  --color-tertiary: #5ddac7;
+  --color-on-tertiary: #003830;
+  --color-tertiary-container: #005046;
+  --color-on-tertiary-container: #7cf8df;
+
+  --color-error: #ffb4ab;
+  --color-on-error: #690005;
+  --color-error-container: #5f1d1d;
+  --color-on-error-container: #ffd9d4;
+
+  --color-inverse-surface: #edf4f4;
+  --color-inverse-on-surface: #1a2022;
+}
+
 body {
   font-family: 'Be Vietnam Pro', sans-serif;
   background-color: var(--color-surface);
   color: var(--color-on-surface);
+  transition: background-color 180ms ease, color 180ms ease;
+}
+
+body[data-density='cozy'] {
+  --density-card-padding: 1.5rem;
+  --density-stack-gap: 1.5rem;
+  --density-input-y: 1rem;
+  --density-input-x: 1rem;
+  --density-button-y: 1rem;
+  --density-button-x: 1.25rem;
+  --density-modal-padding: 1.5rem;
+}
+
+body[data-density='compact'] {
+  --density-card-padding: 1rem;
+  --density-stack-gap: 0.75rem;
+  --density-input-y: 0.75rem;
+  --density-input-x: 0.875rem;
+  --density-button-y: 0.75rem;
+  --density-button-x: 1rem;
+  --density-modal-padding: 1rem;
+}
+
+.density-card {
+  padding: var(--density-card-padding, 1.5rem) !important;
+}
+
+.density-stack {
+  gap: var(--density-stack-gap, 1.5rem) !important;
+}
+
+.density-control {
+  padding-top: var(--density-input-y, 1rem) !important;
+  padding-bottom: var(--density-input-y, 1rem) !important;
+  padding-left: var(--density-input-x, 1rem) !important;
+  padding-right: var(--density-input-x, 1rem) !important;
+}
+
+.density-button {
+  padding-top: var(--density-button-y, 1rem) !important;
+  padding-bottom: var(--density-button-y, 1rem) !important;
+  padding-left: var(--density-button-x, 1.25rem) !important;
+  padding-right: var(--density-button-x, 1.25rem) !important;
+}
+
+.density-modal-shell {
+  padding: var(--density-modal-padding, 1.5rem) !important;
+}
+
+body[data-density='compact'] main {
+  max-width: 88rem;
+}
+
+body[data-density='compact'] .density-hero {
+  min-height: 0 !important;
+  padding: 1rem !important;
+}
+
+body[data-density='compact'] .density-table th,
+body[data-density='compact'] .density-table td {
+  padding-top: 0.6rem !important;
+  padding-bottom: 0.6rem !important;
 }

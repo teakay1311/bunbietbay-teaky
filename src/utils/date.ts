@@ -27,6 +27,22 @@ export function getLocalDateStringWithOffset(days: number, date = new Date()) {
   return getLocalDateString(nextDate);
 }
 
+export function getLocalDateRange(startDate: string, endDate: string) {
+  const start = parseLocalDate(startDate);
+  const end = parseLocalDate(endDate);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start) {
+    return [];
+  }
+
+  const dates: string[] = [];
+  const cursor = new Date(start);
+  while (cursor <= end) {
+    dates.push(getLocalDateString(cursor));
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return dates;
+}
+
 export function normalizeTimeForInput(time: string) {
   const trimmedTime = time.trim();
   if (!trimmedTime) return '';
@@ -50,4 +66,14 @@ export function normalizeTimeForInput(time: string) {
   }
 
   return `${String(normalizedHours).padStart(2, '0')}:${minutes}`;
+}
+
+export function formatLocalDateTime(dateString: string, locale = 'vi-VN') {
+  return new Date(dateString).toLocaleString(locale, {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 }
