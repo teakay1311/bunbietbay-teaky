@@ -2,6 +2,7 @@ import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 import { TripRecord, Activity, SavedPlace, PackingItem, Expense, Photo } from '../context/AppContext';
 import { formatLocalDate } from './date';
+import { formatIcsDate } from './ics';
 import { getCategoryLabel, PLACE_TYPE_OPTIONS } from './tripCategories';
 
 type ExportData = {
@@ -120,11 +121,6 @@ function generateExpensesCsv(expenses: Expense[]) {
         expense.isSettlement ? 'yes' : 'no',
     ]);
     return [header, ...rows].map((row) => row.map(escapeCsv).join(',')).join('\n');
-}
-
-function formatIcsDate(date: string, time: string) {
-    const normalizedTime = /^\d{2}:\d{2}$/.test(time) ? time : '09:00';
-    return `${date.replaceAll('-', '')}T${normalizedTime.replace(':', '')}00`;
 }
 
 function generateIcs(data: ExportData) {

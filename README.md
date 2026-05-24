@@ -27,8 +27,10 @@ This repo now supports 2 runtime modes:
 ## Configure Supabase Auth And Workspace Data
 
 1. Create a Supabase project.
-2. In Supabase SQL Editor, run:
-   `supabase/schema.sql`
+2. In Supabase SQL Editor, run these files in order:
+   - `supabase/schema.sql`
+   - `supabase/add_trip_enhancements.sql`
+   - `supabase/accept_invitation_function.sql`
 3. Copy `.env.example` to `.env`.
 4. Set:
    - `VITE_SUPABASE_URL`
