@@ -187,26 +187,26 @@ export function TripPlaces() {
 
   return (
     <motion.div variants={containerVariants} initial="hidden" animate="show" className="pb-10">
-      <motion.div variants={itemVariants} className="flex justify-between items-end mb-8">
+      <motion.div variants={itemVariants} className="mb-6 flex flex-col items-stretch justify-between gap-4 md:mb-8 md:flex-row md:items-end">
         <div>
-          <p className="font-label text-xs uppercase tracking-[0.2em] text-secondary dark:text-gray-300 font-bold mb-2">Lưu trữ thông tin</p>
-          <h1 className="font-headline text-4xl font-extrabold tracking-tighter text-primary dark:text-white">Địa điểm & Liên hệ</h1>
+          <p className="mb-2 font-label text-[11px] font-bold uppercase tracking-[0.16em] text-secondary dark:text-gray-300 md:text-xs md:tracking-[0.2em]">Lưu trữ thông tin</p>
+          <h1 className="font-headline text-2xl font-extrabold text-primary dark:text-white md:text-4xl md:tracking-tighter">Địa điểm & Liên hệ</h1>
         </div>
         {canEdit && (
-          <button onClick={() => { setEditingPlace(null); setIsAddOpen(true); }} className="bg-primary text-on-primary px-6 py-3 rounded-xl font-bold flex items-center gap-2 hover:opacity-90 transition-opacity">
+          <button onClick={() => { setEditingPlace(null); setIsAddOpen(true); }} className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 font-bold text-on-primary transition-opacity hover:opacity-90 md:w-auto md:px-6">
             <Icons.Plus className="w-5 h-5" />
             Thêm địa điểm
           </button>
         )}
       </motion.div>
 
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
-        <motion.div variants={itemVariants} className="flex gap-2 p-1.5 bg-surface-container-low rounded-xl overflow-x-auto no-scrollbar scroll-smooth">
+      <div className="mb-6 flex flex-col justify-between gap-3 md:mb-8 md:flex-row md:items-center md:gap-4">
+        <motion.div variants={itemVariants} className="no-scrollbar flex gap-2 overflow-x-auto scroll-smooth rounded-xl bg-surface-container-low p-1.5">
           {[{ value: 'all', label: 'Tất cả' }, ...placeTypeOptions].map(tab => (
             <button
               key={tab.value}
               onClick={() => setActiveTab(tab.value)}
-              className={`px-5 py-2 font-bold text-sm rounded-lg whitespace-nowrap transition-colors flex items-center gap-2 ${activeTab === tab.value
+              className={`flex items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-2 text-xs font-bold transition-colors md:gap-2 md:px-5 md:text-sm ${activeTab === tab.value
                 ? 'bg-primary text-white shadow-sm'
                 : 'text-secondary dark:text-gray-300 hover:text-primary hover:bg-surface-container'
                 }`}
@@ -217,7 +217,7 @@ export function TripPlaces() {
           ))}
         </motion.div>
 
-        <motion.div variants={itemVariants} className="flex w-full flex-col gap-3 md:max-w-xl md:flex-row">
+        <motion.div variants={itemVariants} className="grid w-full grid-cols-1 gap-2 sm:grid-cols-2 md:max-w-xl md:flex md:gap-3">
           <div className="relative flex-1">
             <Icons.Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-secondary opacity-50" />
             <input
@@ -228,11 +228,11 @@ export function TripPlaces() {
               className="w-full bg-surface-container-high text-sm text-on-surface rounded-full pl-9 pr-4 py-2 focus:ring-1 focus:ring-primary/50 transition-all font-medium outline-none"
             />
           </div>
-          <SortSelect value={sortBy} options={PLACE_SORT_OPTIONS} onChange={setSortBy} className="md:min-w-[180px]" />
+          <SortSelect value={sortBy} options={PLACE_SORT_OPTIONS} onChange={setSortBy} className="w-full md:w-auto md:min-w-[180px]" />
         </motion.div>
       </div>
 
-      <motion.div variants={itemVariants} className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-surface-container-low px-4 py-3 text-sm text-secondary dark:text-gray-300">
+      <motion.div variants={itemVariants} className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-surface-container-low px-4 py-3 text-sm text-secondary dark:text-gray-300 md:mb-6">
         <span className="font-medium">
           Hiển thị {filteredPlaces.length} địa điểm
           {filteredPlaces.length !== places.length && ` phù hợp trong tổng ${places.length} địa điểm`}
@@ -295,12 +295,12 @@ export function TripPlaces() {
         </motion.section>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-6 lg:grid-cols-3">
         {filteredPlaces.map(place => (
           <motion.div
             variants={itemVariants}
             key={place.id}
-            className="bg-surface-container-lowest p-6 rounded-2xl editorial-shadow group relative cursor-pointer hover:shadow-lg transition-all"
+            className="group relative cursor-pointer rounded-2xl bg-surface-container-lowest p-4 editorial-shadow transition-all hover:shadow-lg md:p-6"
             onClick={() => setViewingPlace(place)}
           >
             {canEdit && (

@@ -28,7 +28,7 @@ function ThemeToggleButton() {
     <button
       type="button"
       onClick={handleToggle}
-      className="flex h-11 w-11 items-center justify-center rounded-2xl bg-surface-container-low text-primary dark:text-white transition-all hover:scale-105 active:scale-95 hover:bg-surface-container hover:shadow-md"
+      className="flex h-10 w-10 items-center justify-center rounded-xl bg-surface-container-low text-primary transition-all hover:scale-105 hover:bg-surface-container hover:shadow-md active:scale-95 dark:text-white md:h-11 md:w-11 md:rounded-2xl"
       title={`Giao diện: ${themeMode === 'system' ? 'Hệ thống' : themeMode === 'dark' ? 'Tối' : 'Sáng'}`}
     >
       <Icon className="h-5 w-5" />
@@ -58,26 +58,26 @@ export function TopNav({ hideNavLinks = false }: { hideNavLinks?: boolean }) {
   };
 
   return (
-    <header className="fixed left-0 right-0 top-0 z-50 border-b border-white/10 dark:border-white/5 bg-surface/75 backdrop-blur-2xl shadow-[0_4px_32px_-12px_rgba(0,0,0,0.1)]">
-      <div className="mx-auto flex w-full max-w-[92rem] items-center justify-between px-4 py-4 md:px-6">
-        <div className="flex min-w-0 items-center gap-3 md:gap-6">
+    <header className="fixed left-0 right-0 top-0 z-50 border-b border-white/10 dark:border-white/5 bg-surface/80 backdrop-blur-2xl shadow-[0_4px_32px_-12px_rgba(0,0,0,0.1)]">
+      <div className="mx-auto flex w-full max-w-[92rem] items-center justify-between gap-2 px-3 py-3 md:px-6 md:py-4">
+        <div className="flex min-w-0 flex-1 items-center gap-2 md:gap-6">
           {shouldShowBackButton && (
             <button
               type="button"
               onClick={handleGoBack}
               aria-label={language === 'vi' ? 'Quay lại' : 'Go back'}
-              className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-surface-container-low text-primary dark:text-white transition-all hover:scale-105 active:scale-95 hover:bg-surface-container hover:shadow-md"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-surface-container-low text-primary transition-all hover:scale-105 hover:bg-surface-container hover:shadow-md active:scale-95 dark:text-white md:h-11 md:w-11 md:rounded-2xl"
             >
               <Icons.ChevronLeft className="h-5 w-5" />
             </button>
           )}
-          <Link to="/trips" className="group flex min-w-0 items-center gap-3 active:scale-95 transition-transform">
-            <img src={logoSrc} alt="Bunbietbay Trips" className="h-11 w-11 rounded-2xl shadow-sm transition-transform group-hover:scale-105" />
+          <Link to="/trips" className="group flex min-w-0 flex-1 items-center gap-2 transition-transform active:scale-95 md:gap-3">
+            <img src={logoSrc} alt="Bunbietbay Trips" className="h-10 w-10 shrink-0 rounded-xl shadow-sm transition-transform group-hover:scale-105 md:h-11 md:w-11 md:rounded-2xl" />
             <div className="min-w-0">
-              <span className="block truncate font-headline text-xl font-black tracking-[-0.04em] text-on-surface md:text-2xl">
+              <span className="block truncate font-headline text-lg font-black text-on-surface md:text-2xl">
                 Bunbietbay Trips
               </span>
-              <span className="block truncate font-label text-[11px] uppercase tracking-[0.2em] text-secondary dark:text-gray-300">
+              <span className="hidden truncate font-label text-[11px] uppercase tracking-[0.2em] text-secondary dark:text-gray-300 sm:block">
                 {session ? 'Workspace có phân quyền' : requiresAuth ? 'Đăng nhập để vào workspace' : 'Local + cloud ready'}
               </span>
             </div>
@@ -116,7 +116,7 @@ export function TopNav({ hideNavLinks = false }: { hideNavLinks?: boolean }) {
           )}
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex shrink-0 items-center gap-1.5 md:gap-3">
           {!session && requiresAuth ? (
             <Link
               to="/login"
@@ -130,20 +130,20 @@ export function TopNav({ hideNavLinks = false }: { hideNavLinks?: boolean }) {
               <button
                 type="button"
                 onClick={() => setIsPrivacyMode(!isPrivacyMode)}
-                className="flex h-11 w-11 items-center justify-center rounded-2xl bg-surface-container-low text-primary dark:text-white transition-all hover:scale-105 active:scale-95 hover:bg-surface-container hover:shadow-md"
+                className="flex h-10 w-10 items-center justify-center rounded-xl bg-surface-container-low text-primary transition-all hover:scale-105 hover:bg-surface-container hover:shadow-md active:scale-95 dark:text-white md:h-11 md:w-11 md:rounded-2xl"
                 title={isPrivacyMode ? 'Hiện số tiền' : 'Ẩn số tiền'}
               >
                 {isPrivacyMode ? <Icons.EyeOff className="h-5 w-5" /> : <Icons.Eye className="h-5 w-5" />}
               </button>
               <Link
                 to="/settings"
-                className="flex h-11 w-11 items-center justify-center rounded-2xl bg-surface-container-low text-primary dark:text-white transition-all hover:scale-105 active:scale-95 hover:bg-surface-container hover:shadow-md"
+                className="hidden h-11 w-11 items-center justify-center rounded-2xl bg-surface-container-low text-primary transition-all hover:scale-105 hover:bg-surface-container hover:shadow-md active:scale-95 dark:text-white sm:flex"
                 title="Cài đặt"
               >
                 <Icons.Settings className="h-5 w-5" />
               </Link>
-              <Link to="/settings" className="group flex items-center gap-3 rounded-full bg-surface-container-low pl-1 pr-4 py-1 shadow-sm transition-all hover:bg-surface-container active:scale-95">
-                <div className="relative h-10 w-10">
+              <Link to="/settings" className="group flex items-center gap-3 rounded-full bg-surface-container-low p-1 shadow-sm transition-all hover:bg-surface-container active:scale-95 md:pr-4">
+                <div className="relative h-9 w-9 md:h-10 md:w-10">
                   <div className="h-full w-full overflow-hidden rounded-full border-2 border-primary-container">
                     <img
                       alt={currentUserProfile?.displayName || 'User profile avatar'}
@@ -202,7 +202,7 @@ export function BottomNav({ tripId }: { tripId: string }) {
   }, [activePath]);
 
   return (
-    <nav id="bottom-nav" className="fixed bottom-0 left-0 z-50 flex w-full items-center justify-start overflow-x-auto no-scrollbar md:justify-around rounded-t-3xl bg-surface/85 px-4 pb-[max(env(safe-area-inset-bottom),0.75rem)] pt-4 shadow-[0_-24px_48px_-12px_rgba(0,0,0,0.12)] backdrop-blur-2xl md:left-1/2 md:mb-6 md:max-w-3xl md:-translate-x-1/2 md:rounded-3xl border-t border-white/10 dark:border-white/5 md:border-none ring-1 ring-white/10 dark:ring-white/5">
+    <nav id="bottom-nav" className="fixed bottom-0 left-0 z-50 flex w-full items-center justify-start overflow-x-auto no-scrollbar rounded-t-2xl border-t border-white/10 bg-surface/90 px-3 pb-[max(env(safe-area-inset-bottom),0.55rem)] pt-2.5 shadow-[0_-18px_40px_-16px_rgba(0,0,0,0.16)] ring-1 ring-white/10 backdrop-blur-2xl dark:border-white/5 dark:ring-white/5 md:left-1/2 md:mb-6 md:max-w-3xl md:-translate-x-1/2 md:justify-around md:rounded-3xl md:border-none md:px-4 md:pb-3 md:pt-4">
       {navItems.map((item) => {
         const isActive = activePath === item.path;
         const Icon = item.icon;
@@ -212,14 +212,14 @@ export function BottomNav({ tripId }: { tripId: string }) {
             to={item.path}
             data-active={isActive ? "true" : "false"}
             className={cn(
-              'group flex flex-col min-w-[76px] shrink-0 items-center justify-center rounded-2xl px-3 py-2 transition-all duration-300 ease-out hover:-translate-y-1 hover:bg-surface-container-low active:scale-90',
+              'group flex min-w-[64px] shrink-0 flex-col items-center justify-center rounded-xl px-2.5 py-1.5 transition-all duration-300 ease-out hover:-translate-y-1 hover:bg-surface-container-low active:scale-90 md:min-w-[76px] md:rounded-2xl md:px-3 md:py-2',
               isActive
                 ? 'bg-primary/15 text-primary dark:text-white shadow-inner'
                 : 'text-outline hover:text-primary dark:text-white',
             )}
           >
-            <Icon className={cn('mb-1 h-6 w-6 transition-transform group-hover:scale-110', isActive && 'fill-current')} />
-            <span className="font-label text-[10px] font-bold uppercase tracking-widest">{item.label}</span>
+            <Icon className={cn('mb-0.5 h-5 w-5 transition-transform group-hover:scale-110 md:mb-1 md:h-6 md:w-6', isActive && 'fill-current')} />
+            <span className="font-label text-[9px] font-bold uppercase tracking-wide md:text-[10px] md:tracking-widest">{item.label}</span>
           </Link>
         );
       })}
@@ -238,7 +238,7 @@ function GlobalBottomNav() {
   ];
 
   return (
-    <nav className="fixed bottom-0 left-0 z-50 flex w-full items-center justify-around md:hidden rounded-t-3xl bg-surface/85 px-4 pb-[max(env(safe-area-inset-bottom),0.75rem)] pt-3 shadow-[0_-24px_48px_-12px_rgba(0,0,0,0.12)] backdrop-blur-2xl border-t border-white/10 dark:border-white/5 ring-1 ring-white/10 dark:ring-white/5">
+    <nav className="fixed bottom-0 left-0 z-50 flex w-full items-center justify-around rounded-t-2xl border-t border-white/10 bg-surface/90 px-3 pb-[max(env(safe-area-inset-bottom),0.55rem)] pt-2.5 shadow-[0_-18px_40px_-16px_rgba(0,0,0,0.16)] ring-1 ring-white/10 backdrop-blur-2xl dark:border-white/5 dark:ring-white/5 md:hidden">
       {navItems.map((item) => {
         const isActive = location.pathname === item.path || location.pathname.startsWith(item.path + '/');
         const Icon = item.icon;
@@ -247,14 +247,14 @@ function GlobalBottomNav() {
             key={item.path}
             to={item.path}
             className={cn(
-              'group flex flex-col items-center justify-center rounded-2xl px-5 py-2 transition-all duration-300 ease-out active:scale-90',
+              'group flex min-w-[82px] flex-col items-center justify-center rounded-xl px-3 py-1.5 transition-all duration-300 ease-out active:scale-90',
               isActive
                 ? 'bg-primary/15 text-primary dark:text-white'
                 : 'text-outline hover:text-primary dark:text-white',
             )}
           >
-            <Icon className={cn('mb-1 h-6 w-6 transition-transform', isActive && 'fill-current')} />
-            <span className="font-label text-[10px] font-bold uppercase tracking-widest">{item.label}</span>
+            <Icon className={cn('mb-0.5 h-5 w-5 transition-transform', isActive && 'fill-current')} />
+            <span className="font-label text-[9px] font-bold uppercase tracking-wide">{item.label}</span>
           </Link>
         );
       })}
@@ -278,7 +278,7 @@ export function Layout({ children, hideNavLinks = false, tripId }: { children: R
   }, []);
 
   return (
-    <div className="min-h-screen w-full overflow-x-hidden bg-surface font-body text-on-surface pb-40 md:pb-32">
+    <div className="min-h-screen w-full overflow-x-hidden bg-surface pb-32 font-body text-on-surface md:pb-32">
       {isOffline && (
         <div className="fixed top-0 left-0 right-0 z-[60] bg-[#FA4D56] text-white text-[11px] uppercase tracking-widest font-bold text-center py-1.5 flex items-center justify-center gap-2 shadow-sm">
           <Icons.AlertTriangle className="w-3.5 h-3.5" /> Đang ngoại tuyến. Dữ liệu sẽ lưu trên máy.
@@ -287,7 +287,7 @@ export function Layout({ children, hideNavLinks = false, tripId }: { children: R
       <div className={isOffline ? "pt-7" : ""}>
         <TopNav hideNavLinks={hideNavLinks} />
       </div>
-      <main className={`mx-auto max-w-[92rem] px-4 md:px-6 ${isOffline ? 'pt-[8.5rem]' : 'pt-28'}`}>
+      <main className={`mx-auto max-w-[92rem] px-4 md:px-6 ${isOffline ? 'pt-[7.25rem] md:pt-[8.5rem]' : 'pt-24 md:pt-28'}`}>
         <AnimatePresence mode="wait" initial={false}>
           <motion.div
             key={location.pathname}

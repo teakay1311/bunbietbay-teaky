@@ -428,16 +428,16 @@ export function TripPhotos() {
 
   return (
     <motion.div variants={containerVariants} initial="hidden" animate="show" className="pb-10">
-      <motion.div variants={itemVariants} className="flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-end mb-8">
+      <motion.div variants={itemVariants} className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between md:mb-8">
         <div>
-          <p className="font-label text-xs uppercase tracking-[0.2em] text-secondary dark:text-gray-300 font-bold mb-2">Kỷ niệm</p>
-          <h1 className="font-headline text-4xl font-extrabold tracking-tighter text-primary dark:text-white">Thư viện ảnh</h1>
+          <p className="mb-2 font-label text-[11px] font-bold uppercase tracking-[0.16em] text-secondary dark:text-gray-300 md:text-xs md:tracking-[0.2em]">Kỷ niệm</p>
+          <h1 className="font-headline text-2xl font-extrabold text-primary dark:text-white md:text-4xl md:tracking-tighter">Thư viện ảnh</h1>
         </div>
         <div className="flex flex-wrap gap-2 sm:gap-3">
           {canEdit && (
             <button
               onClick={() => setIsSelectionMode((currentState) => !currentState)}
-              className="rounded-xl bg-surface-container-high px-3 py-2 sm:px-4 sm:py-3 font-bold text-on-surface transition-colors hover:bg-surface-container-highest text-sm sm:text-base"
+              className="rounded-xl bg-surface-container-high px-3 py-2 text-sm font-bold text-on-surface transition-colors hover:bg-surface-container-highest sm:px-4 sm:py-3 sm:text-base"
             >
               {isSelectionMode ? 'Xong' : 'Chọn nhiều ảnh'}
             </button>
@@ -478,8 +478,8 @@ export function TripPhotos() {
         )}
       </AnimatePresence>
 
-      <motion.div variants={itemVariants} className="mb-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div className="flex w-full flex-col gap-3 md:max-w-2xl md:flex-row">
+      <motion.div variants={itemVariants} className="mb-5 flex flex-col gap-3 md:mb-6 md:flex-row md:items-center md:justify-between">
+        <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-2 md:flex md:max-w-2xl md:gap-3">
           <div className="relative flex-1">
           <Icons.Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-secondary dark:text-gray-300" />
           <input
@@ -490,8 +490,8 @@ export function TripPhotos() {
             className="w-full rounded-xl border border-outline-variant/50 bg-surface-container-low py-3 pl-10 pr-4 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
           />
           </div>
-          <SortSelect value={sortBy} options={PHOTO_SORT_OPTIONS} onChange={setSortBy} className="border border-outline-variant/50 bg-surface-container-low py-3 md:min-w-[190px]" />
-          <div className="flex rounded-xl bg-surface-container-low p-1 ring-1 ring-outline-variant/40">
+          <SortSelect value={sortBy} options={PHOTO_SORT_OPTIONS} onChange={setSortBy} className="w-full border border-outline-variant/50 bg-surface-container-low py-3 md:w-auto md:min-w-[190px]" />
+          <div className="flex rounded-xl bg-surface-container-low p-1 ring-1 ring-outline-variant/40 sm:col-span-2">
             <button type="button" onClick={() => setViewMode('grid')} className={`rounded-lg px-3 py-2 text-sm font-bold transition ${viewMode === 'grid' ? 'bg-primary text-on-primary' : 'text-secondary hover:bg-surface-container'}`}>
               Grid
             </button>
@@ -513,12 +513,12 @@ export function TripPhotos() {
 
       <AnimatePresence>
         {albums.length > 1 && (
-          <motion.div variants={itemVariants} initial="hidden" animate="show" exit={{ opacity: 0, height: 0 }} className="flex gap-4 overflow-x-auto no-scrollbar mb-8 pb-2">
+          <motion.div variants={itemVariants} initial="hidden" animate="show" exit={{ opacity: 0, height: 0 }} className="no-scrollbar mb-6 flex gap-2 overflow-x-auto pb-2 md:mb-8 md:gap-4">
             {albums.map(album => (
               <button
                 key={album}
                 onClick={() => setSelectedAlbum(album)}
-                className={`flex-shrink-0 px-6 py-2 rounded-full font-bold transition-colors ${selectedAlbum === album
+                className={`flex-shrink-0 rounded-full px-4 py-2 text-sm font-bold transition-colors md:px-6 md:text-base ${selectedAlbum === album
                   ? 'bg-primary text-white'
                   : 'bg-surface-container-high text-on-surface-variant hover:bg-surface-container-highest'
                   }`}
@@ -594,7 +594,7 @@ export function TripPhotos() {
         </motion.div>
       ) : (
         <>
-      <motion.div key="grid-view" className="grid grid-cols-2 gap-4 md:grid-cols-[repeat(auto-fill,minmax(180px,1fr))]">
+      <motion.div key="grid-view" className="grid grid-cols-2 gap-3 md:grid-cols-[repeat(auto-fill,minmax(180px,1fr))] md:gap-4">
         {visiblePhotos.map(photo => (
           <motion.div variants={itemVariants} key={photo.id} className="relative group image-sheen aspect-square rounded-2xl overflow-hidden bg-surface-container-high motion-lift">
             <button
@@ -603,7 +603,7 @@ export function TripPhotos() {
               className="block h-full w-full text-left bg-surface-container-low"
             >
               {photo.itemType === 'journal' ? (
-                <div className="p-6 h-full flex flex-col justify-center bg-surface-container overflow-hidden relative group-hover:bg-surface-container-high transition-colors">
+                <div className="relative flex h-full flex-col justify-center overflow-hidden bg-surface-container p-4 transition-colors group-hover:bg-surface-container-high md:p-6">
                   <Icons.FileText className="absolute top-4 right-4 w-12 h-12 opacity-5" />
                   <p className="text-sm font-semibold italic text-on-surface line-clamp-4 relative z-10">"{photo.content}"</p>
                 </div>

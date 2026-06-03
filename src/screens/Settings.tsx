@@ -287,8 +287,11 @@ export function Settings() {
 
       // Quick resize logic using canvas to keep avatar size small
       const img = new Image();
-      img.src = base64Data;
-      await new Promise((resolve) => { img.onload = resolve; });
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve();
+        img.onerror = () => reject(new Error('Không thể xử lý ảnh đại diện.'));
+        img.src = base64Data;
+      });
 
       const canvas = document.createElement('canvas');
       const MAX_SIZE = 400;
@@ -335,25 +338,25 @@ export function Settings() {
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="pb-10">
-      <div className="mb-8 flex flex-col gap-3">
-        <p className="font-label text-xs font-extrabold uppercase tracking-[0.3em] text-secondary dark:text-gray-300">System Settings</p>
+      <div className="mb-6 flex flex-col gap-3 md:mb-8">
+        <p className="font-label text-[11px] font-extrabold uppercase tracking-[0.18em] text-secondary dark:text-gray-300 md:text-xs md:tracking-[0.3em]">System Settings</p>
         <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
           <div className="max-w-3xl">
-            <h1 className="font-headline text-4xl font-black tracking-[-0.05em] text-primary dark:text-white md:text-5xl">Cài đặt hệ thống & tài khoản</h1>
-            <p className="mt-3 text-lg leading-8 text-secondary dark:text-gray-300">
+            <h1 className="font-headline text-2xl font-black text-primary dark:text-white md:text-5xl md:tracking-[-0.05em]">Cài đặt hệ thống & tài khoản</h1>
+            <p className="mt-3 hidden text-lg leading-8 text-secondary dark:text-gray-300 md:block">
               Khu vực này gom toàn bộ tài khoản, hồ sơ cá nhân, quyền truy cập, giao diện, nhắc việc, dữ liệu và phím tắt vào một workspace gọn hơn thay vì kéo dọc quá dài.
             </p>
           </div>
-          <div className="rounded-[1.75rem] bg-slate-950 px-5 py-4 text-white">
-            <p className="font-label text-[11px] uppercase tracking-[0.24em] text-teal-200">Current mode</p>
-            <p className="mt-2 font-headline text-2xl font-bold">{session ? 'Tài khoản đang kết nối' : isConfigured ? 'Có thể đăng nhập' : 'Local workspace'}</p>
+          <div className="rounded-2xl bg-slate-950 px-4 py-3 text-white md:rounded-[1.75rem] md:px-5 md:py-4">
+            <p className="font-label text-[10px] uppercase tracking-[0.18em] text-teal-200 md:text-[11px] md:tracking-[0.24em]">Current mode</p>
+            <p className="mt-1 font-headline text-lg font-bold md:mt-2 md:text-2xl">{session ? 'Tài khoản đang kết nối' : isConfigured ? 'Có thể đăng nhập' : 'Local workspace'}</p>
           </div>
         </div>
       </div>
 
       <div className="grid gap-8 xl:grid-cols-[280px_minmax(0,1fr)]">
-        <aside className="xl:sticky xl:top-28 xl:self-start">
-          <div className="overflow-hidden rounded-[2rem] border border-outline-variant/40 bg-surface-container-lowest/90 p-3 shadow-[0_18px_40px_rgba(0,0,0,0.06)] backdrop-blur">
+        <aside className="min-w-0 xl:sticky xl:top-28 xl:self-start">
+          <div className="no-scrollbar flex gap-2 overflow-x-auto rounded-2xl border border-outline-variant/40 bg-surface-container-lowest/90 p-2 shadow-[0_12px_28px_rgba(0,0,0,0.05)] backdrop-blur xl:block xl:overflow-hidden xl:rounded-[2rem] xl:p-3 xl:shadow-[0_18px_40px_rgba(0,0,0,0.06)]">
             {SECTIONS.map((section) => {
               const Icon = Icons[section.icon];
               return (
@@ -361,10 +364,10 @@ export function Settings() {
                   key={section.key}
                   type="button"
                   onClick={() => setActiveSection(section.key)}
-                  className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left transition ${activeSection === section.key ? 'bg-slate-950 text-white' : 'text-on-surface hover:bg-surface-container-low'}`}
+                  className={`flex shrink-0 items-center gap-2 rounded-xl px-3 py-2.5 text-left transition xl:w-full xl:gap-3 xl:rounded-2xl xl:px-4 xl:py-3 ${activeSection === section.key ? 'bg-slate-950 text-white' : 'text-on-surface hover:bg-surface-container-low'}`}
                 >
-                  <Icon className="h-5 w-5" />
-                  <span className="font-headline text-sm font-bold">{section.label}</span>
+                  <Icon className="h-4 w-4 xl:h-5 xl:w-5" />
+                  <span className="whitespace-nowrap font-headline text-xs font-bold xl:text-sm">{section.label}</span>
                 </button>
               );
             })}
@@ -374,11 +377,11 @@ export function Settings() {
         <div className="space-y-8 min-w-0">
           <AnimatePresence mode="wait">
             {activeSection === 'account' && (
-              <motion.section key="account" variants={sectionVariants} initial="hidden" animate="visible" exit="exit" className="rounded-[2rem] bg-surface-container-lowest p-6 shadow-[0_18px_40px_rgba(0,0,0,0.06)] md:p-8">
+              <motion.section key="account" variants={sectionVariants} initial="hidden" animate="visible" exit="exit" className="rounded-2xl bg-surface-container-lowest p-4 shadow-[0_12px_28px_rgba(0,0,0,0.05)] md:rounded-[2rem] md:p-8 md:shadow-[0_18px_40px_rgba(0,0,0,0.06)]">
                 <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
                   <div>
-                    <p className="font-label text-xs font-bold uppercase tracking-[0.24em] text-secondary dark:text-gray-300">Tài khoản</p>
-                    <h2 className="mt-2 font-headline text-3xl font-black tracking-[-0.04em] text-on-surface">Đăng ký, đăng nhập, hồ sơ cá nhân</h2>
+                    <p className="font-label text-[11px] font-bold uppercase tracking-[0.16em] text-secondary dark:text-gray-300 md:text-xs md:tracking-[0.24em]">Tài khoản</p>
+                    <h2 className="mt-2 font-headline text-2xl font-black text-on-surface md:text-3xl md:tracking-[-0.04em]">Đăng ký, đăng nhập, hồ sơ cá nhân</h2>
                   </div>
                   <div className="rounded-2xl bg-surface-container-low px-4 py-3 text-sm text-secondary dark:text-gray-300">
                     {session ? `Đang dùng ${currentUserProfile?.email || session.user.email}` : 'Chưa kết nối tài khoản cloud'}
@@ -398,22 +401,22 @@ export function Settings() {
                 )}
 
                 {!session && isConfigured && (
-                  <div className="mb-8 grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-                    <div className="rounded-[1.75rem] bg-slate-950 p-6 text-white">
-                      <p className="font-label text-xs uppercase tracking-[0.24em] text-teal-200">Account onboarding</p>
-                      <h3 className="mt-3 font-headline text-3xl font-black tracking-[-0.04em]">Tạo tài khoản mật khẩu hoặc đăng nhập nhanh</h3>
-                      <p className="mt-4 max-w-md text-sm leading-7 text-slate-300">
+                  <div className="mb-6 grid gap-4 md:mb-8 md:gap-6 lg:grid-cols-[1.1fr_0.9fr]">
+                    <div className="rounded-2xl bg-slate-950 p-4 text-white md:rounded-[1.75rem] md:p-6">
+                      <p className="font-label text-[10px] uppercase tracking-[0.18em] text-teal-200 md:text-xs md:tracking-[0.24em]">Account onboarding</p>
+                      <h3 className="mt-2 font-headline text-xl font-black md:mt-3 md:text-3xl md:tracking-[-0.04em]">Tạo tài khoản mật khẩu hoặc đăng nhập nhanh</h3>
+                      <p className="mt-3 max-w-md text-sm leading-6 text-slate-300 md:mt-4 md:leading-7">
                         Luồng onboarding chính đã được chuyển sang email + mật khẩu để bạn không phải mở email mỗi lần. OTP email vẫn còn ở màn đăng nhập như một phương án phụ.
                       </p>
                     </div>
 
-                    <div className="space-y-4 rounded-[1.75rem] border border-outline-variant/30 bg-surface-container-low p-6">
-                      <p className="text-sm leading-7 text-secondary dark:text-gray-300">
+                    <div className="space-y-3 rounded-2xl border border-outline-variant/30 bg-surface-container-low p-4 md:space-y-4 md:rounded-[1.75rem] md:p-6">
+                      <p className="text-sm leading-6 text-secondary dark:text-gray-300 md:leading-7">
                         Khi đăng nhập, cùng một tài khoản sẽ dùng được trên nhiều máy và các lời mời theo email sẽ tự nối vào đúng workspace.
                       </p>
                       <Link
                         to="/login"
-                        className="density-button block rounded-2xl bg-slate-950 text-center font-headline text-lg font-bold text-white transition hover:opacity-95"
+                        className="density-button block rounded-2xl bg-slate-950 text-center font-headline text-base font-bold text-white transition hover:opacity-95 md:text-lg"
                       >
                         Mở màn hình đăng nhập / đăng ký
                       </Link>
@@ -422,7 +425,7 @@ export function Settings() {
                 )}
 
                 <div className="grid gap-8 xl:grid-cols-[0.92fr_1.08fr]">
-                  <div className="rounded-[1.75rem] bg-surface-container-low p-6 min-w-0">
+                    <div className="min-w-0 rounded-2xl bg-surface-container-low p-4 md:rounded-[1.75rem] md:p-6">
                     <div className="flex items-center gap-4">
                       <button
                         type="button"
@@ -446,7 +449,7 @@ export function Settings() {
                         )}
                       </button>
                       <div>
-                        <p className="font-headline text-2xl font-black tracking-[-0.03em] text-on-surface truncate">{profileForm.displayName || 'Chưa có tên hiển thị'}</p>
+                        <p className="truncate font-headline text-xl font-black text-on-surface md:text-2xl md:tracking-[-0.03em]">{profileForm.displayName || 'Chưa có tên hiển thị'}</p>
                         <p className="mt-1 text-sm text-secondary dark:text-gray-300 truncate">{currentUserProfile?.email || 'Chế độ local trên máy này'}</p>
                       </div>
                     </div>
@@ -475,7 +478,7 @@ export function Settings() {
                   </div>
 
                   <div className="space-y-6 min-w-0">
-                    <form onSubmit={saveProfile} className="grid gap-4 rounded-[1.75rem] bg-surface-container-low p-6 md:grid-cols-2">
+                    <form onSubmit={saveProfile} className="grid gap-4 rounded-2xl bg-surface-container-low p-4 md:grid-cols-2 md:rounded-[1.75rem] md:p-6">
                       <div className="md:col-span-2 min-w-0">
                         <label className="mb-2 block font-label text-xs font-bold uppercase tracking-[0.22em] text-secondary dark:text-gray-300">Tên hiển thị</label>
                         <input
@@ -485,34 +488,62 @@ export function Settings() {
                         />
                       </div>
                       <div className="md:col-span-2 min-w-0">
-                        <label className="mb-2 block font-label text-xs font-bold uppercase tracking-[0.22em] text-secondary dark:text-gray-300">Ảnh đại diện</label>
-                        <div className="flex gap-2">
-                          <input
-                            value={profileForm.avatar}
-                            onChange={(event) => setProfileForm((current) => ({ ...current, avatar: event.target.value }))}
-                            placeholder="https://..."
-                            className="density-control flex-1 min-w-0 max-w-full rounded-2xl border border-outline-variant/60 bg-surface-container-lowest px-4 py-3 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 text-on-surface"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => avatarInputRef.current?.click()}
-                            disabled={isUploadingAvatar}
-                            className="density-button flex shrink-0 items-center gap-2 rounded-2xl bg-surface-container-high px-4 py-3 font-semibold text-on-surface transition hover:bg-surface-container-highest disabled:opacity-50"
-                          >
-                            <Icons.Upload className="h-5 w-5" />
-                            <span className="hidden sm:inline">{isUploadingAvatar ? 'Đang tải...' : 'Tải lên'}</span>
-                          </button>
-                          <input
-                            type="file"
-                            accept="image/*"
-                            ref={avatarInputRef}
-                            onChange={(e) => { void handleAvatarUpload(e); }}
-                            className="hidden"
-                          />
-                        </div>
+                        <label className="mb-2 block font-label text-xs font-bold uppercase tracking-[0.18em] text-secondary dark:text-gray-300 md:tracking-[0.22em]">Ảnh đại diện</label>
+                        {profileForm.avatar.startsWith('data:image/') ? (
+                          <div className="flex flex-col gap-2 sm:flex-row">
+                            <div className="flex min-w-0 flex-1 items-center gap-3 rounded-2xl border border-outline-variant/60 bg-surface-container-lowest px-4 py-3">
+                              <img src={profileForm.avatar} alt="Avatar preview" className="h-10 w-10 shrink-0 rounded-full object-cover" />
+                              <div className="min-w-0">
+                                <p className="truncate text-sm font-semibold text-on-surface">Ảnh local đã chọn</p>
+                                <p className="text-xs text-secondary dark:text-gray-300">Bấm Lưu để cập nhật hồ sơ.</p>
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => avatarInputRef.current?.click()}
+                              disabled={isUploadingAvatar}
+                              className="density-button flex shrink-0 items-center justify-center gap-2 rounded-2xl bg-surface-container-high px-4 py-3 font-semibold text-on-surface transition hover:bg-surface-container-highest disabled:opacity-50"
+                            >
+                              <Icons.Upload className="h-5 w-5" />
+                              {isUploadingAvatar ? 'Đang tải...' : 'Đổi ảnh'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setProfileForm((current) => ({ ...current, avatar: '' }))}
+                              className="rounded-2xl border border-outline-variant/60 px-4 py-3 font-semibold text-secondary transition hover:border-error hover:text-error"
+                            >
+                              Xóa
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex gap-2">
+                            <input
+                              value={profileForm.avatar}
+                              onChange={(event) => setProfileForm((current) => ({ ...current, avatar: event.target.value }))}
+                              placeholder="https://..."
+                              className="density-control min-w-0 max-w-full flex-1 rounded-2xl border border-outline-variant/60 bg-surface-container-lowest px-4 py-3 text-on-surface outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => avatarInputRef.current?.click()}
+                              disabled={isUploadingAvatar}
+                              className="density-button flex shrink-0 items-center gap-2 rounded-2xl bg-surface-container-high px-4 py-3 font-semibold text-on-surface transition hover:bg-surface-container-highest disabled:opacity-50"
+                            >
+                              <Icons.Upload className="h-5 w-5" />
+                              <span className="hidden sm:inline">{isUploadingAvatar ? 'Đang tải...' : 'Tải lên'}</span>
+                            </button>
+                          </div>
+                        )}
+                        <input
+                          type="file"
+                          accept="image/*"
+                          ref={avatarInputRef}
+                          onChange={(e) => { void handleAvatarUpload(e); }}
+                          className="hidden"
+                        />
                       </div>
                       <div className="min-w-0">
-                        <label className="mb-2 block font-label text-xs font-bold uppercase tracking-[0.22em] text-secondary dark:text-gray-300">Số điện thoại</label>
+                        <label className="mb-2 block font-label text-xs font-bold uppercase tracking-[0.18em] text-secondary dark:text-gray-300 md:tracking-[0.22em]">Số điện thoại</label>
                         <input
                           value={profileForm.phone}
                           onChange={(event) => setProfileForm((current) => ({ ...current, phone: event.target.value }))}
@@ -520,7 +551,7 @@ export function Settings() {
                         />
                       </div>
                       <div className="min-w-0">
-                        <label className="mb-2 block font-label text-xs font-bold uppercase tracking-[0.22em] text-secondary dark:text-gray-300">Ngày sinh</label>
+                        <label className="mb-2 block font-label text-xs font-bold uppercase tracking-[0.18em] text-secondary dark:text-gray-300 md:tracking-[0.22em]">Ngày sinh</label>
                         <input
                           type="date"
                           value={profileForm.birthdate}
@@ -529,7 +560,7 @@ export function Settings() {
                         />
                       </div>
                       <div className="md:col-span-2 min-w-0">
-                        <label className="mb-2 block font-label text-xs font-bold uppercase tracking-[0.22em] text-secondary dark:text-gray-300">Giới thiệu ngắn</label>
+                        <label className="mb-2 block font-label text-xs font-bold uppercase tracking-[0.18em] text-secondary dark:text-gray-300 md:tracking-[0.22em]">Giới thiệu ngắn</label>
                         <textarea
                           rows={4}
                           value={profileForm.bio}
@@ -538,7 +569,7 @@ export function Settings() {
                         />
                       </div>
                       <div className="md:col-span-2">
-                        <button type="submit" disabled={isSavingProfile} className="density-button rounded-2xl bg-slate-950 font-headline text-lg font-bold text-white transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-60">
+                        <button type="submit" disabled={isSavingProfile} className="density-button w-full rounded-2xl bg-slate-950 font-headline text-base font-bold text-white transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto md:text-lg">
                           {isSavingProfile ? 'Đang lưu hồ sơ...' : 'Lưu hồ sơ của tôi'}
                         </button>
                       </div>

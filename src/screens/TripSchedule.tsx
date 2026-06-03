@@ -373,19 +373,19 @@ export function TripSchedule() {
 
   return (
     <motion.div variants={containerVariants} initial="hidden" animate="show" className="pb-10">
-      <motion.section variants={itemVariants} className="mb-10">
+      <motion.section variants={itemVariants} className="mb-8 md:mb-10">
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
           <div>
-            <span className="font-label text-sm uppercase tracking-widest text-secondary dark:text-gray-300 font-bold mb-2 block">Hành trình sắp tới</span>
-            <h1 className="font-headline text-4xl font-extrabold tracking-tight text-on-surface">{trip.title}</h1>
+            <span className="mb-2 block font-label text-[11px] font-bold uppercase tracking-[0.16em] text-secondary dark:text-gray-300 md:text-sm md:tracking-widest">Hành trình sắp tới</span>
+            <h1 className="font-headline text-2xl font-extrabold text-on-surface md:text-4xl md:tracking-tight">{trip.title}</h1>
             <p className="text-on-surface-variant mt-2 flex items-center gap-2">
               <Icons.CalendarDays className="w-4 h-4" />
               {formatLocalDate(trip.startDate, { day: '2-digit', month: 'short' })} - {formatLocalDate(trip.endDate, { day: '2-digit', month: 'short', year: 'numeric' })}
             </p>
           </div>
           {canEdit && (
-            <button onClick={() => { setEditingActivity(null); setIsAddOpen(true); }} className="editorial-gradient text-white px-8 py-4 rounded-xl font-bold flex items-center gap-3 shadow-lg hover:opacity-90 transition-all active:scale-95">
-              <Icons.Plus className="w-5 h-5" />
+            <button onClick={() => { setEditingActivity(null); setIsAddOpen(true); }} className="editorial-gradient flex w-full items-center justify-center gap-2 rounded-xl px-5 py-3 font-bold text-white shadow-lg transition-all hover:opacity-90 active:scale-95 md:w-auto md:gap-3 md:px-8 md:py-4">
+              <Icons.Plus className="h-5 w-5" />
               Thêm hoạt động
             </button>
           )}
@@ -393,7 +393,7 @@ export function TripSchedule() {
       </motion.section>
 
       {hotelPlaces.length > 0 && (
-        <motion.div variants={itemVariants} className="mb-10 bg-surface-container-low border border-primary/20 rounded-2xl p-5 editorial-shadow relative overflow-hidden group">
+        <motion.div variants={itemVariants} className="group relative mb-8 overflow-hidden rounded-2xl border border-primary/20 bg-surface-container-low p-4 editorial-shadow md:mb-10 md:p-5">
           <div className="absolute top-0 left-0 w-1.5 h-full bg-primary/80 transition-all group-hover:w-2"></div>
           <div className="flex items-start gap-4">
             <div className="bg-primary/10 text-primary p-3 rounded-xl mt-1 shrink-0 group-hover:scale-110 transition-transform">
@@ -433,14 +433,14 @@ export function TripSchedule() {
 
       {uniqueDates.length > 0 ? (
         <>
-          <motion.div variants={itemVariants} className="mb-8 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <motion.div variants={itemVariants} className="mb-6 flex flex-col gap-3 md:mb-8 md:flex-row md:items-center md:justify-between md:gap-4">
             {viewMode === 'timeline' ? (
-              <div className="flex gap-4 overflow-x-auto no-scrollbar pb-2 md:pb-0">
+              <div className="no-scrollbar flex gap-2 overflow-x-auto pb-2 md:gap-4 md:pb-0">
                 {uniqueDates.map((date, index) => (
                   <button
                     key={date}
                     onClick={() => setSelectedDate(date)}
-                    className={`flex-shrink-0 px-6 py-2 rounded-full font-bold transition-colors ${selectedDate === date
+                    className={`flex-shrink-0 rounded-full px-4 py-2 text-sm font-bold transition-colors md:px-6 md:text-base ${selectedDate === date
                       ? 'bg-primary text-white'
                       : 'bg-surface-container-high text-on-surface-variant hover:bg-surface-container-highest'
                       }`}
@@ -454,7 +454,7 @@ export function TripSchedule() {
                 Hiển thị {compactActivities.length}/{tripActivities.length} hoạt động trong toàn bộ chuyến đi.
               </div>
             )}
-            <div className="flex w-full shrink-0 rounded-2xl bg-surface-container-low p-1 text-sm font-bold md:w-auto">
+            <div className="flex w-full shrink-0 rounded-xl bg-surface-container-low p-1 text-sm font-bold md:w-auto md:rounded-2xl">
               <button
                 type="button"
                 onClick={() => setViewMode('timeline')}
@@ -472,14 +472,14 @@ export function TripSchedule() {
             </div>
           </motion.div>
 
-          <motion.div variants={itemVariants} className="space-y-12 relative">
-            <div className="sticky top-24 z-10 py-2 bg-surface/80 backdrop-blur-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-              <h2 className="font-headline text-2xl font-bold text-secondary dark:text-gray-300 flex items-center gap-3">
-                <span className="w-8 h-[2px] bg-outline-variant"></span>
+          <motion.div variants={itemVariants} className="relative space-y-8 md:space-y-12">
+            <div className="sticky top-20 z-10 flex flex-col items-start justify-between gap-3 bg-surface/85 py-2 backdrop-blur-sm md:top-24 md:flex-row md:items-center md:gap-4">
+              <h2 className="flex items-center gap-2 font-headline text-lg font-bold text-secondary dark:text-gray-300 md:gap-3 md:text-2xl">
+                <span className="h-[2px] w-6 bg-outline-variant md:w-8"></span>
                 {viewMode === 'compact' ? 'Toàn bộ lịch trình' : selectedDate && formatFullDate(selectedDate)}
               </h2>
-              <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
-                <div className="relative flex-1 md:w-64">
+              <div className="grid w-full grid-cols-1 items-center gap-2 sm:grid-cols-[1fr_1fr_auto] md:flex md:w-auto md:flex-wrap md:gap-3">
+                <div className="relative min-w-0 md:w-64">
                   <Icons.Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-secondary opacity-50" />
                   <input
                     type="text"
@@ -489,8 +489,8 @@ export function TripSchedule() {
                     className="w-full bg-surface-container-high text-sm text-on-surface rounded-full pl-9 pr-4 py-1.5 font-medium outline-none focus:ring-1 focus:ring-primary/50 transition-all"
                   />
                 </div>
-                <SortSelect value={sortBy} options={ACTIVITY_SORT_OPTIONS} onChange={setSortBy} className="flex-1 md:flex-none py-1.5" />
-                <button type="button" onClick={handleOpenMap} className="text-primary shrink-0 text-sm font-bold flex items-center gap-2 hover:bg-primary/10 px-3 py-1.5 rounded-lg transition-colors group">
+                <SortSelect value={sortBy} options={ACTIVITY_SORT_OPTIONS} onChange={setSortBy} className="w-full py-1.5 md:w-auto md:flex-none" />
+                <button type="button" onClick={handleOpenMap} className="group flex shrink-0 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-bold text-primary transition-colors hover:bg-primary/10 md:py-1.5">
                   <Icons.Map className="w-4 h-4 group-hover:scale-110 transition-transform" /> Bản đồ
                 </button>
               </div>

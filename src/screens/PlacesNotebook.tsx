@@ -228,7 +228,7 @@ export function PlacesNotebook() {
             setCoverImage(result.url);
             showToast({ tone: 'success', title: 'Thành công', message: 'Đã tải ảnh lên.' });
         } catch (err: any) {
-            showToast({ tone: 'danger', title: 'Lỗi tải ảnh', message: err.message || 'Thử lại sau.' });
+            showToast({ tone: 'error', title: 'Lỗi tải ảnh', message: err.message || 'Thử lại sau.' });
         } finally {
             setIsUploading(false);
         }
@@ -256,23 +256,22 @@ export function PlacesNotebook() {
 
     return (
         <React.Fragment>
-            <motion.div variants={containerVariants} initial="hidden" animate="show" className="px-4 py-4 md:px-8 md:py-8 max-w-7xl mx-auto mb-24">
+            <motion.div variants={containerVariants} initial="hidden" animate="show" className="mx-auto mb-24 max-w-7xl py-2 md:px-8 md:py-8">
 
-                <motion.div variants={itemVariants} className="flex flex-col gap-4 md:flex-row md:justify-between md:items-end mb-8 relative">
-                    <div className="absolute -top-10 left-10 w-40 h-40 bg-primary/10 rounded-full blur-3xl -z-10 mt-10"></div>
+                <motion.div variants={itemVariants} className="relative mb-6 flex flex-col gap-3 md:mb-8 md:flex-row md:items-end md:justify-between md:gap-4">
                     <div>
-                        <p className="font-label text-xs uppercase tracking-[0.2em] text-secondary font-bold mb-2">My Global Places</p>
-                        <h1 className="font-headline text-3xl md:text-5xl font-extrabold tracking-tighter text-on-surface">Cẩm Nang Địa Điểm</h1>
+                        <p className="mb-1.5 font-label text-[11px] font-bold uppercase tracking-[0.16em] text-secondary md:mb-2 md:text-xs md:tracking-[0.2em]">My Global Places</p>
+                        <h1 className="font-headline text-2xl font-extrabold text-on-surface md:text-5xl md:tracking-tighter">Cẩm Nang Địa Điểm</h1>
                         <p className="text-sm mt-3 max-w-md text-on-surface-variant leading-relaxed hidden md:block">
                             Nơi bạn lưu trữ mọi nhà hàng, khách sạn, quán cafe tuyệt vời hoặc điểm vui chơi để chuẩn bị cho bất kỳ chuyến đi nào trong tương lai.
                         </p>
                     </div>
 
-                    <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3">
+                    <div className="flex flex-col items-stretch gap-2 md:flex-row md:items-center md:gap-3">
                         <select
                             value={activeNotebookId}
                             onChange={e => setActiveNotebookId(e.target.value)}
-                            className="bg-surface-container-low hover:bg-surface border border-outline/10 editorial-shadow text-on-surface font-bold text-sm px-4 py-3 rounded-2xl outline-none transition-colors"
+                            className="rounded-xl border border-outline/10 bg-surface-container-low px-3 py-2.5 text-sm font-bold text-on-surface outline-none transition-colors hover:bg-surface md:rounded-2xl md:px-4 md:py-3"
                         >
                             <option value="all">📚 Tất cả sổ tay</option>
                             {notebooks.map(nb => (
@@ -282,36 +281,36 @@ export function PlacesNotebook() {
                             ))}
                         </select>
 
-                        <div className="flex flex-wrap bg-surface-container-low p-1 rounded-2xl editorial-shadow border border-outline/10 gap-0.5">
-                            <button onClick={() => { setIsSelectMode(!isSelectMode); setSelectedIds([]); }} className={`px-4 h-10 rounded-xl font-bold flex items-center gap-2 transition-all ${isSelectMode ? 'bg-primary text-on-primary' : 'hover:bg-primary/10 text-secondary hover:text-primary active:scale-95'}`} title="Chọn nhiều">
+                        <div className="flex flex-wrap gap-0.5 rounded-xl border border-outline/10 bg-surface-container-low p-1 md:rounded-2xl">
+                            <button onClick={() => { setIsSelectMode(!isSelectMode); setSelectedIds([]); }} className={`flex h-9 items-center gap-2 rounded-lg px-3 text-sm font-bold transition-all md:h-10 md:rounded-xl md:px-4 ${isSelectMode ? 'bg-primary text-on-primary' : 'hover:bg-primary/10 text-secondary hover:text-primary active:scale-95'}`} title="Chọn nhiều">
                                 <Icons.CheckSquare className="w-4 h-4" />
                                 <span className="hidden md:inline">{isSelectMode ? 'Hủy chọn' : 'Chọn'}</span>
                             </button>
                             <div className="w-[1px] bg-outline/20 my-2 mx-1"></div>
-                            <button onClick={handleShare} className="hover:bg-primary/10 text-secondary hover:text-primary active:scale-95 px-4 h-10 rounded-xl font-bold flex items-center gap-2 transition-all">
+                            <button onClick={handleShare} className="flex h-9 items-center gap-2 rounded-lg px-3 text-sm font-bold text-secondary transition-all hover:bg-primary/10 hover:text-primary active:scale-95 md:h-10 md:rounded-xl md:px-4">
                                 <Icons.UserPlus className="w-4 h-4" />
                                 <span className="hidden sm:inline">Mời</span>
                             </button>
                             <div className="w-[1px] bg-outline/20 my-2 mx-1"></div>
-                            <button onClick={() => setIsCreateNbOpen(true)} className="hover:bg-primary/10 text-secondary hover:text-primary active:scale-95 px-4 h-10 rounded-xl font-bold flex items-center gap-2 transition-all" title="Tạo sổ tay mới">
+                            <button onClick={() => setIsCreateNbOpen(true)} className="flex h-9 items-center gap-2 rounded-lg px-3 text-sm font-bold text-secondary transition-all hover:bg-primary/10 hover:text-primary active:scale-95 md:h-10 md:rounded-xl md:px-4" title="Tạo sổ tay mới">
                                 <Icons.FolderPlus className="w-4 h-4" />
                             </button>
                             {activeNotebookId !== 'all' && notebooks.find(n => n.id === activeNotebookId)?.type === 'shared' && (
                                 <>
                                     <div className="w-[1px] bg-outline/20 my-2 mx-1"></div>
-                                    <button onClick={handleDeleteNotebook} className="hover:bg-error/10 text-secondary hover:text-error active:scale-95 px-4 h-10 rounded-xl font-bold flex items-center gap-2 transition-all" title="Xóa sổ tay này">
+                                    <button onClick={handleDeleteNotebook} className="flex h-9 items-center gap-2 rounded-lg px-3 text-sm font-bold text-secondary transition-all hover:bg-error/10 hover:text-error active:scale-95 md:h-10 md:rounded-xl md:px-4" title="Xóa sổ tay này">
                                         <Icons.Trash2 className="w-4 h-4" />
                                     </button>
                                 </>
                             )}
-                            <button onClick={() => handleOpenForm()} className="bg-primary text-on-primary hover:scale-105 active:scale-95 px-5 h-10 rounded-xl font-bold flex items-center gap-2 transition-all shadow-md ml-1">
+                            <button onClick={() => handleOpenForm()} className="ml-1 flex h-9 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-bold text-on-primary shadow-md transition-all hover:scale-105 active:scale-95 md:h-10 md:rounded-xl md:px-5">
                                 <Icons.Plus className="w-4 h-4 mt-0.5" />
                             </button>
                         </div>
                     </div>
                 </motion.div>
 
-                <div className="flex flex-col md:flex-row gap-4 mb-10 justify-between items-start md:items-center bg-surface-container-low p-2 rounded-2xl md:rounded-full border border-outline-variant/30">
+                <div className="mb-6 flex flex-col items-start justify-between gap-2 rounded-2xl border border-outline-variant/30 bg-surface-container-low p-1.5 md:mb-10 md:flex-row md:items-center md:rounded-full md:p-2">
                     <motion.div variants={itemVariants} className="flex gap-2 overflow-x-auto no-scrollbar max-w-full">
                         {(['all', 'hotel', 'restaurant', 'cafe', 'entertainment', 'other'] as const).map(tab => {
                             let label = 'Tất cả';
@@ -326,7 +325,7 @@ export function PlacesNotebook() {
                                 <button
                                     key={tab}
                                     onClick={() => setActiveTab(tab)}
-                                    className={`px-5 py-2 font-bold text-sm rounded-full whitespace-nowrap transition-colors flex items-center gap-2 ${activeTab === tab
+                                    className={`flex items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-bold transition-colors md:gap-2 md:px-5 md:py-2 md:text-sm ${activeTab === tab
                                         ? 'bg-on-surface text-surface shadow-sm'
                                         : 'text-secondary hover:text-primary'
                                         }`}
@@ -348,22 +347,22 @@ export function PlacesNotebook() {
                                 className="w-full bg-transparent text-sm text-on-surface rounded-full pl-11 pr-4 py-2.5 focus:ring-2 focus:ring-primary/50 transition-all font-medium outline-none"
                             />
                         </div>
-                        <SortSelect value={sortBy} options={NOTEBOOK_PLACE_SORT_OPTIONS} onChange={setSortBy} className="bg-surface-container-lowest shadow-inner ring-1 ring-outline/10" />
+                        <SortSelect value={sortBy} options={NOTEBOOK_PLACE_SORT_OPTIONS} onChange={setSortBy} className="w-full bg-surface-container-lowest shadow-inner ring-1 ring-outline/10 md:w-auto" />
                     </motion.div>
                 </div>
 
-                <div className="flex justify-start mb-6">
+                <div className="mb-5 flex justify-start md:mb-6">
                     <div className="flex bg-surface rounded-xl overflow-hidden editorial-shadow border border-outline/10 text-xs font-bold">
-                        <button onClick={() => setViewMode('grid')} className={`px-4 py-3 flex items-center gap-2 transition-colors ${viewMode === 'grid' ? 'bg-primary text-on-primary' : 'hover:bg-surface-variant text-secondary'}`}>
+                        <button onClick={() => setViewMode('grid')} className={`flex items-center gap-2 px-3 py-2.5 transition-colors md:px-4 md:py-3 ${viewMode === 'grid' ? 'bg-primary text-on-primary' : 'hover:bg-surface-variant text-secondary'}`}>
                             <Icons.LayoutDashboard className="w-4 h-4" /> <span className="hidden sm:inline">Lưới</span>
                         </button>
-                        <button onClick={() => setViewMode('list')} className={`px-4 py-3 flex items-center gap-2 transition-colors ${viewMode === 'list' ? 'bg-primary text-on-primary' : 'hover:bg-surface-variant text-secondary'}`}>
+                        <button onClick={() => setViewMode('list')} className={`flex items-center gap-2 px-3 py-2.5 transition-colors md:px-4 md:py-3 ${viewMode === 'list' ? 'bg-primary text-on-primary' : 'hover:bg-surface-variant text-secondary'}`}>
                             <Icons.List className="w-4 h-4" /> <span className="hidden sm:inline">Danh sách</span>
                         </button>
                     </div>
                 </div>
 
-                <div className={`mt-2 ${viewMode === 'grid' ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6' : 'flex flex-col gap-4'}`}>
+                <div className={`mt-2 ${viewMode === 'grid' ? 'grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-6 lg:grid-cols-3' : 'flex flex-col gap-3 md:gap-4'}`}>
                     {filteredPlaces.length === 0 ? (
                         <div className="col-span-full py-16 text-center bg-surface-container-lowest rounded-[2rem] border border-dashed border-outline-variant/60">
                             <Icons.MapPin className="w-12 h-12 text-outline-variant mx-auto mb-4" />
@@ -398,7 +397,7 @@ export function PlacesNotebook() {
                                             )}
                                             <div className="min-w-0 flex-1">
                                                 <div className="flex min-w-0 flex-wrap items-center gap-2">
-                                                    <h3 className="truncate font-headline text-lg font-bold text-on-surface">{place.name}</h3>
+                                                    <h3 className="truncate font-headline text-base font-bold text-on-surface md:text-lg">{place.name}</h3>
                                                     {activeNotebookId === 'all' && (
                                                         <span className="shrink-0 rounded-md bg-surface-container-high px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-secondary">
                                                             {notebookName}
@@ -465,9 +464,9 @@ export function PlacesNotebook() {
                             return (
                                 <motion.div variants={itemVariants} key={place.id}
                                     onClick={() => isSelectMode ? toggleSelectPlace(place.id) : null}
-                                    className={`bg-surface-container-lowest rounded-[1.5rem] editorial-shadow group border relative flex flex-col hover:-translate-y-1 hover:shadow-xl transition-all h-full overflow-hidden cursor-pointer ${isSelected ? 'border-primary ring-2 ring-primary/20' : 'border-outline-variant/20'}`}>
+                                    className={`group relative flex h-full cursor-pointer flex-col overflow-hidden rounded-[1.25rem] border bg-surface-container-lowest transition-all hover:-translate-y-1 hover:shadow-xl md:rounded-[1.5rem] ${isSelected ? 'border-primary ring-2 ring-primary/20' : 'border-outline-variant/20'}`}>
 
-                                    <div className="p-6 flex-1 flex flex-col">
+                                    <div className="flex flex-1 flex-col p-4 md:p-6">
                                         <div className="flex justify-between items-start mb-4">
                                             <div className="flex bg-primary/10 text-primary p-3 rounded-xl mt-1 shrink-0 group-hover:scale-110 transition-transform">
                                                 {typeIcon}
@@ -492,7 +491,7 @@ export function PlacesNotebook() {
 
                                         <div className="flex-1">
                                             <div className="flex items-start justify-between gap-2 mb-2">
-                                                <h3 className="font-headline font-bold text-xl text-on-surface">{place.name}</h3>
+                                                <h3 className="font-headline text-lg font-bold text-on-surface md:text-xl">{place.name}</h3>
                                                 {activeNotebookId === 'all' && (
                                                     <span className="shrink-0 text-[10px] font-bold uppercase tracking-wider bg-surface-container-high text-secondary px-2 py-1 rounded-md">
                                                         {notebookName}
@@ -554,14 +553,14 @@ export function PlacesNotebook() {
 
             {
                 isSelectMode && selectedIds.length > 0 && (
-                    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-surface-container-highest shadow-2xl px-6 py-4 rounded-full flex items-center gap-6 z-50 border border-outline/10">
+                    <div className="fixed bottom-[calc(env(safe-area-inset-bottom)+5.25rem)] left-1/2 z-50 flex w-[calc(100%-2rem)] -translate-x-1/2 items-center justify-between gap-3 rounded-2xl border border-outline/10 bg-surface-container-highest px-4 py-3 shadow-2xl md:bottom-6 md:w-auto md:justify-start md:gap-6 md:rounded-full md:px-6 md:py-4">
                         <span className="font-bold text-on-surface shrink-0">{selectedIds.length} mục đã chọn</span>
 
-                        <div className="flex items-center gap-2">
+                        <div className="flex min-w-0 items-center gap-2">
                             <button onClick={() => {
                                 if (selectedIds.length === filteredPlaces.length) { setSelectedIds([]); }
                                 else { setSelectedIds(filteredPlaces.map(p => p.id)); }
-                            }} className="px-4 py-2 hover:bg-surface text-secondary hover:text-on-surface rounded-full text-sm font-bold transition-colors">
+                            }} className="rounded-full px-3 py-2 text-sm font-bold text-secondary transition-colors hover:bg-surface hover:text-on-surface md:px-4">
                                 {selectedIds.length === filteredPlaces.length ? 'Bỏ chọn hết' : 'Chọn tất cả'}
                             </button>
                             <button onClick={async () => {
@@ -571,7 +570,7 @@ export function PlacesNotebook() {
                                     setIsSelectMode(false);
                                     setSelectedIds([]);
                                 }
-                            }} className="px-4 py-2 bg-error text-white rounded-full text-sm font-bold shadow-lg hover:scale-105 active:scale-95 transition-all flex items-center gap-2">
+                            }} className="flex items-center gap-2 rounded-full bg-error px-3 py-2 text-sm font-bold text-white shadow-lg transition-all hover:scale-105 active:scale-95 md:px-4">
                                 <Icons.Trash2 className="w-4 h-4" />
                                 Xóa {selectedIds.length}
                             </button>

@@ -135,11 +135,11 @@ export function TripMembers() {
 
   return (
     <motion.div variants={containerVariants} initial="hidden" animate="show" className="pb-10">
-      <motion.section variants={itemVariants} className="mb-10 flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+      <motion.section variants={itemVariants} className="mb-8 flex flex-col gap-4 lg:mb-10 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <p className="font-label text-xs font-bold uppercase tracking-[0.26em] text-secondary dark:text-gray-300">Quản lý truy cập chuyến đi</p>
-          <h1 className="mt-3 font-headline text-4xl font-black tracking-[-0.05em] text-on-surface md:text-5xl">{trip.title}</h1>
-          <p className="mt-3 max-w-2xl text-lg leading-8 text-secondary dark:text-gray-300">
+          <p className="font-label text-[11px] font-bold uppercase tracking-[0.16em] text-secondary dark:text-gray-300 md:text-xs md:tracking-[0.26em]">Quản lý truy cập chuyến đi</p>
+          <h1 className="mt-2 font-headline text-2xl font-black text-on-surface md:mt-3 md:text-5xl md:tracking-[-0.05em]">{trip.title}</h1>
+          <p className="mt-3 hidden max-w-2xl text-lg leading-8 text-secondary dark:text-gray-300 md:block">
             Phân quyền theo email và theo vai trò. Chỉ owner hoặc admin mới có thể thêm người, đổi quyền, hoặc thu hồi quyền truy cập.
           </p>
         </div>
@@ -148,7 +148,7 @@ export function TripMembers() {
           <button
             type="button"
             onClick={() => setIsInviteOpen(true)}
-            className="inline-flex items-center gap-2 rounded-2xl bg-slate-950 px-6 py-4 font-headline text-lg font-bold text-white transition hover:opacity-95 dark:bg-white dark:text-slate-950"
+            className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 py-3 font-headline text-base font-bold text-white transition hover:opacity-95 dark:bg-white dark:text-slate-950 md:w-auto md:rounded-2xl md:px-6 md:py-4 md:text-lg"
           >
             <Icons.UserPlus className="h-5 w-5" />
             Mời theo email
@@ -157,14 +157,14 @@ export function TripMembers() {
       </motion.section>
 
       <motion.div variants={itemVariants} className="mb-8 grid gap-6 xl:grid-cols-[1fr_0.94fr]">
-        <div className="rounded-[2rem] bg-surface-container-lowest p-6 shadow-[0_18px_40px_rgba(0,0,0,0.06)]">
+        <div className="rounded-2xl bg-surface-container-lowest p-4 shadow-[0_12px_28px_rgba(0,0,0,0.05)] md:rounded-[2rem] md:p-6 md:shadow-[0_18px_40px_rgba(0,0,0,0.06)]">
           <div className="mb-6 flex flex-col items-start gap-4 md:flex-row md:items-center md:justify-between">
             <div>
-              <p className="font-label text-xs font-bold uppercase tracking-[0.24em] text-secondary dark:text-gray-300">Current members</p>
-              <h2 className="mt-2 font-headline text-3xl font-black tracking-[-0.04em] text-on-surface">{trip.members.length} người đang có quyền</h2>
+              <p className="font-label text-[11px] font-bold uppercase tracking-[0.16em] text-secondary dark:text-gray-300 md:text-xs md:tracking-[0.24em]">Current members</p>
+              <h2 className="mt-2 font-headline text-2xl font-black text-on-surface md:text-3xl md:tracking-[-0.04em]">{trip.members.length} người đang có quyền</h2>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <SortSelect value={memberSortBy} options={MEMBER_SORT_OPTIONS} onChange={setMemberSortBy} />
+            <div className="flex w-full flex-wrap items-center gap-2 md:w-auto">
+              <SortSelect value={memberSortBy} options={MEMBER_SORT_OPTIONS} onChange={setMemberSortBy} className="w-full md:w-auto" />
               {currentMembership && (
                 <div className="rounded-full bg-slate-950 px-4 py-2 text-xs font-bold uppercase tracking-[0.22em] text-white">
                   Bạn là {currentMembership.role}
@@ -175,14 +175,14 @@ export function TripMembers() {
 
           <div className="space-y-4">
             {sortedMembers.map((member) => (
-              <motion.div variants={itemVariants} key={member.membershipId} className="rounded-[1.5rem] bg-surface-container-low p-4">
+              <motion.div variants={itemVariants} key={member.membershipId} className="rounded-[1.25rem] bg-surface-container-low p-4 md:rounded-[1.5rem]">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                   <div className="flex min-w-0 items-center gap-4">
-                    <img src={member.avatar} alt={member.displayName} className="h-16 w-16 shrink-0 rounded-full border-4 border-surface-container-lowest object-cover" />
+                    <img src={member.avatar} alt={member.displayName} className="h-12 w-12 shrink-0 rounded-full border-4 border-surface-container-lowest object-cover md:h-16 md:w-16" />
                     <div className="min-w-0 flex flex-col justify-center gap-0.5">
                       <div className="flex items-center gap-2">
-                        <p className="truncate font-headline text-xl font-black tracking-[-0.03em] text-on-surface">{member.displayName}</p>
-                        <span className="shrink-0 rounded-full bg-surface-container-lowest px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-on-surface">
+                        <p className="truncate font-headline text-lg font-black text-on-surface md:text-xl md:tracking-[-0.03em]">{member.displayName}</p>
+                        <span className="shrink-0 rounded-full bg-surface-container-lowest px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-on-surface md:tracking-widest">
                           {member.role}
                         </span>
                       </div>
@@ -265,9 +265,9 @@ export function TripMembers() {
         </div>
 
         <div className="space-y-6">
-          <section className="rounded-[2rem] bg-slate-950 p-6 text-white shadow-[0_18px_40px_rgba(0,0,0,0.06)]">
-            <p className="font-label text-xs font-bold uppercase tracking-[0.24em] text-teal-200">Role matrix</p>
-            <div className="mt-5 space-y-4">
+          <section className="rounded-2xl bg-slate-950 p-4 text-white shadow-[0_12px_28px_rgba(0,0,0,0.05)] md:rounded-[2rem] md:p-6 md:shadow-[0_18px_40px_rgba(0,0,0,0.06)]">
+            <p className="font-label text-[11px] font-bold uppercase tracking-[0.16em] text-teal-200 md:text-xs md:tracking-[0.24em]">Role matrix</p>
+            <div className="mt-4 space-y-3 md:mt-5 md:space-y-4">
               <div>
                 <p className="font-headline text-xl font-bold">Owner</p>
                 <p className="text-sm leading-7 text-slate-300">Toàn quyền, bao gồm quản trị thành viên, chuyển vai trò, chỉnh sửa toàn bộ nội dung và quản trị thiết lập chuyến đi.</p>
@@ -281,14 +281,14 @@ export function TripMembers() {
             </div>
           </section>
 
-          <section className="rounded-[2rem] bg-surface-container-lowest p-6 shadow-[0_18px_40px_rgba(0,0,0,0.06)]">
-            <div className="mb-5 flex items-center justify-between">
+          <section className="rounded-2xl bg-surface-container-lowest p-4 shadow-[0_12px_28px_rgba(0,0,0,0.05)] md:rounded-[2rem] md:p-6 md:shadow-[0_18px_40px_rgba(0,0,0,0.06)]">
+            <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div>
-                <p className="font-label text-xs font-bold uppercase tracking-[0.24em] text-secondary dark:text-gray-300">Pending invitations</p>
-                <h2 className="mt-2 font-headline text-2xl font-black tracking-[-0.04em] text-on-surface">Lời mời đang chờ</h2>
+                <p className="font-label text-[11px] font-bold uppercase tracking-[0.16em] text-secondary dark:text-gray-300 md:text-xs md:tracking-[0.24em]">Pending invitations</p>
+                <h2 className="mt-2 font-headline text-xl font-black text-on-surface md:text-2xl md:tracking-[-0.04em]">Lời mời đang chờ</h2>
               </div>
-              <div className="flex flex-wrap items-center justify-end gap-2">
-                <SortSelect value={invitationSortBy} options={INVITATION_SORT_OPTIONS} onChange={setInvitationSortBy} className="py-2" />
+              <div className="flex flex-wrap items-center gap-2 md:justify-end">
+                <SortSelect value={invitationSortBy} options={INVITATION_SORT_OPTIONS} onChange={setInvitationSortBy} className="w-full py-2 md:w-auto" />
                 <div className="rounded-full bg-surface-container-low px-3 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-secondary dark:text-gray-300">
                   {tripInvitations.filter((invitation) => invitation.status === 'pending').length} pending
                 </div>
@@ -303,7 +303,7 @@ export function TripMembers() {
               )}
               {sortedInvitations.map((invitation) => (
                 <div key={invitation.id} className="rounded-2xl bg-surface-container-low px-4 py-4">
-                  <div className="flex items-start justify-between gap-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
                     <div>
                       <p className="font-semibold text-on-surface">{invitation.email}</p>
                       <p className="text-sm text-secondary dark:text-gray-300">Vai trò: {invitation.role} · Trạng thái: {invitation.status}</p>

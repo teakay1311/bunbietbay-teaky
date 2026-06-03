@@ -294,22 +294,22 @@ export function MyTrips() {
 
   return (
     <>
-      <section className="mb-16">
+      <section className="mb-8 md:mb-16">
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.5, ease: 'easeOut' }}
-          className="density-hero relative overflow-hidden rounded-xl bg-gradient-to-br from-primary via-primary to-primary-container h-[300px] flex items-center p-12 shadow-[0_24px_48px_-12px_rgba(0,0,0,0.15)] ring-1 ring-white/10"
+          className="density-hero relative flex h-[180px] items-center overflow-hidden rounded-xl bg-gradient-to-br from-primary via-primary to-primary-container p-5 shadow-[0_18px_36px_-18px_rgba(0,0,0,0.18)] ring-1 ring-white/10 md:h-[300px] md:p-12 md:shadow-[0_24px_48px_-12px_rgba(0,0,0,0.15)]"
         >
           <div className="absolute right-0 top-0 w-1/2 h-full opacity-20 pointer-events-none mix-blend-overlay">
             <img alt="Travel abstract" className="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBNwBnWoBo158dem-P8xSIbQ_85ZKdImaXbi_voQtZ9bp37lJlYlqChi6ExeK1ltAGJUUd2xmp266HL6l9zi3-gLznGgpzVZODbSjLzi2BuctK67XYi7GMn7IyNUfZUjJSz8wTMC0r6BNuLzmjajej_QmccAkbZmhqKP1M71Zy1fGDnqrkvSz_VPsP7HbVMNZ0pF4JgSWIx_4yRzPx-szCsEjRXvAEITiwemzOndLNpT1huf4AvIMenEMU2mwSzjpf6PPRfe1iYo9M" />
           </div>
           <div className="relative z-10 max-w-lg">
-            <h1 className="text-on-primary text-4xl font-extrabold tracking-tight mb-6 font-headline leading-tight drop-shadow-sm">
+            <h1 className="mb-4 font-headline text-2xl font-extrabold leading-tight text-on-primary drop-shadow-sm sm:text-3xl md:mb-6 md:text-4xl">
               {language === 'vi' ? 'Chuyến hành trình tiếp theo của bạn bắt đầu tại đây.' : 'Your next journey begins here.'}
             </h1>
-            <button onClick={() => { setEditingTripId(null); setIsAddOpen(true); }} className="group flex items-center gap-3 bg-white text-primary px-8 py-4 rounded-xl font-bold text-lg shadow-[0_12px_24px_rgba(0,0,0,0.2)] hover:scale-105 transition-transform active:scale-95 ring-1 ring-white/50">
-              <Icons.PlusCircle className="w-6 h-6" />
+            <button onClick={() => { setEditingTripId(null); setIsAddOpen(true); }} className="group flex items-center gap-2 rounded-xl bg-white px-5 py-3 text-sm font-bold text-primary shadow-[0_12px_24px_rgba(0,0,0,0.18)] ring-1 ring-white/50 transition-transform hover:scale-105 active:scale-95 md:gap-3 md:px-8 md:py-4 md:text-lg">
+              <Icons.PlusCircle className="h-5 w-5 md:h-6 md:w-6" />
               {language === 'vi' ? 'Tạo chuyến đi mới' : 'Create new trip'}
             </button>
           </div>
@@ -317,11 +317,11 @@ export function MyTrips() {
       </section>
 
       <section>
-        <div className="flex flex-col gap-4 mb-8">
-          <div className="flex items-end justify-between">
+          <div className="mb-6 flex flex-col gap-3 md:mb-8 md:gap-4">
+          <div className="flex items-end justify-between gap-3">
             <div>
-              <span className="font-label text-xs uppercase tracking-[0.2em] text-secondary dark:text-gray-300 font-extrabold">{language === 'vi' ? 'Bộ sưu tập' : 'Collection'}</span>
-              <h2 className="text-3xl font-bold text-primary dark:text-white font-headline mt-1">{language === 'vi' ? 'Chuyến đi của tôi' : 'My Trips'}</h2>
+              <span className="font-label text-[11px] font-extrabold uppercase tracking-[0.16em] text-secondary dark:text-gray-300 md:text-xs md:tracking-[0.2em]">{language === 'vi' ? 'Bộ sưu tập' : 'Collection'}</span>
+              <h2 className="mt-1 font-headline text-2xl font-bold text-primary dark:text-white md:text-3xl">{language === 'vi' ? 'Chuyến đi của tôi' : 'My Trips'}</h2>
             </div>
             <div className="flex gap-2">
               <div className="flex items-center gap-1 rounded-full bg-surface-container-high px-2 py-1">
@@ -334,7 +334,7 @@ export function MyTrips() {
               </div>
             </div>
           </div>
-          <div className="flex flex-col lg:flex-row gap-3">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:flex lg:gap-3">
             <div className="flex-1 relative">
               <Icons.Search className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-secondary opacity-50" />
               <input
@@ -342,16 +342,16 @@ export function MyTrips() {
                 placeholder="Tìm chuyến đi (tiêu đề, địa điểm)..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-surface-container-high text-on-surface rounded-xl pl-10 pr-4 py-2.5 font-medium outline-none focus:ring-2 focus:ring-primary/50 transition-all font-label"
+                className="w-full rounded-xl bg-surface-container-high py-2.5 pl-10 pr-4 font-label font-medium text-on-surface outline-none transition-all focus:ring-2 focus:ring-primary/50 sm:col-span-2"
               />
             </div>
-            <div className="flex items-center gap-2 bg-surface-container-high rounded-xl px-4 py-2 hover:bg-surface-container-highest transition-colors">
+            <div className="flex min-w-0 items-center gap-2 rounded-xl bg-surface-container-high px-3 py-2 transition-colors hover:bg-surface-container-highest">
               <Icons.Calendar className="w-4 h-4 text-secondary opacity-50" />
               <input
                 type="date"
                 value={startDateFilter}
                 onChange={e => setStartDateFilter(e.target.value)}
-                className="bg-transparent text-sm font-semibold outline-none cursor-pointer text-on-surface max-w-[120px]"
+                className="min-w-0 flex-1 cursor-pointer bg-transparent text-sm font-semibold text-on-surface outline-none"
                 title="Từ ngày"
               />
               <span className="text-secondary opacity-50 font-bold">-</span>
@@ -359,16 +359,16 @@ export function MyTrips() {
                 type="date"
                 value={endDateFilter}
                 onChange={e => setEndDateFilter(e.target.value)}
-                className="bg-transparent text-sm font-semibold outline-none cursor-pointer text-on-surface max-w-[120px]"
+                className="min-w-0 flex-1 cursor-pointer bg-transparent text-sm font-semibold text-on-surface outline-none"
                 title="Đến ngày"
               />
             </div>
-            <div className="flex items-center gap-2 rounded-xl bg-surface-container-high px-4 py-2">
+            <div className="flex min-w-0 items-center gap-2 rounded-xl bg-surface-container-high px-3 py-2">
               <Icons.Filter className="w-5 h-5 text-on-surface" />
               <select
                 value={statusFilter}
                 onChange={(event) => setStatusFilter(event.target.value as 'all' | 'upcoming' | 'completed' | 'draft')}
-                className="bg-transparent text-sm font-semibold text-on-surface outline-none cursor-pointer truncate max-w-[100px] md:max-w-none"
+                className="min-w-0 flex-1 cursor-pointer truncate bg-transparent text-sm font-semibold text-on-surface outline-none"
               >
                 <option value="all">Tất cả</option>
                 <option value="upcoming">Sắp tới</option>
@@ -376,7 +376,7 @@ export function MyTrips() {
                 <option value="draft">Bản nháp</option>
               </select>
             </div>
-            <SortSelect value={sortBy} options={TRIP_SORT_OPTIONS} onChange={setSortBy} className="min-w-[190px]" />
+            <SortSelect value={sortBy} options={TRIP_SORT_OPTIONS} onChange={setSortBy} className="w-full sm:col-span-2 lg:w-auto lg:min-w-[190px]" />
           </div>
         </div>
 
@@ -386,7 +386,7 @@ export function MyTrips() {
           animate="show"
           className={cn(
             viewMode === 'grid' ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3" : "flex flex-col",
-            viewMode === 'list' ? 'gap-3 density-stack' : uiDensity === 'compact' ? 'gap-5 density-stack' : 'gap-8',
+            viewMode === 'list' ? 'gap-3 density-stack' : uiDensity === 'compact' ? 'gap-4 density-stack md:gap-5' : 'gap-5 md:gap-8',
           )}
         >
           {filteredTrips.map((trip) => {
@@ -528,12 +528,12 @@ export function MyTrips() {
 
             return (
               <motion.div variants={itemVariants} key={trip.id}>
-                <Link to={`/trips/${trip.id}/schedule`} className={cn("bg-surface-container-lowest rounded-[1.5rem] shadow-[0_12px_24px_rgba(0,0,0,0.06)] ring-1 ring-outline/10 hover:shadow-[0_24px_48px_-12px_rgba(0,0,0,0.12)] hover:-translate-y-2 transition-all duration-300 group block density-card active:scale-[0.98]", uiDensity === 'compact' ? 'p-4' : 'p-6')}>
-                  <div className="flex justify-between items-start mb-6">
-                    <div className="h-16 w-16 rounded-lg bg-secondary-container flex items-center justify-center text-primary dark:text-white overflow-hidden">
+                  <Link to={`/trips/${trip.id}/schedule`} className={cn("group block rounded-[1.25rem] bg-surface-container-lowest shadow-[0_12px_24px_rgba(0,0,0,0.06)] ring-1 ring-outline/10 transition-all duration-300 hover:-translate-y-2 hover:shadow-[0_24px_48px_-12px_rgba(0,0,0,0.12)] active:scale-[0.98] md:rounded-[1.5rem]", uiDensity === 'compact' ? 'p-4' : 'p-4 md:p-6')}>
+                  <div className="mb-5 flex items-start justify-between gap-3 md:mb-6">
+                    <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-secondary-container text-primary dark:text-white md:h-16 md:w-16">
                       <img alt={trip.title} className="h-full w-full object-cover" src={trip.image} loading="lazy" decoding="async" />
                     </div>
-                    <div className="flex items-center gap-1">
+                    <div className="flex min-w-0 flex-wrap items-center justify-end gap-1">
                       <button
                         onClick={async (e) => {
                           e.preventDefault();
@@ -574,21 +574,21 @@ export function MyTrips() {
                         </button>
                       )}
                       <span className={cn(
-                        "font-label text-[10px] font-extrabold px-3 py-1 rounded-full uppercase tracking-widest",
+                        "max-w-full rounded-full px-2.5 py-1 font-label text-[9px] font-extrabold uppercase tracking-wide md:px-3 md:text-[10px] md:tracking-widest",
                         statusBadgeClass
                       )}>
                         {statusLabel}
                       </span>
                     </div>
                   </div>
-                  <h3 className="text-xl font-bold font-headline mb-1 text-on-surface group-hover:text-primary dark:text-white transition-colors">{trip.title}</h3>
-                  <div className="flex items-center gap-1 text-secondary dark:text-gray-300 mb-6">
+                  <h3 className="mb-1 font-headline text-lg font-bold text-on-surface transition-colors group-hover:text-primary dark:text-white md:text-xl">{trip.title}</h3>
+                  <div className="mb-5 flex min-w-0 items-center gap-1 text-secondary dark:text-gray-300 md:mb-6">
                     <Icons.MapPin className="w-4 h-4" />
-                    <span className="font-label text-sm font-medium">{trip.location}</span>
+                    <span className="truncate font-label text-sm font-medium">{trip.location}</span>
                   </div>
                   <div className="mb-5 space-y-3">
                     <div>
-                      <div className="flex items-center justify-between text-[10px] font-bold text-secondary dark:text-gray-300 uppercase tracking-widest mb-1.5">
+                      <div className="mb-1.5 flex items-center justify-between gap-3 text-[10px] font-bold uppercase tracking-wide text-secondary dark:text-gray-300 md:tracking-widest">
                         <span className="flex items-center gap-1"><Icons.Package className="w-3 h-3" /> Hành lý</span>
                         <span>{packedCountByTrip[trip.id] ?? 0}/{packingCountByTrip[trip.id] ?? 0}</span>
                       </div>
@@ -598,9 +598,9 @@ export function MyTrips() {
                     </div>
 
                     <div>
-                      <div className="flex items-center justify-between text-[10px] font-bold text-secondary dark:text-gray-300 uppercase tracking-widest mb-1.5">
+                      <div className="mb-1.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-[10px] font-bold uppercase tracking-wide text-secondary dark:text-gray-300 md:tracking-widest">
                         <span className="flex items-center gap-1"><Icons.Wallet className="w-3 h-3" /> Đã chi</span>
-                        <span className={((spentByTrip[trip.id] ?? 0) >= trip.budget) ? "text-error" : trip.budget > 0 && ((spentByTrip[trip.id] ?? 0) / trip.budget) >= 0.9 ? "text-yellow-600 dark:text-yellow-400" : "text-tertiary"}>
+                        <span className={cn("break-words text-right", ((spentByTrip[trip.id] ?? 0) >= trip.budget) ? "text-error" : trip.budget > 0 && ((spentByTrip[trip.id] ?? 0) / trip.budget) >= 0.9 ? "text-yellow-600 dark:text-yellow-400" : "text-tertiary")}>
                           {formatMoney(spentByTrip[trip.id] ?? 0)} / {formatMoney(trip.budget)}
                         </span>
                       </div>
@@ -631,10 +631,10 @@ export function MyTrips() {
                       </div>
                     </div>
                     <div className="space-y-2">
-                      <div className="flex justify-between items-center bg-surface-container-low p-3 rounded-2xl">
+                      <div className="flex items-center justify-between gap-3 rounded-2xl bg-surface-container-low p-3">
                         <div className="flex flex-col gap-1 items-start">
-                          <span className="font-label text-xs uppercase text-outline font-bold tracking-widest">Ngân sách</span>
-                          <span className="font-headline text-lg font-bold text-primary dark:text-white">{formatMoney(trip.budget, CURRENCIES[trip.baseCurrency || 'VND'].symbol)}</span>
+                          <span className="font-label text-xs font-bold uppercase tracking-wide text-outline md:tracking-widest">Ngân sách</span>
+                          <span className="break-words font-headline text-base font-bold text-primary dark:text-white md:text-lg">{formatMoney(trip.budget, CURRENCIES[trip.baseCurrency || 'VND'].symbol)}</span>
                           <div className={cn("text-[10px] font-label font-bold", (spentByTrip[trip.id] ?? 0) > trip.budget ? "text-error" : "text-outline")}>
                             Đã chi: {formatMoney(spentByTrip[trip.id] ?? 0, CURRENCIES[trip.baseCurrency || 'VND'].symbol)}
                           </div>
@@ -668,10 +668,6 @@ export function MyTrips() {
           )}
         </motion.div>
       </section>
-
-      <button onClick={() => { setEditingTripId(null); setIsAddOpen(true); }} className="md:hidden fixed right-6 bottom-[calc(env(safe-area-inset-bottom)+7rem)] w-14 h-14 bg-primary text-white rounded-full shadow-2xl flex items-center justify-center z-40 active:scale-90 transition-transform">
-        <Icons.Plus className="w-6 h-6" />
-      </button>
 
       <Modal isOpen={isAddOpen} onClose={() => { if (!isSubmitting) { setIsAddOpen(false); setEditingTripId(null); setTripFormError(null); } }} title={editingTripId ? "Chỉnh sửa chuyến đi" : "Tạo chuyến đi mới"}>
         <form onSubmit={handleAddTrip} className="space-y-4">

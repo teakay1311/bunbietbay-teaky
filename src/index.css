@@ -187,6 +187,7 @@ body {
   background-color: var(--color-surface);
   color: var(--color-on-surface);
   transition: background-color 180ms ease, color 180ms ease;
+  overflow-x: hidden;
 }
 
 body[data-density='cozy'] {

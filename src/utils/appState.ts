@@ -54,6 +54,10 @@ function ensureArray<T>(value: unknown, fallback: T[]): T[] {
   return Array.isArray(value) ? value as T[] : fallback;
 }
 
+function hasOwnField<T extends object>(value: T | null | undefined, field: PropertyKey) {
+  return Boolean(value && Object.prototype.hasOwnProperty.call(value, field));
+}
+
 function fallbackTimestamp(index: number) {
   return new Date(Date.UTC(2024, 0, 1, 0, 0, index)).toISOString();
 }
@@ -153,26 +157,31 @@ export function normalizePersistedState(
   fallback: PersistedAppState,
 ): PersistedAppState {
   const migratedState = migratePersistedState(state);
+  const sourceState = state as LegacyState | null | undefined;
+  const hasTrips = hasOwnField(sourceState, 'trips') || hasOwnField(sourceState, 'baseTrips');
+  const hasProfiles = hasOwnField(sourceState, 'profiles') || hasOwnField(sourceState, 'members');
+  const hasMemberships = hasOwnField(sourceState, 'memberships') || hasOwnField(sourceState, 'baseTrips');
+  const hasViewerProfileId = hasOwnField(sourceState, 'viewerProfileId') || (hasOwnField(sourceState, 'members') && !hasOwnField(sourceState, 'profiles'));
 
   return {
     version: migratedState?.version ?? APP_STATE_VERSION,
-    trips: ensureArray(migratedState?.trips, fallback.trips),
-    profiles: ensureArray(migratedState?.profiles, fallback.profiles),
-    memberships: ensureArray(migratedState?.memberships, fallback.memberships),
-    invitations: ensureArray(migratedState?.invitations, fallback.invitations),
-    activities: ensureArray(migratedState?.activities, fallback.activities),
-    expenses: ensureArray(migratedState?.expenses, fallback.expenses),
-    savedPlaces: ensureArray(migratedState?.savedPlaces, fallback.savedPlaces),
-    packingItems: ensureArray(migratedState?.packingItems, fallback.packingItems),
-    photos: ensureArray(migratedState?.photos, fallback.photos),
-    activityLogs: ensureArray(migratedState?.activityLogs, fallback.activityLogs),
-    currentTripId: typeof migratedState?.currentTripId === 'string' || migratedState?.currentTripId === null
+    trips: hasTrips ? ensureArray(migratedState?.trips, fallback.trips) : fallback.trips,
+    profiles: hasProfiles ? ensureArray(migratedState?.profiles, fallback.profiles) : fallback.profiles,
+    memberships: hasMemberships ? ensureArray(migratedState?.memberships, fallback.memberships) : fallback.memberships,
+    invitations: hasOwnField(sourceState, 'invitations') ? ensureArray(migratedState?.invitations, fallback.invitations) : fallback.invitations,
+    activities: hasOwnField(sourceState, 'activities') ? ensureArray(migratedState?.activities, fallback.activities) : fallback.activities,
+    expenses: hasOwnField(sourceState, 'expenses') ? ensureArray(migratedState?.expenses, fallback.expenses) : fallback.expenses,
+    savedPlaces: hasOwnField(sourceState, 'savedPlaces') ? ensureArray(migratedState?.savedPlaces, fallback.savedPlaces) : fallback.savedPlaces,
+    packingItems: hasOwnField(sourceState, 'packingItems') ? ensureArray(migratedState?.packingItems, fallback.packingItems) : fallback.packingItems,
+    photos: hasOwnField(sourceState, 'photos') ? ensureArray(migratedState?.photos, fallback.photos) : fallback.photos,
+    activityLogs: hasOwnField(sourceState, 'activityLogs') ? ensureArray(migratedState?.activityLogs, fallback.activityLogs) : fallback.activityLogs,
+    currentTripId: hasOwnField(sourceState, 'currentTripId') && (typeof migratedState?.currentTripId === 'string' || migratedState?.currentTripId === null)
       ? migratedState.currentTripId
       : fallback.currentTripId,
-    viewerProfileId: typeof migratedState?.viewerProfileId === 'string' || migratedState?.viewerProfileId === null
+    viewerProfileId: hasViewerProfileId && (typeof migratedState?.viewerProfileId === 'string' || migratedState?.viewerProfileId === null)
       ? migratedState.viewerProfileId
       : fallback.viewerProfileId,
-    pinnedTripIds: ensureArray(migratedState?.pinnedTripIds, fallback.pinnedTripIds ?? []),
+    pinnedTripIds: hasOwnField(sourceState, 'pinnedTripIds') ? ensureArray(migratedState?.pinnedTripIds, fallback.pinnedTripIds ?? []) : fallback.pinnedTripIds ?? [],
   };
 }
 

@@ -85,6 +85,8 @@ export function Login() {
       }
 
       await signInWithPassword(email, password);
+    } catch {
+      // AuthContext already exposes localized feedback for auth failures.
     } finally {
       setIsSubmitting(false);
     }
@@ -262,7 +264,7 @@ export function Login() {
                     onClick={() => {
                       setToken('');
                       setIsSubmitting(true);
-                      void sendLoginCode(email).finally(() => setIsSubmitting(false));
+                      void sendLoginCode(email).catch(() => undefined).finally(() => setIsSubmitting(false));
                     }}
                     className="density-button w-full rounded-2xl border border-outline-variant/60 font-semibold text-secondary dark:text-gray-300 transition hover:border-primary hover:text-primary dark:text-white"
                   >

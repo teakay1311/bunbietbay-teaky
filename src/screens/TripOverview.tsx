@@ -263,18 +263,18 @@ export function TripOverview() {
           </div>
         )}
       </div>
-      <div className="relative mb-12 flex flex-col md:flex-row items-end gap-6">
+      <div className="relative mb-8 flex flex-col items-stretch gap-4 md:mb-12 md:flex-row md:items-end md:gap-6">
         <div className="w-full md:w-2/3">
-          <p className="font-label text-xs uppercase tracking-[0.2em] text-secondary dark:text-gray-300 font-bold mb-2">Chi tiết chuyến đi</p>
-          <h1 className="font-headline text-5xl font-extrabold tracking-tighter text-on-surface">{trip.title}</h1>
-          <p className="text-on-surface-variant mt-4 max-w-md leading-relaxed flex items-center gap-2">
+          <p className="mb-2 font-label text-[11px] font-bold uppercase tracking-[0.16em] text-secondary dark:text-gray-300 md:text-xs md:tracking-[0.2em]">Chi tiết chuyến đi</p>
+          <h1 className="font-headline text-2xl font-extrabold text-on-surface md:text-5xl md:tracking-tighter">{trip.title}</h1>
+          <p className="mt-3 flex max-w-md items-center gap-2 leading-relaxed text-on-surface-variant md:mt-4">
             <Icons.MapPin className="w-4 h-4" />
             {trip.location}
           </p>
         </div>
-        <div className="bg-surface-container-low rounded-[2rem] p-6 text-center border border-outline-variant/30 relative overflow-hidden flex-1 group editorial-shadow min-w-[200px]">
-          <h2 className="font-label text-sm uppercase tracking-widest text-primary font-bold mb-3">Ngân sách tổng</h2>
-          <p className="font-headline text-3xl font-bold text-on-surface">{formatMoney(trip.budget, baseCurrencySymbol)}</p>
+        <div className="group relative min-w-0 flex-1 overflow-hidden rounded-2xl border border-outline-variant/30 bg-surface-container-low p-4 text-center editorial-shadow md:min-w-[200px] md:rounded-[2rem] md:p-6">
+          <h2 className="mb-2 font-label text-xs font-bold uppercase tracking-wide text-primary md:mb-3 md:text-sm md:tracking-widest">Ngân sách tổng</h2>
+          <p className="break-words font-headline text-2xl font-bold text-on-surface md:text-3xl">{formatMoney(trip.budget, baseCurrencySymbol)}</p>
           {trip.budget > 0 && (
             <div className="mt-4 w-full h-1 bg-surface-variant rounded-full overflow-hidden">
               <div className="h-full bg-tertiary rounded-full shadow-inner" style={{ width: `${spentPercentage}%` }}></div>
@@ -285,7 +285,7 @@ export function TripOverview() {
       </div>
 
       {attentionCards.length > 0 && (
-        <motion.section variants={itemVariants} className="mb-8 rounded-3xl border border-outline-variant/30 bg-surface-container-lowest p-5 editorial-shadow">
+        <motion.section variants={itemVariants} className="mb-8 rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-4 editorial-shadow md:rounded-3xl md:p-5">
           <div className="mb-4 flex items-center justify-between gap-3">
             <div>
               <p className="font-label text-[10px] font-bold uppercase tracking-[0.22em] text-secondary dark:text-gray-300">Ưu tiên nhanh</p>
@@ -318,8 +318,8 @@ export function TripOverview() {
 
       <section className={uiDensity === 'compact' ? 'mb-8' : 'mb-12'}>
         <div className={uiDensity === 'compact' ? 'grid grid-cols-1 lg:grid-cols-3 gap-4 density-stack' : 'grid grid-cols-1 lg:grid-cols-3 gap-6'}>
-          <motion.div variants={itemVariants} className="rounded-[1.5rem] bg-surface-container-lowest p-6 shadow-[0_12px_24px_rgba(0,0,0,0.06)] density-card ring-1 ring-outline/10 hover:-translate-y-1 transition-transform">
-            <p className="font-label text-[10px] uppercase tracking-[0.2em] text-secondary dark:text-gray-300 font-bold mb-2">Trạng thái ngân sách</p>
+          <motion.div variants={itemVariants} className="rounded-[1.25rem] bg-surface-container-lowest p-4 shadow-[0_12px_24px_rgba(0,0,0,0.06)] density-card ring-1 ring-outline/10 transition-transform hover:-translate-y-1 md:rounded-[1.5rem] md:p-6">
+            <p className="mb-2 font-label text-[10px] font-bold uppercase tracking-wide text-secondary dark:text-gray-300 md:tracking-[0.2em]">Trạng thái ngân sách</p>
             <h2 className="font-headline text-2xl font-bold text-on-surface">{spentPercentage.toFixed(1)}%</h2>
             <div className="flex-1">
               <p className="font-bold font-headline">Trạng thái quỹ</p>
@@ -328,13 +328,13 @@ export function TripOverview() {
                 : `Bạn đã vượt ${formatMoney(Math.abs(remaining), baseCurrencySymbol)} so với ngân sách dự kiến.`}</p>
             </div>
           </motion.div>
-          <motion.div variants={itemVariants} className="rounded-[1.5rem] bg-surface-container-lowest p-6 shadow-[0_12px_24px_rgba(0,0,0,0.06)] density-card ring-1 ring-outline/10 hover:-translate-y-1 transition-transform">
-            <p className="font-label text-[10px] uppercase tracking-[0.2em] text-secondary dark:text-gray-300 font-bold mb-2">Checklist nhanh</p>
+          <motion.div variants={itemVariants} className="rounded-[1.25rem] bg-surface-container-lowest p-4 shadow-[0_12px_24px_rgba(0,0,0,0.06)] density-card ring-1 ring-outline/10 transition-transform hover:-translate-y-1 md:rounded-[1.5rem] md:p-6">
+            <p className="mb-2 font-label text-[10px] font-bold uppercase tracking-wide text-secondary dark:text-gray-300 md:tracking-[0.2em]">Checklist nhanh</p>
             <h2 className="font-headline text-2xl font-bold text-on-surface">{packedItemsCount}/{tripPackingItems.length}</h2>
             <p className="mt-2 text-sm text-on-surface-variant">Đã chuẩn bị xong {packedItemsCount} món hành lý. Mở ngay danh sách nếu muốn hoàn tất phần còn thiếu.</p>
           </motion.div>
-          <motion.div variants={itemVariants} className="rounded-[1.5rem] bg-surface-container-lowest p-6 shadow-[0_12px_24px_rgba(0,0,0,0.06)] density-card ring-1 ring-outline/10 hover:-translate-y-1 transition-transform">
-            <p className="font-label text-[10px] uppercase tracking-[0.2em] text-secondary dark:text-gray-300 font-bold mb-2">Timeline sắp tới</p>
+          <motion.div variants={itemVariants} className="rounded-[1.25rem] bg-surface-container-lowest p-4 shadow-[0_12px_24px_rgba(0,0,0,0.06)] density-card ring-1 ring-outline/10 transition-transform hover:-translate-y-1 md:rounded-[1.5rem] md:p-6">
+            <p className="mb-2 font-label text-[10px] font-bold uppercase tracking-wide text-secondary dark:text-gray-300 md:tracking-[0.2em]">Timeline sắp tới</p>
             {upcomingActivities.length > 0 ? (
               <div className="space-y-3">
                 {upcomingActivities.slice(0, 3).map((activity) => (
@@ -352,7 +352,7 @@ export function TripOverview() {
         </div>
       </section>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-12 lg:gap-8">
         <section className="lg:col-span-7 space-y-6">
           {trip.review && (
             <div className="bg-surface-container-lowest p-6 md:p-8 rounded-2xl editorial-shadow relative overflow-hidden mb-8">
@@ -409,7 +409,7 @@ export function TripOverview() {
               <motion.div variants={itemVariants} key={member.id}>
                 <div
                   onClick={() => { setSelectedMember(member); setIsMemberInfoOpen(true); }}
-                  className={`bg-surface-container-lowest p-6 rounded-[1.5rem] ring-1 ring-outline/10 shadow-sm flex items-center justify-between group hover:shadow-md hover:-translate-y-1 transition-all duration-300 cursor-pointer ${member.balance < 0 ? 'border-l-4 border-l-error' : ''}`}
+                  className={`group flex cursor-pointer items-center justify-between gap-3 rounded-[1.25rem] bg-surface-container-lowest p-4 shadow-sm ring-1 ring-outline/10 transition-all duration-300 hover:-translate-y-1 hover:shadow-md md:rounded-[1.5rem] md:p-6 ${member.balance < 0 ? 'border-l-4 border-l-error' : ''}`}
                 >
                   <div className="flex items-center gap-4">
                     <img alt={member.displayName} className="w-12 h-12 rounded-full object-cover" src={member.avatar} />
@@ -418,9 +418,9 @@ export function TripOverview() {
                       <p className="font-label text-[10px] text-on-surface-variant uppercase tracking-tighter font-bold">{member.role}</p>
                     </div>
                   </div>
-                  <div className="text-right">
+                  <div className="min-w-0 text-right">
                     <p className="font-label text-[10px] text-secondary dark:text-gray-300 uppercase font-bold mb-1">Đã chi</p>
-                    <p className="font-headline font-bold text-on-surface">{formatMoney(member.spent, baseCurrencySymbol)}</p>
+                    <p className="break-words font-headline font-bold text-on-surface">{formatMoney(member.spent, baseCurrencySymbol)}</p>
                     <span className={`text-[11px] font-medium ${member.balance >= 0 ? 'text-tertiary' : 'text-error'}`}>
                       {member.balance >= 0 ? '+' : '-'} {formatMoney(Math.abs(member.balance), baseCurrencySymbol)}
                     </span>
@@ -430,7 +430,7 @@ export function TripOverview() {
             ))}
           </div>
 
-          <div className="mt-8 rounded-[1.5rem] bg-surface-container-lowest p-6 editorial-shadow ring-1 ring-outline/10">
+          <div className="mt-8 rounded-[1.25rem] bg-surface-container-lowest p-4 editorial-shadow ring-1 ring-outline/10 md:rounded-[1.5rem] md:p-6">
             <div className="mb-5 flex items-center justify-between gap-4">
               <div>
                 <p className="font-label text-[10px] font-bold uppercase tracking-[0.22em] text-secondary dark:text-gray-300">Activity feed</p>
@@ -467,7 +467,7 @@ export function TripOverview() {
         <aside className="lg:col-span-5 space-y-6">
           <motion.div variants={itemVariants} className="sticky top-24">
             <div className="grid grid-cols-1 gap-4 mb-6">
-              <div className="rounded-3xl bg-surface-container-lowest p-6 shadow-[0_12px_24px_rgba(0,0,0,0.06)]">
+              <div className="rounded-2xl bg-surface-container-lowest p-4 shadow-[0_12px_24px_rgba(0,0,0,0.06)] md:rounded-3xl md:p-6">
                 <div className="flex items-start justify-between gap-4">
                   <div>
                     <p className="font-label text-[10px] uppercase tracking-[0.2em] text-secondary dark:text-gray-300 font-bold mb-2">Hành lý của chuyến đi</p>
@@ -484,7 +484,7 @@ export function TripOverview() {
                 </Link>
               </div>
 
-              <div className="rounded-3xl bg-surface-container-lowest p-6 shadow-[0_12px_24px_rgba(0,0,0,0.06)]">
+              <div className="rounded-2xl bg-surface-container-lowest p-4 shadow-[0_12px_24px_rgba(0,0,0,0.06)] md:rounded-3xl md:p-6">
                 <div className="flex items-start justify-between gap-4">
                   <div>
                     <p className="font-label text-[10px] uppercase tracking-[0.2em] text-secondary dark:text-gray-300 font-bold mb-2">Ảnh & kỷ niệm</p>
@@ -502,7 +502,7 @@ export function TripOverview() {
               </div>
             </div>
 
-            <div className="bg-primary text-on-primary p-8 rounded-3xl overflow-hidden relative shadow-2xl">
+            <div className="relative overflow-hidden rounded-2xl bg-primary p-5 text-on-primary shadow-2xl md:rounded-3xl md:p-8">
               <div className="absolute -top-10 -right-10 w-32 h-32 bg-primary-container opacity-20 rounded-full blur-2xl"></div>
               <h2 className="font-headline text-2xl font-bold mb-6">Ai trả ai?</h2>
 

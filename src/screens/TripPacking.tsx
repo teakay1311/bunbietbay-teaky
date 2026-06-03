@@ -304,18 +304,18 @@ export function TripPacking() {
 
   return (
     <motion.div variants={containerVariants} initial="hidden" animate="show" className="pb-10">
-      <motion.div variants={itemVariants} className="flex justify-between items-end mb-8">
-        <div>
-          <p className="font-label text-xs uppercase tracking-[0.2em] text-secondary dark:text-gray-300 font-bold mb-2">Chuẩn bị</p>
-          <div className="flex flex-wrap items-center gap-4">
-            <h1 className="font-headline text-4xl font-extrabold tracking-tighter text-on-surface">Hành lý & Đồ đạc</h1>
+      <motion.div variants={itemVariants} className="mb-6 flex flex-col items-stretch justify-between gap-4 md:mb-8 md:flex-row md:items-end">
+        <div className="min-w-0">
+          <p className="mb-2 font-label text-[11px] font-bold uppercase tracking-[0.16em] text-secondary dark:text-gray-300 md:text-xs md:tracking-[0.2em]">Chuẩn bị</p>
+          <div className="flex flex-col gap-3 md:flex-row md:flex-wrap md:items-center md:gap-4">
+            <h1 className="font-headline text-2xl font-extrabold text-on-surface md:text-4xl md:tracking-tighter">Hành lý & Đồ đạc</h1>
             {session?.user && (
-              <div className="flex bg-surface-container-low rounded-full p-1 ring-1 ring-outline-variant/30 self-end mb-1">
-                <button onClick={() => setFilterAssignee('all')} className={`px-4 py-1.5 rounded-full text-sm font-bold transition-colors ${filterAssignee === 'all' ? 'bg-primary text-white shadow-sm' : 'text-secondary hover:text-on-surface'}`}>Tất cả</button>
-                <button onClick={() => setFilterAssignee('me')} className={`px-4 py-1.5 rounded-full text-sm font-bold transition-colors ${filterAssignee === 'me' ? 'bg-primary text-white shadow-sm' : 'text-secondary hover:text-on-surface'}`}>Phân công cho tôi</button>
+              <div className="mb-1 flex w-full self-end rounded-full bg-surface-container-low p-1 ring-1 ring-outline-variant/30 sm:w-auto">
+                <button onClick={() => setFilterAssignee('all')} className={`flex-1 rounded-full px-3 py-1.5 text-sm font-bold transition-colors sm:flex-none md:px-4 ${filterAssignee === 'all' ? 'bg-primary text-white shadow-sm' : 'text-secondary hover:text-on-surface'}`}>Tất cả</button>
+                <button onClick={() => setFilterAssignee('me')} className={`flex-1 rounded-full px-3 py-1.5 text-sm font-bold transition-colors sm:flex-none md:px-4 ${filterAssignee === 'me' ? 'bg-primary text-white shadow-sm' : 'text-secondary hover:text-on-surface'}`}>Phân công cho tôi</button>
               </div>
             )}
-            <div className="relative flex-1 min-w-[200px] mb-1 self-end">
+            <div className="relative mb-1 min-w-0 flex-1 self-end md:min-w-[200px]">
               <Icons.Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-secondary opacity-50" />
               <input
                 type="text"
@@ -325,18 +325,18 @@ export function TripPacking() {
                 className="w-full bg-surface-container-high text-sm text-on-surface rounded-full pl-9 pr-4 py-1.5 focus:ring-1 focus:ring-primary/50 transition-all font-medium outline-none"
               />
             </div>
-            <SortSelect value={sortBy} options={PACKING_SORT_OPTIONS} onChange={setSortBy} className="mb-1 self-end py-1.5" />
+            <SortSelect value={sortBy} options={PACKING_SORT_OPTIONS} onChange={setSortBy} className="mb-1 w-full self-end py-1.5 md:w-auto" />
           </div>
         </div>
         {canEdit && (
-          <button onClick={() => { setEditingItem(null); setIsBatchMode(false); setIsPresetMode(false); setIsAddOpen(true); }} className="bg-primary text-on-primary px-6 py-3 rounded-xl font-bold flex items-center gap-2 hover:opacity-90 transition-opacity">
+          <button onClick={() => { setEditingItem(null); setIsBatchMode(false); setIsPresetMode(false); setIsAddOpen(true); }} className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 font-bold text-on-primary transition-opacity hover:opacity-90 md:w-auto md:px-6">
             <Icons.Plus className="w-5 h-5" />
             Thêm đồ
           </button>
         )}
       </motion.div>
 
-      <motion.div variants={itemVariants} className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-surface-container-low px-4 py-3 text-sm text-secondary dark:text-gray-300">
+      <motion.div variants={itemVariants} className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-surface-container-low px-4 py-3 text-sm text-secondary dark:text-gray-300 md:mb-6">
         <span className="font-medium">
           Hiển thị {items.length} món
           {items.length !== tripPackingItems.length && ` phù hợp trong tổng ${tripPackingItems.length} món`}
@@ -356,7 +356,7 @@ export function TripPacking() {
       </motion.div>
 
       {assigneeStats.length > 0 && (
-        <motion.section variants={itemVariants} className="mb-8 rounded-3xl bg-surface-container-lowest p-5 editorial-shadow ring-1 ring-outline/10">
+        <motion.section variants={itemVariants} className="mb-8 rounded-2xl bg-surface-container-lowest p-4 editorial-shadow ring-1 ring-outline/10 md:rounded-3xl md:p-5">
           <div className="mb-4 flex items-center justify-between gap-4">
             <div>
               <p className="font-label text-[10px] font-bold uppercase tracking-[0.22em] text-secondary dark:text-gray-300">Theo thành viên</p>
@@ -382,7 +382,7 @@ export function TripPacking() {
         </motion.section>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-6 lg:grid-cols-3">
         {categories.map(cat => {
           const catItems = itemsByCategory[cat.id] ?? [];
           if (catItems.length === 0) return null;
@@ -391,7 +391,7 @@ export function TripPacking() {
           const progress = (packedCount / catItems.length) * 100;
 
           return (
-            <motion.div variants={itemVariants} key={cat.id} className="bg-surface-container-lowest p-6 rounded-2xl editorial-shadow">
+            <motion.div variants={itemVariants} key={cat.id} className="rounded-2xl bg-surface-container-lowest p-4 editorial-shadow md:p-6">
               <div className="flex items-center gap-3 mb-4">
                 <div className="w-10 h-10 rounded-xl bg-primary-container text-primary dark:text-white flex items-center justify-center">
                   <cat.icon className="w-5 h-5" />

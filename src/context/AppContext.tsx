@@ -1393,6 +1393,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
               image: currentActivity.image,
               map_url: currentActivity.mapUrl,
               booking_code: currentActivity.bookingCode,
+              is_completed: currentActivity.isCompleted ?? false,
             }));
           });
         });
@@ -1540,6 +1541,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
             map_url: a.mapUrl,
             image: a.image,
             booking_code: a.bookingCode,
+            is_completed: a.isCompleted ?? false,
           }));
           await runSupabaseMutation(() => supabase!.from('activities').insert(actData));
         }

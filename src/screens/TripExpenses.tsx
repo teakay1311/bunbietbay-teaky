@@ -449,34 +449,34 @@ export function TripExpenses() {
 
   return (
     <motion.div variants={containerVariants} initial="hidden" animate="show" className="pb-10">
-      <motion.section variants={itemVariants} className="mb-12">
+      <motion.section variants={itemVariants} className="mb-8 md:mb-12">
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
           <div>
-            <span className="font-label text-xs uppercase tracking-[0.2em] text-secondary dark:text-gray-300 font-bold mb-2 block">Chuyến đi hiện tại</span>
-            <h1 className="text-4xl md:text-5xl font-extrabold tracking-tighter text-on-surface font-headline">{trip.title}</h1>
+            <span className="mb-2 block font-label text-[11px] font-bold uppercase tracking-[0.16em] text-secondary dark:text-gray-300 md:text-xs md:tracking-[0.2em]">Chuyến đi hiện tại</span>
+            <h1 className="font-headline text-2xl font-extrabold text-on-surface md:text-5xl md:tracking-tighter">{trip.title}</h1>
             <p className="text-on-surface-variant mt-2 flex items-center gap-2">
               <Icons.CalendarDays className="w-4 h-4" />
               {formatLocalDate(trip.startDate, { day: '2-digit', month: 'short' })} — {formatLocalDate(trip.endDate, { day: '2-digit', month: 'short', year: 'numeric' })}
             </p>
           </div>
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-2 md:gap-3">
             {canManageTrip && (
-              <button onClick={() => setIsBudgetSettingsOpen(true)} className="bg-surface-container-high text-on-surface px-6 py-3 rounded-lg font-semibold transition-all flex items-center gap-2 hover:bg-surface-container-highest">
-                <Icons.Settings className="w-5 h-5" />
-                Ngân sách & tỉ giá
+              <button onClick={() => setIsBudgetSettingsOpen(true)} className="flex items-center gap-2 rounded-lg bg-surface-container-high px-3 py-2.5 text-sm font-semibold text-on-surface transition-all hover:bg-surface-container-highest md:px-6 md:py-3 md:text-base">
+                <Icons.Settings className="h-4 w-4 md:h-5 md:w-5" />
+                <span>Ngân sách & tỉ giá</span>
               </button>
             )}
-            <button onClick={exportExpensesCsv} className="bg-surface-container-high text-on-surface px-6 py-3 rounded-lg font-semibold transition-all flex items-center gap-2 hover:bg-surface-container-highest">
-              <Icons.Receipt className="w-5 h-5" />
+            <button onClick={exportExpensesCsv} className="flex items-center gap-2 rounded-lg bg-surface-container-high px-3 py-2.5 text-sm font-semibold text-on-surface transition-all hover:bg-surface-container-highest md:px-6 md:py-3 md:text-base">
+              <Icons.Receipt className="h-4 w-4 md:h-5 md:w-5" />
               Xuất CSV
             </button>
-            <button onClick={printExpenseReport} className="bg-surface-container-high text-on-surface px-6 py-3 rounded-lg font-semibold transition-all flex items-center gap-2 hover:bg-surface-container-highest">
-              <Icons.FileText className="w-5 h-5" />
+            <button onClick={printExpenseReport} className="flex items-center gap-2 rounded-lg bg-surface-container-high px-3 py-2.5 text-sm font-semibold text-on-surface transition-all hover:bg-surface-container-highest md:px-6 md:py-3 md:text-base">
+              <Icons.FileText className="h-4 w-4 md:h-5 md:w-5" />
               In PDF
             </button>
             {canEdit && (
-              <button onClick={() => { setEditingExpense(null); setIsAddOpen(true); }} className="bg-primary text-on-primary px-6 py-3 rounded-lg font-semibold hover:opacity-90 transition-all flex items-center gap-2 editorial-shadow">
-                <Icons.Plus className="w-5 h-5" />
+              <button onClick={() => { setEditingExpense(null); setIsAddOpen(true); }} className="editorial-shadow flex items-center gap-2 rounded-lg bg-primary px-3 py-2.5 text-sm font-semibold text-on-primary transition-all hover:opacity-90 md:px-6 md:py-3 md:text-base">
+                <Icons.Plus className="h-4 w-4 md:h-5 md:w-5" />
                 Thêm chi tiêu
               </button>
             )}
@@ -500,20 +500,20 @@ export function TripExpenses() {
         </motion.div>
       )}
 
-      <motion.section variants={itemVariants} className={uiDensity === 'compact' ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-10 density-stack' : 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 mb-12'}>
-        <div className={uiDensity === 'compact' ? 'bg-surface-container-lowest p-4 rounded-xl editorial-shadow relative overflow-hidden group density-card' : 'bg-surface-container-lowest p-6 rounded-xl editorial-shadow relative overflow-hidden group density-card'}>
+      <motion.section variants={itemVariants} className={uiDensity === 'compact' ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-8 md:mb-10 density-stack' : 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-6 mb-8 md:mb-12'}>
+        <div className={uiDensity === 'compact' ? 'bg-surface-container-lowest p-4 rounded-xl editorial-shadow relative overflow-hidden group density-card' : 'bg-surface-container-lowest p-4 md:p-6 rounded-xl editorial-shadow relative overflow-hidden group density-card'}>
           <div className="relative z-10">
-            <h3 className="font-label text-[10px] uppercase tracking-widest font-bold text-secondary dark:text-gray-300 mb-2 md:mb-4">Tổng Ngân Sách</h3>
-            <div className="text-2xl md:text-3xl font-extrabold text-on-surface font-headline tracking-tight truncate" title={`${formatMoney(trip.budget, baseCurrencySymbol)}`}>{formatMoney(trip.budget, baseCurrencySymbol)}</div>
+            <h3 className="mb-2 font-label text-[10px] font-bold uppercase tracking-wide text-secondary dark:text-gray-300 md:mb-4 md:tracking-widest">Tổng Ngân Sách</h3>
+            <div className="break-words font-headline text-xl font-extrabold tracking-tight text-on-surface md:text-3xl" title={`${formatMoney(trip.budget, baseCurrencySymbol)}`}>{formatMoney(trip.budget, baseCurrencySymbol)}</div>
             <p className="text-xs text-on-surface-variant mt-2">Dự kiến cho {trip.members.length} người</p>
           </div>
           <Icons.Wallet className="absolute -bottom-4 -right-4 w-20 h-20 md:w-24 md:h-24 text-primary dark:text-white/5 rotate-12 group-hover:scale-110 transition-transform" />
         </div>
 
-        <div className={uiDensity === 'compact' ? 'bg-surface-container-lowest p-4 rounded-xl editorial-shadow relative overflow-hidden group density-card' : 'bg-surface-container-lowest p-6 rounded-xl editorial-shadow relative overflow-hidden group density-card'}>
+        <div className={uiDensity === 'compact' ? 'bg-surface-container-lowest p-4 rounded-xl editorial-shadow relative overflow-hidden group density-card' : 'bg-surface-container-lowest p-4 md:p-6 rounded-xl editorial-shadow relative overflow-hidden group density-card'}>
           <div className="relative z-10">
-            <h3 className="font-label text-[10px] uppercase tracking-widest font-bold text-secondary dark:text-gray-300 mb-2 md:mb-4">Đã Chi Tiêu</h3>
-            <div className={`text-2xl md:text-3xl font-extrabold font-headline tracking-tight truncate ${spentPercentage >= 100 ? 'text-error' : spentPercentage >= 90 ? 'text-warning text-yellow-600 dark:text-yellow-400' : 'text-tertiary'}`} title={`${formatMoney(trip.spent, baseCurrencySymbol)}`}>{formatMoney(trip.spent, baseCurrencySymbol)}</div>
+            <h3 className="mb-2 font-label text-[10px] font-bold uppercase tracking-wide text-secondary dark:text-gray-300 md:mb-4 md:tracking-widest">Đã Chi Tiêu</h3>
+            <div className={`break-words font-headline text-xl font-extrabold tracking-tight md:text-3xl ${spentPercentage >= 100 ? 'text-error' : spentPercentage >= 90 ? 'text-warning text-yellow-600 dark:text-yellow-400' : 'text-tertiary'}`} title={`${formatMoney(trip.spent, baseCurrencySymbol)}`}>{formatMoney(trip.spent, baseCurrencySymbol)}</div>
             <div className="mt-4 h-1.5 w-full bg-surface-variant rounded-full overflow-hidden">
               <div className={`h-full transition-all ${spentPercentage >= 100 ? 'bg-error' : spentPercentage >= 90 ? 'bg-yellow-500' : 'bg-tertiary'}`} style={{ width: `${spentPercentage}%` }}></div>
             </div>
@@ -521,19 +521,19 @@ export function TripExpenses() {
           <Icons.Banknote className="absolute -bottom-4 -right-4 w-20 h-20 md:w-24 md:h-24 text-tertiary/5 rotate-12 group-hover:scale-110 transition-transform" />
         </div>
 
-        <div className={uiDensity === 'compact' ? 'bg-surface-container-lowest p-4 rounded-xl editorial-shadow relative overflow-hidden group density-card' : 'bg-surface-container-lowest p-6 rounded-xl editorial-shadow relative overflow-hidden group density-card'}>
+        <div className={uiDensity === 'compact' ? 'bg-surface-container-lowest p-4 rounded-xl editorial-shadow relative overflow-hidden group density-card' : 'bg-surface-container-lowest p-4 md:p-6 rounded-xl editorial-shadow relative overflow-hidden group density-card'}>
           <div className="relative z-10">
-            <h3 className="font-label text-[10px] uppercase tracking-widest font-bold text-secondary dark:text-gray-300 mb-2 md:mb-4">Còn Lại</h3>
-            <div className="text-2xl md:text-3xl font-extrabold text-primary dark:text-white-container font-headline tracking-tight truncate" title={`${formatMoney(remaining, baseCurrencySymbol)}`}>{formatMoney(remaining, baseCurrencySymbol)}</div>
+            <h3 className="mb-2 font-label text-[10px] font-bold uppercase tracking-wide text-secondary dark:text-gray-300 md:mb-4 md:tracking-widest">Còn Lại</h3>
+            <div className="break-words font-headline text-xl font-extrabold tracking-tight text-primary dark:text-white-container md:text-3xl" title={`${formatMoney(remaining, baseCurrencySymbol)}`}>{formatMoney(remaining, baseCurrencySymbol)}</div>
             <p className="text-xs text-on-surface-variant mt-2">{safeBudget > 0 ? ((remaining / safeBudget) * 100).toFixed(1) : '0.0'}% ngân sách</p>
           </div>
           <Icons.PiggyBank className="absolute -bottom-4 -right-4 w-20 h-20 md:w-24 md:h-24 text-primary dark:text-white-container/5 rotate-12 group-hover:scale-110 transition-transform" />
         </div>
 
-        <div className={uiDensity === 'compact' ? 'bg-surface-container-lowest p-4 rounded-xl editorial-shadow relative overflow-hidden group density-card' : 'bg-surface-container-lowest p-6 rounded-xl editorial-shadow relative overflow-hidden group density-card'}>
+        <div className={uiDensity === 'compact' ? 'bg-surface-container-lowest p-4 rounded-xl editorial-shadow relative overflow-hidden group density-card' : 'bg-surface-container-lowest p-4 md:p-6 rounded-xl editorial-shadow relative overflow-hidden group density-card'}>
           <div className="relative z-10">
-            <h3 className="font-label text-[10px] uppercase tracking-widest font-bold text-secondary dark:text-gray-300 mb-2 md:mb-4">TB mỗi người</h3>
-            <div className="text-2xl md:text-3xl font-extrabold text-on-surface font-headline tracking-tight truncate" title={`${formatMoney(avgPerPerson, baseCurrencySymbol)}`}>{formatMoney(avgPerPerson, baseCurrencySymbol)}</div>
+            <h3 className="mb-2 font-label text-[10px] font-bold uppercase tracking-wide text-secondary dark:text-gray-300 md:mb-4 md:tracking-widest">TB mỗi người</h3>
+            <div className="break-words font-headline text-xl font-extrabold tracking-tight text-on-surface md:text-3xl" title={`${formatMoney(avgPerPerson, baseCurrencySymbol)}`}>{formatMoney(avgPerPerson, baseCurrencySymbol)}</div>
             <p className="text-xs text-on-surface-variant mt-2">Chia cho {trip.members.length} thành viên</p>
           </div>
           <Icons.Users className="absolute -bottom-4 -right-4 w-20 h-20 md:w-24 md:h-24 text-on-surface/5 rotate-12 group-hover:scale-110 transition-transform" />
@@ -584,16 +584,16 @@ export function TripExpenses() {
         </motion.section>
       )}
 
-      <motion.div variants={itemVariants} className="flex gap-4 mb-6 relative z-10 w-full overflow-x-auto no-scrollbar">
-        <button onClick={() => setActiveTab('list')} className={`px-6 py-2.5 font-bold rounded-2xl transition-all whitespace-nowrap ${activeTab === 'list' ? 'bg-primary text-on-primary shadow-lg shadow-primary/20' : 'bg-surface-container-high text-secondary dark:text-gray-300 hover:text-on-surface'}`}>
+      <motion.div variants={itemVariants} className="no-scrollbar relative z-10 mb-5 flex w-full gap-2 overflow-x-auto md:mb-6 md:gap-4">
+        <button onClick={() => setActiveTab('list')} className={`whitespace-nowrap rounded-xl px-4 py-2 text-sm font-bold transition-all md:rounded-2xl md:px-6 md:py-2.5 md:text-base ${activeTab === 'list' ? 'bg-primary text-on-primary shadow-lg shadow-primary/20' : 'bg-surface-container-high text-secondary dark:text-gray-300 hover:text-on-surface'}`}>
           Danh sách Chi tiêu
         </button>
-        <button onClick={() => setActiveTab('balances')} className={`px-6 py-2.5 font-bold rounded-2xl transition-all whitespace-nowrap ${activeTab === 'balances' ? 'bg-primary text-on-primary shadow-lg shadow-primary/20' : 'bg-surface-container-high text-secondary dark:text-gray-300 hover:text-on-surface'}`}>
+        <button onClick={() => setActiveTab('balances')} className={`whitespace-nowrap rounded-xl px-4 py-2 text-sm font-bold transition-all md:rounded-2xl md:px-6 md:py-2.5 md:text-base ${activeTab === 'balances' ? 'bg-primary text-on-primary shadow-lg shadow-primary/20' : 'bg-surface-container-high text-secondary dark:text-gray-300 hover:text-on-surface'}`}>
           <div className="flex items-center gap-2">
             <Icons.ArrowRightLeft className="w-4 h-4" /> Tra soát Công nợ
           </div>
         </button>
-        <button onClick={() => setActiveTab('charts')} className={`px-6 py-2.5 font-bold rounded-2xl transition-all whitespace-nowrap ${activeTab === 'charts' ? 'bg-primary text-on-primary shadow-lg shadow-primary/20' : 'bg-surface-container-high text-secondary dark:text-gray-300 hover:text-on-surface'}`}>
+        <button onClick={() => setActiveTab('charts')} className={`whitespace-nowrap rounded-xl px-4 py-2 text-sm font-bold transition-all md:rounded-2xl md:px-6 md:py-2.5 md:text-base ${activeTab === 'charts' ? 'bg-primary text-on-primary shadow-lg shadow-primary/20' : 'bg-surface-container-high text-secondary dark:text-gray-300 hover:text-on-surface'}`}>
           <div className="flex items-center gap-2">
             <Icons.PieChart className="w-4 h-4" /> Biểu đồ Chi tiêu
           </div>
@@ -604,9 +604,9 @@ export function TripExpenses() {
         <div className="bg-surface-container-lowest rounded-[1.4rem] overflow-hidden">
           {activeTab === 'list' && (
             <>
-              <div className="p-6 border-b border-surface-variant/30 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-surface-container-low/60 backdrop-blur-sm">
+              <div className="flex flex-col items-start justify-between gap-3 border-b border-surface-variant/30 bg-surface-container-low/60 p-4 backdrop-blur-sm md:flex-row md:items-center md:gap-4 md:p-6">
                 <h2 className="text-xl font-bold font-headline text-on-surface hidden lg:block">Danh sách Chi tiêu</h2>
-                <div className="flex flex-wrap gap-2 w-full md:w-auto overflow-x-auto no-scrollbar">
+                <div className="no-scrollbar grid w-full grid-cols-1 gap-2 sm:grid-cols-2 lg:flex lg:w-auto lg:flex-wrap lg:overflow-x-auto">
                   <div className="relative flex-1 md:w-64">
                     <Icons.Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-secondary dark:text-gray-300" />
                     <input
@@ -621,7 +621,7 @@ export function TripExpenses() {
                   <select
                     value={categoryFilter}
                     onChange={(event) => setCategoryFilter(event.target.value)}
-                    className="flex-1 md:flex-none rounded-lg bg-surface-container-low border border-outline-variant/50 px-3 py-2 text-sm text-on-surface"
+                    className="min-w-0 flex-1 rounded-lg border border-outline-variant/50 bg-surface-container-low px-3 py-2 text-sm text-on-surface lg:flex-none"
                   >
                     <option value="all">Tất cả danh mục</option>
                     {[...new Set(tripExpensesForDisplay.map((expense) => expense.category))].map((category) => (
@@ -631,7 +631,7 @@ export function TripExpenses() {
                   <select
                     value={payerFilter}
                     onChange={(event) => setPayerFilter(event.target.value)}
-                    className="flex-1 md:flex-none rounded-lg bg-surface-container-low border border-outline-variant/50 px-3 py-2 text-sm text-on-surface"
+                    className="min-w-0 flex-1 rounded-lg border border-outline-variant/50 bg-surface-container-low px-3 py-2 text-sm text-on-surface lg:flex-none"
                   >
                     <option value="all">Mọi người chi</option>
                     {trip.members.map((m) => (
@@ -641,20 +641,20 @@ export function TripExpenses() {
                   <select
                     value={participantFilter}
                     onChange={(event) => setParticipantFilter(event.target.value)}
-                    className="flex-1 md:flex-none rounded-lg bg-surface-container-low border border-outline-variant/50 px-3 py-2 text-sm text-on-surface"
+                    className="min-w-0 flex-1 rounded-lg border border-outline-variant/50 bg-surface-container-low px-3 py-2 text-sm text-on-surface lg:flex-none"
                   >
                     <option value="all">Mọi người nợ</option>
                     {trip.members.map((m) => (
                       <option key={`part-${m.id}`} value={m.id}>Người nợ: {m.displayName}</option>
                     ))}
                   </select>
-                  <SortSelect value={sortBy} options={EXPENSE_SORT_OPTIONS} onChange={setSortBy} className="flex-1 md:flex-none border border-outline-variant/50 bg-surface-container-low" />
+                  <SortSelect value={sortBy} options={EXPENSE_SORT_OPTIONS} onChange={setSortBy} className="w-full border border-outline-variant/50 bg-surface-container-low sm:col-span-2 lg:w-auto lg:flex-none" />
                   <button className="p-2 rounded-lg transition-colors text-secondary dark:text-gray-300" title="Bộ lọc đang bật">
                     <Icons.Filter className="w-5 h-5" />
                   </button>
                 </div>
               </div>
-              <div className="border-b border-surface-variant/30 bg-surface-container-low/40 px-6 py-4">
+              <div className="border-b border-surface-variant/30 bg-surface-container-low/40 px-4 py-4 md:px-6">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                   <div className="text-sm font-medium text-secondary dark:text-gray-300">
                     Hiển thị {filteredExpenses.length} khoản chi
@@ -1237,39 +1237,62 @@ export function TripExpenses() {
                             if (!canEdit) return;
                             if (info.offset.x > 80 || info.offset.x < -80) {
                               try {
-                                const amountAction = Math.abs(b.amount);
-                                // Determine correct paidBy/participants direction
-                                // If member owes (b.amount < 0): member pays → paidBy = member, participants = creditor(s)
-                                // If member is owed (b.amount > 0): debtor pays → paidBy = debtor, participants = [member]
-                                let payer: string;
-                                let recipients: string[];
+                                const currencyBalances = detailedBalances[b.currency] ?? {};
+                                const currency = b.currency as Currency;
+                                const exchangeRateToBase = getExchangeRateToBaseCurrency(currency);
+                                const settlements: Array<{ payer: string; recipients: string[]; originalAmount: number }> = [];
+                                let remainingAmount = Math.abs(b.amount);
+
                                 if (b.amount < -0.01) {
-                                  // Member owes money → they are the payer
-                                  payer = settlementMemberId;
-                                  const creditor = tripMembers.find(m => m.id !== settlementMemberId && (balances[m.id] || 0) > 0.01);
-                                  recipients = creditor ? [creditor.id] : tripMembers.filter(m => m.id !== settlementMemberId).map(m => m.id);
+                                  const creditors = tripMembers
+                                    .filter((tripMember) => tripMember.id !== settlementMemberId && (currencyBalances[tripMember.id] || 0) > 0.01)
+                                    .sort((left, right) => (currencyBalances[right.id] || 0) - (currencyBalances[left.id] || 0));
+
+                                  creditors.forEach((creditor) => {
+                                    if (remainingAmount <= 0.01) return;
+                                    const originalAmount = Math.min(remainingAmount, currencyBalances[creditor.id] || 0);
+                                    settlements.push({ payer: settlementMemberId, recipients: [creditor.id], originalAmount });
+                                    remainingAmount -= originalAmount;
+                                  });
                                 } else {
-                                  // Member is owed money → find a debtor to pay them
-                                  const debtor = tripMembers.find(m => m.id !== settlementMemberId && (balances[m.id] || 0) < -0.01);
-                                  payer = debtor ? debtor.id : settlementMemberId;
-                                  recipients = [settlementMemberId];
+                                  const debtors = tripMembers
+                                    .filter((tripMember) => tripMember.id !== settlementMemberId && (currencyBalances[tripMember.id] || 0) < -0.01)
+                                    .sort((left, right) => Math.abs(currencyBalances[right.id] || 0) - Math.abs(currencyBalances[left.id] || 0));
+
+                                  debtors.forEach((debtor) => {
+                                    if (remainingAmount <= 0.01) return;
+                                    const originalAmount = Math.min(remainingAmount, Math.abs(currencyBalances[debtor.id] || 0));
+                                    settlements.push({ payer: debtor.id, recipients: [settlementMemberId], originalAmount });
+                                    remainingAmount -= originalAmount;
+                                  });
                                 }
-                                await addExpense({
-                                  tripId: trip.id,
-                                  date: getLocalDateString(),
-                                  time: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
-                                  title: `Quyết toán nhanh nợ ${b.currency}`,
-                                  category: 'Khác',
-                                  amount: amountAction * getExchangeRateToBaseCurrency(b.currency as Currency),
-                                  originalAmount: amountAction,
-                                  currency: b.currency as Currency,
-                                  exchangeRate: getExchangeRateToBaseCurrency(b.currency as Currency),
-                                  paidBy: payer,
-                                  participants: recipients,
-                                  note: 'Chốt nợ bằng thao tác vuốt',
-                                  isSettlement: true,
+
+                                if (settlements.length === 0 || remainingAmount > 0.01) {
+                                  throw new Error('Không tìm thấy đối tác phù hợp để quyết toán khoản này.');
+                                }
+
+                                for (const settlement of settlements) {
+                                  await addExpense({
+                                    tripId: trip.id,
+                                    date: getLocalDateString(),
+                                    time: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
+                                    title: `Quyết toán nhanh nợ ${b.currency}`,
+                                    category: 'Khác',
+                                    amount: settlement.originalAmount * exchangeRateToBase,
+                                    originalAmount: settlement.originalAmount,
+                                    currency,
+                                    exchangeRate: exchangeRateToBase,
+                                    paidBy: settlement.payer,
+                                    participants: settlement.recipients,
+                                    note: 'Chốt nợ bằng thao tác vuốt',
+                                    isSettlement: true,
+                                  });
+                                }
+                                showToast({
+                                  tone: 'success',
+                                  title: 'Hoàn tất',
+                                  message: settlements.length > 1 ? `Đã tạo ${settlements.length} khoản quyết toán.` : 'Đã cập nhật công nợ.',
                                 });
-                                showToast({ tone: 'success', title: 'Hoàn tất', message: 'Đã cập nhật công nợ.' });
                               } catch (error) {
                                 showToast({ tone: 'error', title: 'Lỗi', message: getErrorMessage(error, 'Không thể quyết toán.') });
                               }

@@ -422,11 +422,13 @@ export function NotebookProvider({ children }: { children: React.ReactNode }) {
     };
 
     const addNotebookPlace = async (notebookId: string, place: Omit<NotebookPlace, 'id' | 'createdAt' | 'notebookId' | 'createdBy'>) => {
+        let optimisticId: string | null = null;
         try {
             let id = 'loc_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 8);
             if (typeof crypto !== 'undefined' && crypto.randomUUID) {
                 try { id = crypto.randomUUID(); } catch (err) { }
             }
+            optimisticId = id;
 
             const newPlace: NotebookPlace = {
                 ...place,
@@ -477,6 +479,7 @@ export function NotebookProvider({ children }: { children: React.ReactNode }) {
                 if (!isUuid && data && !error) {
                     pendingLocalIdsRef.current.delete(id);
                     pendingLocalIdsRef.current.add(data.id);
+                    optimisticId = data.id;
                     setNotebookPlaces(prev => prev.map(p => p.id === id ? { ...p, id: data.id } : p));
                 } else {
                     // Place confirmed on remote with same ID, remove from pending
@@ -485,12 +488,16 @@ export function NotebookProvider({ children }: { children: React.ReactNode }) {
             }
             return { success: true };
         } catch (error: any) {
-            // Rollback might be needed but for simplicity we keep it or rely on next refresh
+            if (optimisticId) {
+                pendingLocalIdsRef.current.delete(optimisticId);
+                setNotebookPlaces(prev => prev.filter(p => p.id !== optimisticId));
+            }
             return { success: false, error: error.message || 'Lỗi không xác định khi lưu.' };
         }
     };
 
     const editNotebookPlace = async (id: string, placeUpdates: Partial<NotebookPlace>) => {
+        const previousPlace = notebookPlaces.find(p => p.id === id);
         try {
             setNotebookPlaces(prev => prev.map(p => p.id === id ? { ...p, ...placeUpdates } : p));
 
@@ -509,25 +516,47 @@ export function NotebookProvider({ children }: { children: React.ReactNode }) {
             }
             return { success: true };
         } catch (error: any) {
+            if (previousPlace && !isMissingSupabaseObject(error)) {
+                setNotebookPlaces(prev => prev.map(p => p.id === id ? previousPlace : p));
+            }
             return { success: false, error: error.message || 'Lỗi cập nhật CSDL.' };
         }
     };
 
     const deleteNotebookPlace = async (id: string) => {
+        const previousPlace = notebookPlaces.find(p => p.id === id);
+        const wasPending = pendingLocalIdsRef.current.has(id);
+        pendingLocalIdsRef.current.delete(id);
         setNotebookPlaces(prev => prev.filter(p => p.id !== id));
         if (isRemoteMode && supabase) {
             try {
                 await runSupabaseMutation(() => supabase.from('notebook_places').delete().eq('id', id));
-            } catch (e) { }
+            } catch (error) {
+                if (previousPlace && !isMissingSupabaseObject(error)) {
+                    if (wasPending) pendingLocalIdsRef.current.add(id);
+                    setNotebookPlaces(prev => prev.some(p => p.id === id) ? prev : [...prev, previousPlace]);
+                }
+            }
         }
     };
 
     const bulkDeleteNotebookPlaces = async (ids: string[]) => {
+        const previousPlaces = notebookPlaces.filter(p => ids.includes(p.id));
+        const pendingIds = ids.filter(id => pendingLocalIdsRef.current.has(id));
+        ids.forEach(id => pendingLocalIdsRef.current.delete(id));
         setNotebookPlaces(prev => prev.filter(p => !ids.includes(p.id)));
         if (isRemoteMode && supabase) {
             try {
                 await runSupabaseMutation(() => supabase.from('notebook_places').delete().in('id', ids));
-            } catch (e) { }
+            } catch (error) {
+                if (previousPlaces.length > 0 && !isMissingSupabaseObject(error)) {
+                    pendingIds.forEach(id => pendingLocalIdsRef.current.add(id));
+                    setNotebookPlaces(prev => {
+                        const existingIds = new Set(prev.map(p => p.id));
+                        return [...prev, ...previousPlaces.filter(p => !existingIds.has(p.id))];
+                    });
+                }
+            }
         }
     };
 
@@ -581,6 +610,8 @@ export function NotebookProvider({ children }: { children: React.ReactNode }) {
     };
 
     const deleteNotebook = async (id: string): Promise<{ success: boolean; error?: string }> => {
+        const previousNotebooks = notebooks;
+        const previousPlaces = notebookPlaces;
         try {
             // Remove from local state first (optimistic)
             setNotebooks(prev => prev.filter(n => n.id !== id));
@@ -597,6 +628,10 @@ export function NotebookProvider({ children }: { children: React.ReactNode }) {
             }
             return { success: true };
         } catch (error: any) {
+            if (!isMissingSupabaseObject(error)) {
+                setNotebooks(previousNotebooks);
+                setNotebookPlaces(previousPlaces);
+            }
             return { success: false, error: error.message || 'Không thể xóa sổ tay.' };
         }
     };

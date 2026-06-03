@@ -77,6 +77,41 @@ test('falls back to safe defaults when imported lists have invalid shapes', () =
   assert.equal(normalizedState.currentTripId, null);
 });
 
+test('preserves fallback data when normalizing a partial state update', () => {
+  const currentState: PersistedAppState = {
+    ...fallbackState,
+    trips: [{
+      id: 't1',
+      title: 'Trip',
+      location: 'Da Nang',
+      startDate: '2026-04-10',
+      endDate: '2026-04-12',
+      budget: 1000,
+      status: 'upcoming',
+      image: '',
+    }],
+    profiles: [{
+      id: 'm1',
+      email: 'm1@example.com',
+      displayName: 'Old Name',
+      avatar: 'https://example.com/a.png',
+    }],
+    memberships: [{ id: 'tm1', tripId: 't1', userId: 'm1', role: 'owner' }],
+    currentTripId: 't1',
+    viewerProfileId: 'm1',
+  };
+
+  const normalizedState = normalizePersistedState({
+    profiles: [{ ...currentState.profiles[0], displayName: 'New Name' }],
+  }, currentState);
+
+  assert.equal(normalizedState.profiles[0]?.displayName, 'New Name');
+  assert.deepEqual(normalizedState.trips, currentState.trips);
+  assert.deepEqual(normalizedState.memberships, currentState.memberships);
+  assert.equal(normalizedState.currentTripId, 't1');
+  assert.equal(normalizedState.viewerProfileId, 'm1');
+});
+
 test('rejects imported snapshot when expense participants is malformed', () => {
   assert.throws(() => {
     validateImportedSnapshot({
