@@ -52,7 +52,7 @@ export function Modal({
           >
             <div className="density-modal-shell flex shrink-0 items-center justify-between border-b border-outline-variant/30">
               <h2 className="min-w-0 pr-3 font-headline text-lg font-bold sm:text-xl">{title}</h2>
-              <button onClick={onClose} className="rounded-full p-2 transition-all hover:bg-surface-container active:scale-95">
+              <button aria-label="Đóng hộp thoại" title="Đóng" onClick={onClose} className="rounded-full p-2 transition-all hover:bg-surface-container active:scale-95">
                 <Icons.Plus className="h-6 w-6 rotate-45" />
               </button>
             </div>

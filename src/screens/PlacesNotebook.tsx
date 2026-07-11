@@ -287,7 +287,7 @@ export function PlacesNotebook() {
                                 <span className="hidden md:inline">{isSelectMode ? 'Hủy chọn' : 'Chọn'}</span>
                             </button>
                             <div className="w-[1px] bg-outline/20 my-2 mx-1"></div>
-                            <button onClick={handleShare} className="flex h-9 items-center gap-2 rounded-lg px-3 text-sm font-bold text-secondary transition-all hover:bg-primary/10 hover:text-primary active:scale-95 md:h-10 md:rounded-xl md:px-4">
+                            <button aria-label="Mời thành viên vào sổ tay" title="Mời thành viên" onClick={handleShare} className="flex h-9 items-center gap-2 rounded-lg px-3 text-sm font-bold text-secondary transition-all hover:bg-primary/10 hover:text-primary active:scale-95 md:h-10 md:rounded-xl md:px-4">
                                 <Icons.UserPlus className="w-4 h-4" />
                                 <span className="hidden sm:inline">Mời</span>
                             </button>
@@ -303,7 +303,7 @@ export function PlacesNotebook() {
                                     </button>
                                 </>
                             )}
-                            <button onClick={() => handleOpenForm()} className="ml-1 flex h-9 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-bold text-on-primary shadow-md transition-all hover:scale-105 active:scale-95 md:h-10 md:rounded-xl md:px-5">
+                            <button aria-label="Thêm địa điểm vào sổ tay" title="Thêm địa điểm" onClick={() => handleOpenForm()} className="ml-1 flex h-9 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-bold text-on-primary shadow-md transition-all hover:scale-105 active:scale-95 md:h-10 md:rounded-xl md:px-5">
                                 <Icons.Plus className="w-4 h-4 mt-0.5" />
                             </button>
                         </div>
@@ -478,10 +478,10 @@ export function PlacesNotebook() {
                                                     </div>
                                                 ) : (
                                                     <>
-                                                        <button onClick={(e) => { e.stopPropagation(); handleOpenForm(place); }} className="w-8 h-8 flex items-center justify-center bg-surface-container hover:bg-surface-variant hover:text-primary text-secondary rounded-lg transition-colors">
+                                                        <button aria-label={`Sửa địa điểm ${place.name}`} title="Sửa địa điểm" onClick={(e) => { e.stopPropagation(); handleOpenForm(place); }} className="w-8 h-8 flex items-center justify-center bg-surface-container hover:bg-surface-variant hover:text-primary text-secondary rounded-lg transition-colors">
                                                             <Icons.Edit2 className="w-4 h-4" />
                                                         </button>
-                                                        <button onClick={(e) => { e.stopPropagation(); handleDelete(place.id, place.name); }} className="w-8 h-8 flex items-center justify-center bg-error-container/20 hover:bg-error text-error hover:text-white rounded-lg transition-colors">
+                                                        <button aria-label={`Xóa địa điểm ${place.name}`} title="Xóa địa điểm" onClick={(e) => { e.stopPropagation(); handleDelete(place.id, place.name); }} className="w-8 h-8 flex items-center justify-center bg-error-container/20 hover:bg-error text-error hover:text-white rounded-lg transition-colors">
                                                             <Icons.Trash2 className="w-4 h-4" />
                                                         </button>
                                                     </>

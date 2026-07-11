@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { APP_STATE_VERSION, normalizePersistedState, validateImportedSnapshot } from '../src/utils/appState';
+import { APP_STATE_VERSION, buildDuplicatedMembershipRoles, normalizePersistedState, prepareImportedSnapshot, validateImportedSnapshot } from '../src/utils/appState';
 import type { PersistedAppState } from '../src/context/AppContext';
 
 const fallbackState: PersistedAppState = {
@@ -17,6 +17,18 @@ const fallbackState: PersistedAppState = {
   activityLogs: [],
   currentTripId: null,
   viewerProfileId: null,
+};
+
+const validSnapshot: PersistedAppState = {
+  ...fallbackState,
+  trips: [{
+    id: 't1', title: 'Trip', location: 'Da Lat', startDate: '2026-04-10', endDate: '2026-04-12',
+    budget: 1000000, status: 'upcoming', image: '',
+  }],
+  profiles: [{ id: 'm1', email: 'm1@example.com', displayName: 'M1', avatar: 'https://example.com/a.png' }],
+  memberships: [{ id: 'tm1', tripId: 't1', userId: 'm1', role: 'owner' }],
+  currentTripId: 't1',
+  viewerProfileId: 'm1',
 };
 
 test('migrates persisted photos to include storage metadata', () => {
@@ -60,6 +72,7 @@ test('migrates legacy baseTrips and members into trips/profiles/memberships', ()
   assert.equal(normalizedState.profiles.length, 1);
   assert.equal(normalizedState.memberships.length, 1);
   assert.equal(normalizedState.memberships[0]?.role, 'owner');
+  assert.equal(normalizedState.memberships[0]?.revokedAt, undefined);
 });
 
 test('falls back to safe defaults when imported lists have invalid shapes', () => {
@@ -115,6 +128,7 @@ test('preserves fallback data when normalizing a partial state update', () => {
 test('rejects imported snapshot when expense participants is malformed', () => {
   assert.throws(() => {
     validateImportedSnapshot({
+      ...validSnapshot,
       expenses: [{
         id: 'e1',
         tripId: 't1',
@@ -130,25 +144,44 @@ test('rejects imported snapshot when expense participants is malformed', () => {
   }, /không hợp lệ/i);
 });
 
-test('accepts imported snapshot with valid minimal records', () => {
+test('accepts a complete imported snapshot with valid links', () => {
   assert.doesNotThrow(() => {
-    validateImportedSnapshot({
-      trips: [{
-        id: 't1',
-        title: 'Trip',
-        location: 'Da Lat',
-        startDate: '2026-04-10',
-        endDate: '2026-04-12',
-        budget: 1000000,
-        status: 'upcoming',
-        image: '',
-      }],
-      profiles: [{
-        id: 'm1',
-        email: 'm1@example.com',
-        displayName: 'M1',
-        avatar: 'https://example.com/a.png',
-      }],
-    });
+    validateImportedSnapshot(validSnapshot);
   });
+});
+
+test('rejects current-version partial and orphaned backups', () => {
+  assert.throws(() => validateImportedSnapshot({ version: APP_STATE_VERSION }), /không đầy đủ/i);
+  assert.throws(() => validateImportedSnapshot({
+    ...validSnapshot,
+    expenses: [{
+      id: 'e1', tripId: 't1', date: '2026-04-10', time: '10:00', title: 'Taxi', category: 'Di chuyển',
+      amount: 120000, paidBy: 'missing', participants: ['m1'],
+    }],
+  }), /chi tiêu không liên kết/i);
+});
+
+test('migrates a legacy backup before full validation', () => {
+  const imported = prepareImportedSnapshot({
+    version: 2,
+    baseTrips: [{
+      id: 'legacy-trip', title: 'Legacy', location: 'Hue', startDate: '2026-04-10', endDate: '2026-04-12',
+      budget: 1000, status: 'upcoming', image: '', memberIds: ['legacy-user'],
+    }],
+    members: [{ id: 'legacy-user', name: 'Legacy User', avatar: '', email: 'legacy@example.com' }],
+  });
+  assert.equal(imported.memberships[0]?.role, 'owner');
+});
+
+test('duplicates active memberships with the creator as owner', () => {
+  const roles = buildDuplicatedMembershipRoles([
+    { id: 'tm1', tripId: 't1', userId: 'old-owner', role: 'owner' },
+    { id: 'tm2', tripId: 't1', userId: 'creator', role: 'viewer' },
+    { id: 'tm3', tripId: 't1', userId: 'archived', role: 'editor', revokedAt: '2026-04-10T00:00:00.000Z' },
+  ], 't1', 'creator');
+
+  assert.deepEqual(roles, [
+    { userId: 'creator', role: 'owner' },
+    { userId: 'old-owner', role: 'admin' },
+  ]);
 });

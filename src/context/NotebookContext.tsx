@@ -189,6 +189,9 @@ export function NotebookProvider({ children }: { children: React.ReactNode }) {
                         supabase.from('notebook_places').select('*').in('notebook_id', allNotebookIds)
                     ]);
 
+                    if (nbs.error) throw nbs.error;
+                    if (places.error) throw places.error;
+
                     if (nbs.data) {
                         loadedNotebooks = nbs.data.map((r: any) => ({
                             id: r.id, name: r.name, type: r.type, createdBy: r.created_by
@@ -220,7 +223,8 @@ export function NotebookProvider({ children }: { children: React.ReactNode }) {
                         type: 'personal',
                         created_by: session!.user.id
                     }).select('id').single();
-                    
+
+                    if (error) throw error;
                     if (data && !error) {
                         remotePersonal = { id: data.id, name: 'Sổ tay cá nhân', type: 'personal', createdBy: session!.user.id };
                         loadedNotebooks.unshift(remotePersonal);
@@ -397,6 +401,8 @@ export function NotebookProvider({ children }: { children: React.ReactNode }) {
                 if (error) {
                     if (error.message.includes('schema cache') || error.message.includes('does not exist')) {
                         console.warn('Backend notebook tables missing. Falling back to local storage.');
+                        setNotebooks(prev => [...prev, { id, name, type, createdBy: session?.user?.id }]);
+                        return { success: true, id };
                     } else {
                         throw error;
                     }

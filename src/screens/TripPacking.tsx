@@ -105,14 +105,15 @@ export function TripPacking() {
 
   const trip = trips.find(t => t.id === id);
   const tripMembers = trip?.members ?? [];
+  const displayMembers = useMemo(() => [...tripMembers, ...(trip?.historicalMembers ?? [])], [trip?.historicalMembers, tripMembers]);
   const tripPackingItems = useMemo(() => packingItems.filter((item) => item.tripId === id), [packingItems, id]);
 
   const memberMap = useMemo(() => {
-    return tripMembers.reduce<Record<string, { name: string; avatar: string }>>((map, member) => {
+    return displayMembers.reduce<Record<string, { name: string; avatar: string }>>((map, member) => {
       map[member.id] = { name: member.displayName, avatar: member.avatar };
       return map;
     }, {});
-  }, [tripMembers]);
+  }, [displayMembers]);
 
   const items = useMemo(() => {
     let filteredList = tripPackingItems;

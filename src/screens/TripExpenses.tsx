@@ -199,7 +199,7 @@ export function TripExpenses() {
       const matchesParticipant = participantFilter === 'all' || expense.participants.includes(participantFilter);
       return matchesSearch && matchesCategory && matchesPayer && matchesParticipant;
     });
-    const memberNameById = new Map<string, string>((trip?.members ?? []).map((member) => [member.id, member.displayName]));
+    const memberNameById = new Map<string, string>([...(trip?.members ?? []), ...(trip?.historicalMembers ?? [])].map((member) => [member.id, member.displayName]));
     const fallbackSort = (a: Expense, b: Expense) => compareDate(`${a.date}T${normalizeTimeForInput(a.time)}`, `${b.date}T${normalizeTimeForInput(b.time)}`, 'desc');
     const sortComparator = (a: Expense, b: Expense) => {
       switch (sortBy) {
@@ -214,15 +214,16 @@ export function TripExpenses() {
       }
     };
     return stableSort(filteredList, chainComparators(sortComparator, fallbackSort));
-  }, [tripExpensesForDisplay, searchQuery, categoryFilter, payerFilter, participantFilter, sortBy, trip?.members]);
+  }, [tripExpensesForDisplay, searchQuery, categoryFilter, payerFilter, participantFilter, sortBy, trip?.historicalMembers, trip?.members]);
   const filteredExpenseTotal = useMemo(() => filteredExpenses.reduce((sum, expense) => sum + expense.amount, 0), [filteredExpenses]);
   const filteredExpenseAverage = filteredExpenses.length > 0 ? filteredExpenseTotal / filteredExpenses.length : 0;
   const hasActiveExpenseFilters = Boolean(searchQuery.trim()) || categoryFilter !== 'all' || payerFilter !== 'all' || participantFilter !== 'all';
   const tripMembers = trip?.members ?? [];
+  const financialMembers = useMemo(() => [...tripMembers, ...(trip?.historicalMembers ?? [])], [trip?.historicalMembers, tripMembers]);
 
   const balances = useMemo(() => {
     const bals: Record<string, number> = {};
-    tripMembers.forEach(m => bals[m.id] = 0);
+    financialMembers.forEach(m => bals[m.id] = 0);
 
     tripExpenses.forEach(expense => {
       const normalizedAmount = expense.amount;
@@ -241,7 +242,7 @@ export function TripExpenses() {
       }
     });
     return bals;
-  }, [tripExpenses, tripMembers]);
+  }, [financialMembers, tripExpenses]);
 
   const detailedBalances = useMemo(() => {
     const curBals: Record<string, Record<string, number>> = {};
@@ -250,7 +251,7 @@ export function TripExpenses() {
       const currency = expense.currency || baseCurrency;
       if (!curBals[currency]) {
         curBals[currency] = {};
-        tripMembers.forEach(m => curBals[currency][m.id] = 0);
+        financialMembers.forEach(m => curBals[currency][m.id] = 0);
       }
       const amt = expense.originalAmount || expense.amount;
 
@@ -269,7 +270,7 @@ export function TripExpenses() {
     });
 
     return curBals;
-  }, [tripExpenses, tripMembers, baseCurrency]);
+  }, [tripExpenses, financialMembers, baseCurrency]);
 
   const chartsData = useMemo(() => {
     const categoryTotals: Record<string, number> = {};
@@ -290,7 +291,7 @@ export function TripExpenses() {
       .sort((a, b) => new Date(a.rawDate).getTime() - new Date(b.rawDate).getTime());
 
     const memberData = Object.entries(memberTotals).map(([id, value]) => {
-      const member = tripMembers.find(m => m.id === id);
+      const member = financialMembers.find(m => m.id === id);
       return {
         name: member?.displayName || id,
         value
@@ -298,7 +299,7 @@ export function TripExpenses() {
     }).sort((a, b) => b.value - a.value);
 
     return { pieData, barData, memberData };
-  }, [tripExpensesForDisplay, tripMembers]);
+  }, [financialMembers, tripExpensesForDisplay]);
 
   const categoryBudgetRows = useMemo(() => {
     const budgets = trip?.categoryBudgets ?? {};
@@ -373,8 +374,8 @@ export function TripExpenses() {
   const exportExpensesCsv = () => {
     const header = ['Ngay', 'Thoi gian', 'Noi dung', 'Danh muc', 'So tien goc', 'Tien te', 'Quy doi', 'Nguoi tra', 'Nguoi tham gia', 'Ghi chu'];
     const rows = filteredExpenses.map((expense) => {
-      const payer = trip.members.find((member) => member.id === expense.paidBy)?.displayName || expense.paidBy;
-      const participants = expense.participants.map((participantId) => trip.members.find((member) => member.id === participantId)?.displayName || participantId).join(', ');
+      const payer = financialMembers.find((member) => member.id === expense.paidBy)?.displayName || expense.paidBy;
+      const participants = expense.participants.map((participantId) => financialMembers.find((member) => member.id === participantId)?.displayName || participantId).join(', ');
       return [
         expense.date,
         expense.time,
@@ -432,7 +433,7 @@ export function TripExpenses() {
             <thead><tr><th>Ngay</th><th>Noi dung</th><th>Danh muc</th><th>So tien</th><th>Nguoi tra</th></tr></thead>
             <tbody>
               ${filteredExpenses.map((expense) => {
-      const payer = trip.members.find((member) => member.id === expense.paidBy)?.displayName || expense.paidBy;
+      const payer = financialMembers.find((member) => member.id === expense.paidBy)?.displayName || expense.paidBy;
       return `<tr><td>${escapeHtml(expense.date)}</td><td>${escapeHtml(expense.title)}</td><td>${escapeHtml(expense.category)}</td><td>${formatMoney(expense.originalAmount ?? expense.amount, CURRENCIES[expense.currency || baseCurrency].symbol)}</td><td>${escapeHtml(payer)}</td></tr>`;
     }).join('')}
             </tbody>
@@ -693,7 +694,7 @@ export function TripExpenses() {
               </div>
               <div className="space-y-3 p-4 md:hidden">
                 {filteredExpenses.map((expense) => {
-                  const payer = (trip?.members ?? []).find(m => m.id === expense.paidBy);
+                  const payer = financialMembers.find(m => m.id === expense.paidBy);
                   return (
                     <motion.div variants={itemVariants} key={`mobile-${expense.id}`} className="rounded-2xl bg-surface-container-low p-4">
                       <div className="flex items-start justify-between gap-3">
@@ -715,10 +716,12 @@ export function TripExpenses() {
                       {expense.note && <p className="mt-3 line-clamp-2 text-sm text-secondary dark:text-gray-300"><LinkifyText text={expense.note} /></p>}
                       {canEdit && (
                         <div className="mt-4 flex justify-end gap-2">
-                          <button onClick={() => { setEditingExpense(expense); setIsAddOpen(true); }} className="rounded-lg p-2 text-secondary transition-colors hover:bg-surface-container-high hover:text-primary">
+                          <button aria-label={`Sửa khoản chi ${expense.title}`} title="Sửa khoản chi" onClick={() => { setEditingExpense(expense); setIsAddOpen(true); }} className="rounded-lg p-2 text-secondary transition-colors hover:bg-surface-container-high hover:text-primary">
                             <Icons.Edit2 className="h-4 w-4" />
                           </button>
                           <button
+                            aria-label={`Xóa khoản chi ${expense.title}`}
+                            title="Xóa khoản chi"
                             onClick={async () => {
                               const shouldDelete = await confirm({
                                 title: 'Xóa khoản chi này',
@@ -766,7 +769,7 @@ export function TripExpenses() {
                   </thead>
                   <tbody className="divide-y divide-surface-variant/20">
                     {filteredExpenses.map((expense) => {
-                      const payer = (trip?.members ?? []).find(m => m.id === expense.paidBy);
+                      const payer = financialMembers.find(m => m.id === expense.paidBy);
                       const getCategoryStyle = (cat: string) => {
                         switch (cat) {
                           case 'Di chuyển': return { bg: 'bg-secondary-container', text: 'text-on-secondary-container', icon: Icons.Plane };
@@ -815,7 +818,7 @@ export function TripExpenses() {
                           <td className="px-6 py-5 align-middle">
                             <div className="flex -space-x-2">
                               {expense.participants.slice(0, 3).map(pId => {
-                                const p = (trip?.members ?? []).find(m => m.id === pId);
+                                const p = financialMembers.find(m => m.id === pId);
                                 return p ? <img key={p.id} alt={p.displayName} className="w-6 h-6 rounded-full border-2 border-surface-container-lowest" src={p.avatar} /> : null;
                               })}
                               {expense.participants.length > 3 && (
@@ -837,10 +840,10 @@ export function TripExpenses() {
                           <td className="px-6 py-5 align-middle text-right flex justify-end gap-2">
                             {canEdit && (
                               <>
-                                <button onClick={() => { setEditingExpense(expense); setIsAddOpen(true); }} className="p-2 text-secondary dark:text-gray-300 hover:text-primary dark:text-white hover:bg-primary-container rounded-lg transition-colors">
+                                <button aria-label={`Sửa khoản chi ${expense.title}`} title="Sửa khoản chi" onClick={() => { setEditingExpense(expense); setIsAddOpen(true); }} className="p-2 text-secondary dark:text-gray-300 hover:text-primary dark:text-white hover:bg-primary-container rounded-lg transition-colors">
                                   <Icons.Edit2 className="w-4 h-4" />
                                 </button>
-                                <button onClick={async () => {
+                                <button aria-label={`Xóa khoản chi ${expense.title}`} title="Xóa khoản chi" onClick={async () => {
                                   const shouldDelete = await confirm({
                                     title: 'Xóa khoản chi này',
                                     message: 'Khoản chi sẽ bị gỡ khỏi báo cáo chi tiêu của chuyến đi.',
@@ -906,7 +909,7 @@ export function TripExpenses() {
                 </p>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {trip.members.map(m => {
+                {financialMembers.map(m => {
                   const bal = balances[m.id] || 0;
                   const isOwed = bal > 0.01;
                   const owes = bal < -0.01;
@@ -916,15 +919,16 @@ export function TripExpenses() {
                       <img src={m.avatar} alt={m.displayName} className="w-14 h-14 rounded-full border-2 border-surface shadow-sm" />
                       <div>
                         <div className="font-headline font-bold text-lg">{m.displayName}</div>
+                        {m.isArchived && <div className="mt-1 text-xs font-bold uppercase tracking-wider text-secondary">Đã thu hồi quyền</div>}
                         {settled && <div className="text-secondary dark:text-gray-300 text-sm font-medium mt-1 select-none">Đã thanh toán đủ</div>}
                         {isOwed && <div className="text-tertiary font-bold mt-1 tracking-tight">{'+ '}{formatMoney(Math.abs(bal), baseCurrencySymbol)}</div>}
                         {owes && <div className="text-error font-bold mt-1 tracking-tight">{'- '}{formatMoney(Math.abs(bal), baseCurrencySymbol)}</div>}
                       </div>
-                      <div className="ml-auto">
+                      {!m.isArchived && <div className="ml-auto">
                         <button onClick={() => setSettlementMemberId(m.id)} className="p-2.5 text-secondary dark:text-gray-300 hover:text-primary transition-colors bg-surface-container hover:bg-surface-container-high rounded-full shadow-sm" title="Chi tiết đa tiền tệ">
                           <Icons.Wallet className="w-5 h-5" />
                         </button>
-                      </div>
+                      </div>}
                     </motion.div>
                   );
                 })}

@@ -1,7 +1,7 @@
 import type { ActivityLogEntry, PersistedAppState, Photo, TripMembership, TripRecord, TripInvitation } from '../context/AppContext';
 import type { UserProfile } from '../context/AuthContext';
 
-export const APP_STATE_VERSION = 4;
+export const APP_STATE_VERSION = 5;
 
 type LegacyState = {
   version?: number;
@@ -125,6 +125,18 @@ function migrateLegacyMemberships(state: LegacyState): TripMembership[] {
   });
 }
 
+export function buildDuplicatedMembershipRoles(memberships: TripMembership[], tripId: string, creatorId: string) {
+  return [
+    { userId: creatorId, role: 'owner' as const },
+    ...memberships
+      .filter((membership) => membership.tripId === tripId && !membership.revokedAt && membership.userId !== creatorId)
+      .map((membership) => ({
+        userId: membership.userId,
+        role: membership.role === 'owner' ? 'admin' as const : membership.role,
+      })),
+  ];
+}
+
 export function migratePersistedState(
   state: Partial<PersistedAppState> | LegacyState | null | undefined,
 ): Partial<PersistedAppState> | null {
@@ -200,11 +212,12 @@ function isValidTripRecord(value: unknown) {
   return typeof value.id === 'string'
     && typeof value.title === 'string'
     && typeof value.location === 'string'
-    && typeof value.startDate === 'string'
-    && typeof value.endDate === 'string'
-    && typeof value.budget === 'number'
-    && typeof value.status === 'string'
-    && typeof value.image === 'string';
+    && typeof value.startDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value.startDate)
+    && typeof value.endDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value.endDate) && value.startDate <= value.endDate
+    && typeof value.budget === 'number' && Number.isFinite(value.budget) && value.budget > 0
+    && (value.status === 'upcoming' || value.status === 'completed' || value.status === 'draft')
+    && typeof value.image === 'string'
+    && (value.createdBy === undefined || typeof value.createdBy === 'string');
 }
 
 function isValidProfile(value: unknown) {
@@ -224,7 +237,8 @@ function isValidMembership(value: unknown) {
   return typeof value.id === 'string'
     && typeof value.tripId === 'string'
     && typeof value.userId === 'string'
-    && typeof value.role === 'string';
+    && (value.role === 'owner' || value.role === 'admin' || value.role === 'editor' || value.role === 'viewer')
+    && (value.revokedAt === undefined || typeof value.revokedAt === 'string');
 }
 
 function isValidInvitation(value: unknown) {
@@ -234,10 +248,11 @@ function isValidInvitation(value: unknown) {
   return typeof value.id === 'string'
     && typeof value.tripId === 'string'
     && typeof value.email === 'string'
-    && typeof value.role === 'string'
-    && typeof value.status === 'string'
+    && (value.role === 'admin' || value.role === 'editor' || value.role === 'viewer')
+    && (value.status === 'pending' || value.status === 'accepted' || value.status === 'declined' || value.status === 'revoked')
     && typeof value.invitedBy === 'string'
-    && typeof value.createdAt === 'string';
+    && typeof value.createdAt === 'string'
+    && (value.acceptedBy === undefined || typeof value.acceptedBy === 'string');
 }
 
 function isValidActivity(value: unknown) {
@@ -246,7 +261,7 @@ function isValidActivity(value: unknown) {
   }
   return typeof value.id === 'string'
     && typeof value.tripId === 'string'
-    && typeof value.date === 'string'
+    && typeof value.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value.date)
     && typeof value.time === 'string'
     && typeof value.title === 'string'
     && typeof value.location === 'string'
@@ -260,11 +275,11 @@ function isValidExpense(value: unknown) {
   }
   return typeof value.id === 'string'
     && typeof value.tripId === 'string'
-    && typeof value.date === 'string'
+    && typeof value.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value.date)
     && typeof value.time === 'string'
     && typeof value.title === 'string'
     && typeof value.category === 'string'
-    && typeof value.amount === 'number'
+    && typeof value.amount === 'number' && Number.isFinite(value.amount) && value.amount > 0
     && typeof value.paidBy === 'string'
     && isStringArray(value.participants);
 }
@@ -287,7 +302,8 @@ function isValidPackingItem(value: unknown) {
     && typeof value.tripId === 'string'
     && typeof value.name === 'string'
     && typeof value.isPacked === 'boolean'
-    && typeof value.category === 'string';
+    && typeof value.category === 'string'
+    && (value.assigneeId === undefined || typeof value.assigneeId === 'string');
 }
 
 function isValidPhoto(value: unknown) {
@@ -297,7 +313,9 @@ function isValidPhoto(value: unknown) {
   return typeof value.id === 'string'
     && typeof value.tripId === 'string'
     && typeof value.url === 'string'
-    && typeof value.album === 'string';
+    && typeof value.album === 'string'
+    && (value.people === undefined || isStringArray(value.people))
+    && (value.tags === undefined || isStringArray(value.tags));
 }
 
 function isValidActivityLog(value: unknown): value is ActivityLogEntry {
@@ -312,7 +330,26 @@ function isValidActivityLog(value: unknown): value is ActivityLogEntry {
     && typeof value.createdAt === 'string';
 }
 
-export function validateImportedSnapshot(state: Partial<PersistedAppState>) {
+function assertUniqueIds(field: string, items: Array<{ id: string }>) {
+  if (new Set(items.map((item) => item.id)).size !== items.length) {
+    throw new Error(`Backup chứa ID trùng trong ${field}.`);
+  }
+}
+
+export function validateImportedSnapshot(state: Partial<PersistedAppState>): asserts state is PersistedAppState {
+  const requiredFields: Array<keyof PersistedAppState> = [
+    'version', 'trips', 'profiles', 'memberships', 'invitations', 'activities', 'expenses',
+    'savedPlaces', 'packingItems', 'photos', 'activityLogs', 'currentTripId', 'viewerProfileId',
+  ];
+  for (const field of requiredFields) {
+    if (!Object.prototype.hasOwnProperty.call(state, field)) {
+      throw new Error(`Backup không đầy đủ: thiếu ${String(field)}.`);
+    }
+  }
+  if (state.version !== APP_STATE_VERSION) {
+    throw new Error(`Backup không hợp lệ: phiên bản phải là ${APP_STATE_VERSION}.`);
+  }
+
   const checks: Array<[keyof PersistedAppState, (value: unknown) => boolean]> = [
     ['trips', isValidTripRecord],
     ['profiles', isValidProfile],
@@ -345,4 +382,76 @@ export function validateImportedSnapshot(state: Partial<PersistedAppState>) {
   if (state.viewerProfileId !== undefined && state.viewerProfileId !== null && typeof state.viewerProfileId !== 'string') {
     throw new Error('Backup không hợp lệ: viewerProfileId phải là chuỗi hoặc null.');
   }
+  if (state.pinnedTripIds !== undefined && !isStringArray(state.pinnedTripIds)) {
+    throw new Error('Backup không hợp lệ: pinnedTripIds phải là mảng chuỗi.');
+  }
+
+  const snapshot = state as PersistedAppState;
+  for (const [field, items] of checks.map(([field]) => [field, snapshot[field]] as const)) {
+    assertUniqueIds(String(field), items as Array<{ id: string }>);
+  }
+
+  const tripIds = new Set(snapshot.trips.map((trip) => trip.id));
+  const profileIds = new Set(snapshot.profiles.map((profile) => profile.id));
+  if (snapshot.trips.some((trip) => trip.createdBy && !profileIds.has(trip.createdBy))) {
+    throw new Error('Backup chứa chuyến đi không liên kết với hồ sơ người tạo hợp lệ.');
+  }
+  const membershipKeys = new Set<string>();
+  for (const membership of snapshot.memberships) {
+    if (!tripIds.has(membership.tripId) || !profileIds.has(membership.userId)) {
+      throw new Error('Backup chứa membership không liên kết với chuyến đi hoặc hồ sơ hợp lệ.');
+    }
+    const key = `${membership.tripId}:${membership.userId}`;
+    if (membershipKeys.has(key)) {
+      throw new Error('Backup chứa membership trùng người trong cùng chuyến đi.');
+    }
+    membershipKeys.add(key);
+  }
+
+  const assertTripLink = (tripId: string, field: string) => {
+    if (!tripIds.has(tripId)) throw new Error(`Backup chứa ${field} không liên kết với chuyến đi hợp lệ.`);
+  };
+  snapshot.invitations.forEach((invitation) => {
+    assertTripLink(invitation.tripId, 'lời mời');
+    if (!profileIds.has(invitation.invitedBy) || (invitation.acceptedBy && !profileIds.has(invitation.acceptedBy))) {
+      throw new Error('Backup chứa lời mời không liên kết với hồ sơ hợp lệ.');
+    }
+  });
+  snapshot.activities.forEach((activity) => assertTripLink(activity.tripId, 'hoạt động'));
+  snapshot.savedPlaces.forEach((place) => assertTripLink(place.tripId, 'địa điểm'));
+  snapshot.photos.forEach((photo) => assertTripLink(photo.tripId, 'ảnh'));
+  snapshot.activityLogs.forEach((log) => {
+    assertTripLink(log.tripId, 'nhật ký');
+    if (log.actorId && !profileIds.has(log.actorId)) throw new Error('Backup chứa nhật ký không liên kết với hồ sơ hợp lệ.');
+  });
+  snapshot.expenses.forEach((expense) => {
+    assertTripLink(expense.tripId, 'chi tiêu');
+    if (!membershipKeys.has(`${expense.tripId}:${expense.paidBy}`)
+      || expense.participants.some((participantId) => !membershipKeys.has(`${expense.tripId}:${participantId}`))) {
+      throw new Error('Backup chứa chi tiêu không liên kết với thành viên hợp lệ.');
+    }
+  });
+  snapshot.packingItems.forEach((item) => {
+    assertTripLink(item.tripId, 'hành lý');
+    if (item.assigneeId && !membershipKeys.has(`${item.tripId}:${item.assigneeId}`)) {
+      throw new Error('Backup chứa hành lý không liên kết với thành viên hợp lệ.');
+    }
+  });
+  if (snapshot.currentTripId && !tripIds.has(snapshot.currentTripId)) throw new Error('Backup chứa currentTripId không hợp lệ.');
+  if (snapshot.viewerProfileId && !profileIds.has(snapshot.viewerProfileId)) throw new Error('Backup chứa viewerProfileId không hợp lệ.');
+  if ((snapshot.pinnedTripIds ?? []).some((tripId) => !tripIds.has(tripId))) throw new Error('Backup chứa chuyến đi đã ghim không hợp lệ.');
+}
+
+const EMPTY_PERSISTED_STATE: PersistedAppState = {
+  version: APP_STATE_VERSION,
+  trips: [], profiles: [], memberships: [], invitations: [], activities: [], expenses: [],
+  savedPlaces: [], packingItems: [], photos: [], activityLogs: [], currentTripId: null, viewerProfileId: null, pinnedTripIds: [],
+};
+
+export function prepareImportedSnapshot(state: Partial<PersistedAppState> | LegacyState) {
+  const preparedState = state.version === APP_STATE_VERSION
+    ? state
+    : normalizePersistedState(state, EMPTY_PERSISTED_STATE);
+  validateImportedSnapshot(preparedState);
+  return preparedState;
 }

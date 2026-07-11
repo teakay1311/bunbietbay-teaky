@@ -325,10 +325,10 @@ export function MyTrips() {
             </div>
             <div className="flex gap-2">
               <div className="flex items-center gap-1 rounded-full bg-surface-container-high px-2 py-1">
-                <button onClick={() => setViewMode('list')} className={cn('p-1.5 rounded-full transition-colors', viewMode === 'list' ? 'bg-primary text-white shadow-sm' : 'text-on-surface hover:bg-surface-container-highest')}>
+                <button aria-label="Hiển thị dạng danh sách" title="Danh sách" onClick={() => setViewMode('list')} className={cn('p-1.5 rounded-full transition-colors', viewMode === 'list' ? 'bg-primary text-white shadow-sm' : 'text-on-surface hover:bg-surface-container-highest')}>
                   <Icons.Menu className="w-4 h-4" />
                 </button>
-                <button onClick={() => setViewMode('grid')} className={cn('p-1.5 rounded-full transition-colors', viewMode === 'grid' ? 'bg-primary text-white shadow-sm' : 'text-on-surface hover:bg-surface-container-highest')}>
+                <button aria-label="Hiển thị dạng lưới" title="Dạng lưới" onClick={() => setViewMode('grid')} className={cn('p-1.5 rounded-full transition-colors', viewMode === 'grid' ? 'bg-primary text-white shadow-sm' : 'text-on-surface hover:bg-surface-container-highest')}>
                   <Icons.LayoutDashboard className="w-4 h-4" />
                 </button>
               </div>
@@ -505,6 +505,8 @@ export function MyTrips() {
                         </button>
                         {trip.permissions?.canDeleteTrip && (
                           <button
+                            aria-label={`Xóa chuyến đi ${trip.title}`}
+                            title="Xóa chuyến đi"
                             onClick={async (e) => {
                               e.preventDefault();
                               e.stopPropagation();

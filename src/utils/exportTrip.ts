@@ -4,6 +4,7 @@ import { TripRecord, Activity, SavedPlace, PackingItem, Expense, Photo } from '.
 import { formatLocalDate } from './date';
 import { formatIcsDate } from './ics';
 import { getCategoryLabel, PLACE_TYPE_OPTIONS } from './tripCategories';
+import { sortActivitiesByTime } from './activitySort';
 
 type ExportData = {
     trip: TripRecord;
@@ -43,7 +44,7 @@ function generateMarkdown(data: ExportData): string {
     } else {
         for (const date of sortedDates) {
             md += `### Ngày ${formatLocalDate(date, opts)}\n`;
-            const dailyActivities = activities.filter(a => a.date === date).sort((a, b) => a.time.localeCompare(b.time));
+            const dailyActivities = sortActivitiesByTime(activities.filter(a => a.date === date));
             for (const act of dailyActivities) {
                 md += `- **[${act.time}] ${act.title}**\n`;
                 if (act.location) md += `  - Địa điểm: ${act.location}\n`;

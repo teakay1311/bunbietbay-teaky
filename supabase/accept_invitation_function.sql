@@ -26,7 +26,8 @@ begin
   from public.trip_invitations
   where id = target_invitation_id
   on conflict (trip_id, user_id)
-  do update set role = excluded.role;
+  do update set role = excluded.role,
+                revoked_at = null;
 
   -- Mark invitation as accepted
   update public.trip_invitations

@@ -11,7 +11,7 @@ import { useAuth } from '../context/AuthContext';
 import { useAppContext, type PersistedAppState } from '../context/AppContext';
 import { useFeedback } from '../context/FeedbackContext';
 import { useNotebook } from '../context/NotebookContext';
-import { validateImportedSnapshot } from '../utils/appState';
+import { prepareImportedSnapshot } from '../utils/appState';
 import { motion, AnimatePresence } from 'framer-motion';
 
 type SectionKey = 'account' | 'workspace' | 'appearance' | 'reminders' | 'shortcuts' | 'data';
@@ -188,8 +188,7 @@ export function Settings() {
     try {
       const rawContent = await file.text();
       const parsedSnapshot = JSON.parse(rawContent) as Partial<PersistedAppState>;
-      validateImportedSnapshot(parsedSnapshot);
-      replacePersistedState(parsedSnapshot);
+      replacePersistedState(prepareImportedSnapshot(parsedSnapshot));
       showToast({
         tone: 'success',
         title: 'Đã nhập backup',
@@ -200,7 +199,7 @@ export function Settings() {
       showToast({
         tone: 'error',
         title: 'Không thể nhập backup',
-        message: 'Hãy kiểm tra lại file JSON trước khi thử lại.',
+        message: error instanceof Error ? error.message : 'Hãy kiểm tra lại file JSON trước khi thử lại.',
       });
     } finally {
       event.target.value = '';
@@ -230,6 +229,7 @@ export function Settings() {
     }
 
     replacePersistedState({
+      ...snapshot,
       profiles: snapshot.profiles.map((profile) => profile.id === currentUserProfile.id ? {
         ...profile,
         ...profileForm,

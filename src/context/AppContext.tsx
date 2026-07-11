@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
 import { deleteImageFromCloudinary } from '../lib/cloudinary';
 import { loadPersistedState, savePersistedState } from '../utils/persistence';
-import { APP_STATE_VERSION, normalizePersistedState } from '../utils/appState';
+import { APP_STATE_VERSION, buildDuplicatedMembershipRoles, normalizePersistedState } from '../utils/appState';
 import { useAuth, type UserProfile } from './AuthContext';
 import { INITIAL_PERSISTED_STATE } from '../constants/mockData';
 
@@ -104,6 +104,7 @@ export type TripMembership = {
   userId: string;
   role: TripAccessRole;
   createdAt?: string;
+  revokedAt?: string;
 };
 
 export type TripInvitation = {
@@ -211,11 +212,13 @@ export type CalculatedMember = UserProfile & {
   spent: number;
   balance: number;
   createdAt?: string;
+  isArchived: boolean;
 };
 
 export type CalculatedTrip = TripRecord & {
   spent: number;
   members: CalculatedMember[];
+  historicalMembers: CalculatedMember[];
   membershipRole: TripAccessRole | null;
   permissions: TripPermissions;
   invitationCount: number;
@@ -260,7 +263,7 @@ type AppContextType = {
   currentUserProfile: UserProfile | null;
   currentTripId: string | null;
   setCurrentTripId: (id: string | null) => void;
-  replacePersistedState: (state: Partial<PersistedAppState>) => void;
+  replacePersistedState: (state: PersistedAppState) => void;
   refreshWorkspace: () => Promise<void>;
   batchRemote: (callback: () => Promise<void>) => Promise<void>;
   inviteTripMember: (tripId: string, input: InviteTripMemberInput) => Promise<void>;
@@ -315,6 +318,7 @@ type RemoteMembershipRow = {
   user_id: string;
   role: TripAccessRole;
   created_at: string;
+  revoked_at: string | null;
 };
 
 type RemoteInvitationRow = {
@@ -428,6 +432,13 @@ function toTripRecord(row: RemoteTripRow): TripRecord {
   };
 }
 
+function getRemoteErrorMessage(error: unknown) {
+  if (typeof error === 'object' && error !== null && 'message' in error) {
+    return String((error as { message: unknown }).message);
+  }
+  return error instanceof Error ? error.message : String(error);
+}
+
 async function fetchRemoteWorkspace(userId: string, email: string | null): Promise<PersistedAppState> {
   if (!supabase) {
     throw new Error('Supabase chưa được cấu hình');
@@ -435,21 +446,14 @@ async function fetchRemoteWorkspace(userId: string, email: string | null): Promi
 
   const membershipResponse = await supabase
     .from('trip_memberships')
-    .select('id, trip_id, user_id, role, created_at')
-    .eq('user_id', userId);
+    .select('id, trip_id, user_id, role, created_at, revoked_at')
+    .eq('user_id', userId)
+    .is('revoked_at', null);
 
   if (membershipResponse.error) {
-    const errorMessage = typeof membershipResponse.error === 'object' && membershipResponse.error !== null && 'message' in membershipResponse.error
-      ? (membershipResponse.error as { message: string }).message
-      : String(membershipResponse.error);
+    const errorMessage = getRemoteErrorMessage(membershipResponse.error);
     if (errorMessage.includes('schema cache') || errorMessage.includes('does not exist') || errorMessage.includes('relation')) {
-      console.warn('Supabase tables chưa được khởi tạo. App sẽ hoạt động ở chế độ local.', membershipResponse.error);
-      return {
-        version: APP_STATE_VERSION,
-        trips: [], profiles: [], memberships: [], invitations: [],
-        activities: [], expenses: [], savedPlaces: [], packingItems: [], photos: [], activityLogs: [],
-        currentTripId: null, viewerProfileId: userId,
-      };
+      throw membershipResponse.error;
     }
     throw membershipResponse.error;
   }
@@ -510,7 +514,7 @@ async function fetchRemoteWorkspace(userId: string, email: string | null): Promi
     activityLogResponse,
   ] = await Promise.all([
     supabase.from('trips').select('id, title, location, start_date, end_date, budget, base_currency, status, image, review, created_by, theme_color, created_at, updated_at').in('id', tripIds),
-    supabase.from('trip_memberships').select('id, trip_id, user_id, role, created_at').in('trip_id', tripIds),
+    supabase.from('trip_memberships').select('id, trip_id, user_id, role, created_at, revoked_at').in('trip_id', tripIds),
     Promise.all([
       supabase.from('trip_invitations').select('id, trip_id, email, role, status, invited_by, accepted_by, created_at, updated_at').in('trip_id', tripIds),
       invitationsForMePromise,
@@ -586,6 +590,7 @@ async function fetchRemoteWorkspace(userId: string, email: string | null): Promi
       userId: membership.user_id,
       role: membership.role,
       createdAt: membership.created_at,
+      revokedAt: membership.revoked_at ?? undefined,
     })),
     invitations: uniqueInvitations.map((invitation) => ({
       id: invitation.id,
@@ -701,11 +706,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const guestWorkspaceRef = useRef<PersistedAppState>(INITIAL_PERSISTED_STATE);
   const undoStackRef = useRef<Array<() => Promise<void>>>([]);
   const batchDepthRef = useRef(0);
-  const persistTimerRef = useRef<ReturnType<typeof setTimeout>>();
 
   const isRemoteMode = isSupabaseConfigured && Boolean(session);
 
   const remoteUnavailableRef = useRef(false);
+  const hasLoadedRemoteRef = useRef(false);
 
   const refreshWorkspace = useCallback(async () => {
     if (!session || !supabase) {
@@ -722,6 +727,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         writeRemotePinnedTripIds(session.user.id, pinnedTripIds);
       }
       remoteUnavailableRef.current = false;
+      hasLoadedRemoteRef.current = true;
       setWorkspaceState((currentState) => ({
         ...currentState,
         ...nextState,
@@ -732,9 +738,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }));
     } catch (error) {
       console.warn('Remote workspace fetch failed, falling back to local data', error);
-      remoteUnavailableRef.current = true;
+      const errorMessage = getRemoteErrorMessage(error);
+      remoteUnavailableRef.current = errorMessage.includes('schema cache') || errorMessage.includes('does not exist') || errorMessage.includes('relation');
       setWorkspaceState((currentState) => {
-        if (currentState.trips.length === 0 && guestWorkspaceRef.current.trips.length > 0) {
+        if (!hasLoadedRemoteRef.current) {
           return guestWorkspaceRef.current;
         }
         return currentState;
@@ -842,13 +849,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
 
     guestWorkspaceRef.current = workspaceState;
-    if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
-    persistTimerRef.current = setTimeout(() => {
-      void savePersistedState(workspaceState).catch((error) => {
-        console.error('Failed to save local workspace state', error);
-      });
-    }, 500);
-    return () => { if (persistTimerRef.current) clearTimeout(persistTimerRef.current); };
+    void savePersistedState(workspaceState).catch((error) => {
+      console.error('Failed to save local workspace state', error);
+    });
   }, [isHydrated, isRemoteMode, workspaceState]);
 
   const currentUserProfile = useMemo(() => {
@@ -886,9 +889,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return workspaceState.trips.map((trip) => {
       const tripMemberships = membershipsByTrip.get(trip.id) ?? [];
       const tripExpenses = expensesByTrip.get(trip.id) ?? [];
-      const membershipRole = tripMemberships.find((membership) => membership.userId === currentUserProfile?.id)?.role ?? null;
+      const membershipRole = tripMemberships.find((membership) => !membership.revokedAt && membership.userId === currentUserProfile?.id)?.role ?? null;
 
-      const members = tripMemberships.flatMap((membership) => {
+      const allMembers = tripMemberships.flatMap((membership) => {
         const memberProfile = profileMap.get(membership.userId);
         if (!memberProfile) {
           return [];
@@ -915,6 +918,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           spent: amountPaid,
           balance: amountPaid - amountOwed,
           createdAt: membership.createdAt,
+          isArchived: Boolean(membership.revokedAt),
         }];
       });
 
@@ -925,7 +929,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return {
         ...trip,
         spent,
-        members,
+        members: allMembers.filter((member) => !member.isArchived),
+        historicalMembers: allMembers.filter((member) => member.isArchived),
         membershipRole,
         permissions: rolePermissions(membershipRole),
         invitationCount: (invitationsByTrip.get(trip.id) ?? []).filter((invitation) => invitation.status === 'pending').length,
@@ -941,8 +946,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }));
   }, []);
 
-  const replacePersistedState = useCallback((state: Partial<PersistedAppState>) => {
-    setWorkspaceState((currentState) => normalizePersistedState(state, currentState));
+  const replacePersistedState = useCallback((state: PersistedAppState) => {
+    setWorkspaceState(normalizePersistedState(state, state));
   }, []);
 
   const withLocalUpdate = useCallback((updater: (state: PersistedAppState) => PersistedAppState) => {
@@ -980,7 +985,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     try {
       await run();
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorMessage = getRemoteErrorMessage(error);
       if (errorMessage.includes('schema cache') || errorMessage.includes('does not exist') || errorMessage.includes('relation')) {
         console.warn('Supabase tables chưa sẵn sàng, lưu local thay thế.', error);
         remoteUnavailableRef.current = true;
@@ -1153,8 +1158,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         throw new Error('Không tìm thấy thành viên cần xóa.');
       }
       assertCanManageMembers(membership.tripId);
+      const revokedAt = new Date().toISOString();
       const didRemoteMutate = await mutateRemote(async () => {
-        await runSupabaseMutation(() => supabase!.from('trip_memberships').delete().eq('id', membershipId));
+        await runSupabaseMutation(() => supabase!.from('trip_memberships').update({ revoked_at: revokedAt }).eq('id', membershipId));
       });
 
       if (didRemoteMutate) {
@@ -1163,7 +1169,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       withLocalUpdate((currentState) => ({
         ...currentState,
-        memberships: currentState.memberships.filter((membership) => membership.id !== membershipId),
+        memberships: currentState.memberships.map((membership) => membership.id === membershipId ? { ...membership, revokedAt } : membership),
       }));
     },
     addExpense: async (expense) => {
@@ -1512,7 +1518,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
         if (tripError) throw tripError;
 
-        const memberships = workspaceState.memberships.filter(m => m.tripId === id);
+        const memberships = buildDuplicatedMembershipRoles(workspaceState.memberships, id, session!.user.id);
+        const duplicatedUserIds = new Set(memberships.map((membership) => membership.userId));
         if (memberships.length > 0) {
           const memData = memberships.map(m => ({
             trip_id: newTrip.id,
@@ -1553,7 +1560,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
             name: p.name,
             category: p.category,
             is_packed: false,
-            assignee_id: p.assigneeId,
+            assignee_id: p.assigneeId && duplicatedUserIds.has(p.assigneeId) ? p.assigneeId : null,
           }));
           await runSupabaseMutation(() => supabase!.from('packing_items').insert(packData));
         }
@@ -1566,18 +1573,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const currentUserId = currentUserProfile?.id ?? workspaceState.viewerProfileId ?? 'm1';
       withLocalUpdate((currentState) => {
         const nextId = `t${Date.now()}`;
+        const duplicatedMemberships = buildDuplicatedMembershipRoles(currentState.memberships, id, currentUserId);
+        const duplicatedUserIds = new Set(duplicatedMemberships.map((membership) => membership.userId));
         const activitiesCopy = currentState.activities.filter(a => a.tripId === id).map((a, i) => ({
           ...a,
           tripId: nextId,
           date: shiftDate(a.date, startOffsetDays),
           id: `a${Date.now()}-${i}`
         }));
-        const packingsCopy = currentState.packingItems.filter(p => p.tripId === id).map((p, i) => ({ ...p, tripId: nextId, isPacked: false, id: `p${Date.now()}-${i}` }));
-        let membershipsCopy = currentState.memberships.filter(m => m.tripId === id).map((m, i) => ({ ...m, tripId: nextId, id: `tm${Date.now()}-${i}` }));
-
-        if (membershipsCopy.length === 0) {
-          membershipsCopy = [{ id: `tm-${Date.now()}`, tripId: nextId, userId: currentUserId, role: 'owner' }];
-        }
+        const packingsCopy = currentState.packingItems.filter(p => p.tripId === id).map((p, i) => ({
+          ...p,
+          tripId: nextId,
+          isPacked: false,
+          id: `p${Date.now()}-${i}`,
+          assigneeId: p.assigneeId && duplicatedUserIds.has(p.assigneeId) ? p.assigneeId : undefined,
+        }));
+        const membershipsCopy = duplicatedMemberships
+          .map((membership, index) => ({ ...membership, id: `tm${Date.now()}-${index}`, tripId: nextId }));
 
         return {
           ...currentState,

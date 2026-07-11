@@ -93,6 +93,32 @@ async function runSmoke() {
   await page.waitForURL('**/settings');
   await page.waitForSelector('text=Cài đặt hệ thống');
 
+  await page.goto(`${baseUrl}/trips/t3/members`, { waitUntil: 'networkidle' });
+  const archivedMemberRow = page.getByText('tu@example.com', { exact: true })
+    .locator('xpath=ancestor::div[contains(@class, "rounded-[1.25rem]")]');
+  await archivedMemberRow.getByRole('button', { name: 'Thu hồi' }).click();
+  await page.getByRole('button', { name: 'Thu hồi quyền', exact: true }).click();
+  await page.getByText('tu@example.com', { exact: true }).waitFor({ state: 'detached' });
+
+  await page.goto(`${baseUrl}/trips/t3/expenses`, { waitUntil: 'networkidle' });
+  await page.getByText('Tú', { exact: true }).first().waitFor();
+  await page.getByRole('button', { name: 'Tra soát Công nợ' }).click();
+  await page.getByText('Đã thu hồi quyền', { exact: true }).waitFor();
+
+  for (const route of [
+    '/trips', '/trips/t3/schedule', '/trips/t3/overview', '/trips/t3/expenses', '/trips/t3/members',
+    '/trips/t3/places', '/trips/t3/packing', '/trips/t3/photos', '/notebook', '/settings',
+  ]) {
+    await page.goto(`${baseUrl}${route}`, { waitUntil: 'networkidle' });
+    const unnamedButtons = await page.evaluate(() => [...document.querySelectorAll('button')]
+      .filter((button) => button.getClientRects().length > 0
+        && !((button.textContent || '').trim() || button.getAttribute('aria-label') || button.getAttribute('title')))
+      .length);
+    if (unnamedButtons > 0) {
+      throw new Error(`${route} còn ${unnamedButtons} nút đang hiển thị nhưng không có accessible name.`);
+    }
+  }
+
   await page.goto(`${baseUrl}/trips/does-not-exist/photos`, { waitUntil: 'networkidle' });
   await page.waitForSelector('text=Trip not found');
 

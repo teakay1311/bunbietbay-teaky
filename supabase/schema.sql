@@ -67,8 +67,11 @@ create table if not exists public.trip_memberships (
   user_id uuid not null references public.profiles (id) on delete cascade,
   role text not null check (role in ('owner', 'admin', 'editor', 'viewer')),
   created_at timestamptz not null default timezone('utc', now()),
+  revoked_at timestamptz,
   unique (trip_id, user_id)
 );
+
+alter table public.trip_memberships add column if not exists revoked_at timestamptz;
 
 create table if not exists public.trip_invitations (
   id uuid primary key default gen_random_uuid(),
@@ -259,6 +262,7 @@ as $is_member$
     from public.trip_memberships membership
     where membership.trip_id = target_trip_id
       and membership.user_id = auth.uid()
+      and membership.revoked_at is null
   );
 $is_member$;
 
@@ -274,6 +278,7 @@ as $is_editor$
     from public.trip_memberships membership
     where membership.trip_id = target_trip_id
       and membership.user_id = auth.uid()
+      and membership.revoked_at is null
       and membership.role in ('owner', 'admin', 'editor')
   );
 $is_editor$;
@@ -290,6 +295,7 @@ as $is_manager$
     from public.trip_memberships membership
     where membership.trip_id = target_trip_id
       and membership.user_id = auth.uid()
+      and membership.revoked_at is null
       and membership.role in ('owner', 'admin')
   );
 $is_manager$;
@@ -306,6 +312,7 @@ as $is_owner$
     from public.trip_memberships membership
     where membership.trip_id = target_trip_id
       and membership.user_id = auth.uid()
+      and membership.revoked_at is null
       and membership.role = 'owner'
   );
 $is_owner$;
@@ -326,6 +333,7 @@ as $has_shared$
     from public.trip_memberships mine
     join public.trip_memberships theirs on theirs.trip_id = mine.trip_id
     where mine.user_id = auth.uid()
+      and mine.revoked_at is null
       and theirs.user_id = target_user_id
   );
 $has_shared$;

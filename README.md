@@ -30,6 +30,7 @@ This repo now supports 2 runtime modes:
 2. In Supabase SQL Editor, run these files in order:
    - `supabase/schema.sql`
    - `supabase/add_trip_enhancements.sql`
+   - `supabase/add_revoked_trip_memberships.sql` (required for existing projects)
    - `supabase/accept_invitation_function.sql`
 3. Copy `.env.example` to `.env`.
 4. Set:
