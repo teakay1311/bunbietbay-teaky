@@ -4,11 +4,12 @@ import { useLocation, useParams } from 'react-router-dom';
 import { Icons } from '../components/Icons';
 import { Modal } from '../components/Modal';
 import { CURRENCIES, useAppContext, type CalculatedMember, type TripAccessRole, type TripInvitation } from '../context/AppContext';
-import { useSettings, useFormatMoney } from '../context/SettingsContext';
+import { useFormatMoney } from '../context/SettingsContext';
 import { useFeedback } from '../context/FeedbackContext';
 import { formatLocalDateTime } from '../utils/date';
 import { getErrorMessage } from '../utils/errorMessage';
-import { motion } from 'framer-motion';
+import { motion } from 'motion/react';
+import { fadeUpVariants, pageStaggerVariants } from '../ui/motion';
 import { SortSelect } from '../components/SortSelect';
 import { chainComparators, compareDate, compareNumber, compareText, stableSort, type SortOption } from '../utils/listSort';
 
@@ -61,7 +62,6 @@ export function TripMembers() {
     currentUserProfile,
   } = useAppContext();
   const { showToast, confirm } = useFeedback();
-  const { uiDensity } = useSettings();
   const formatMoney = useFormatMoney();
   const [isInviteOpen, setIsInviteOpen] = useState(false);
   const [selectedMember, setSelectedMember] = useState<CalculatedMember | null>(null);
@@ -123,15 +123,8 @@ export function TripMembers() {
     }
   }, (a, b) => compareText(a.email, b.email, 'asc')));
 
-  const containerVariants = {
-    hidden: { opacity: 0 },
-    show: { opacity: 1, transition: { staggerChildren: 0.02 } }
-  };
-
-  const itemVariants = {
-    hidden: { opacity: 0, y: 15 },
-    show: { opacity: 1, y: 0, transition: { ease: 'easeOut', duration: 0.2 } }
-  };
+  const containerVariants = pageStaggerVariants;
+  const itemVariants = fadeUpVariants;
 
   return (
     <motion.div variants={containerVariants} initial="hidden" animate="show" className="pb-10">

@@ -1,40 +1,10 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { useAuth } from './AuthContext';
+import type { Notebook, NotebookPlace, PendingNotebookInvitation } from '../domain/models';
+import { acceptNotebookInvitationRemote, fetchNotebookInvitations, isMissingSupabaseObject, runNotebookMutation } from '../data/notebookService';
 
-export type Notebook = {
-    id: string;
-    name: string;
-    type: 'personal' | 'shared';
-    createdBy?: string;
-};
-
-export type NotebookPlace = {
-    id: string;
-    notebookId: string;
-    name: string;
-    type: 'hotel' | 'restaurant' | 'cafe' | 'entertainment' | 'other';
-    address?: string;
-    phone?: string;
-    note?: string;
-    rating: number; // 1-5
-    customFields?: { label: string; value: string }[];
-    coverImage?: string;
-    photos?: string[];
-    createdAt: string;
-    createdBy?: string;
-};
-
-export type PendingNotebookInvitation = {
-    id: string;
-    notebookId: string;
-    notebookName: string;
-    email: string;
-    role: 'admin' | 'editor' | 'viewer';
-    status: 'pending' | 'accepted' | 'declined';
-    createdAt: string;
-    invitedByName: string | null;
-};
+export type { Notebook, NotebookPlace, PendingNotebookInvitation } from '../domain/models';
 
 interface NotebookContextType {
     notebooks: Notebook[];
@@ -53,67 +23,6 @@ interface NotebookContextType {
 }
 
 const NotebookContext = createContext<NotebookContextType | undefined>(undefined);
-
-async function runSupabaseMutation(run: () => PromiseLike<{ error: unknown }>) {
-    const response = await Promise.resolve(run());
-    if ('error' in response && response.error) throw response.error;
-}
-
-function isMissingSupabaseObject(error: unknown) {
-    const message = error instanceof Error ? error.message : String((error as any)?.message ?? error);
-    return message.includes('schema cache') || message.includes('does not exist') || message.includes('relation');
-}
-
-async function fetchNotebookInvitations(email: string | null): Promise<PendingNotebookInvitation[]> {
-    if (!supabase || !email) {
-        return [];
-    }
-
-    const { data, error } = await supabase
-        .from('notebook_invitations')
-        .select(`
-            id,
-            notebook_id,
-            email,
-            role,
-            status,
-            created_at,
-            notebooks:notebook_id(name),
-            inviter:invited_by(display_name)
-        `)
-        .eq('email', email.toLowerCase())
-        .eq('status', 'pending')
-        .order('created_at', { ascending: false });
-
-    if (error) {
-        throw error;
-    }
-
-    return ((data ?? []) as any[]).map((invitation) => ({
-        id: invitation.id,
-        notebookId: invitation.notebook_id,
-        notebookName: invitation.notebooks?.name ?? 'Sổ tay',
-        email: invitation.email,
-        role: invitation.role,
-        status: invitation.status,
-        createdAt: invitation.created_at,
-        invitedByName: invitation.inviter?.display_name ?? null,
-    }));
-}
-
-async function acceptNotebookInvitationRemote(invitationId: string) {
-    if (!supabase) {
-        return;
-    }
-
-    const { error } = await supabase.rpc('accept_notebook_invitation', {
-        target_invitation_id: invitationId,
-    });
-
-    if (error) {
-        throw error;
-    }
-}
 
 export function NotebookProvider({ children }: { children: React.ReactNode }) {
     const { session, userEmail, profile } = useAuth();
@@ -508,7 +417,7 @@ export function NotebookProvider({ children }: { children: React.ReactNode }) {
             setNotebookPlaces(prev => prev.map(p => p.id === id ? { ...p, ...placeUpdates } : p));
 
             if (isRemoteMode && supabase) {
-                await runSupabaseMutation(() => supabase.from('notebook_places').update({
+                await runNotebookMutation(() => supabase.from('notebook_places').update({
                     name: placeUpdates.name,
                     type: placeUpdates.type,
                     address: placeUpdates.address,
@@ -536,7 +445,7 @@ export function NotebookProvider({ children }: { children: React.ReactNode }) {
         setNotebookPlaces(prev => prev.filter(p => p.id !== id));
         if (isRemoteMode && supabase) {
             try {
-                await runSupabaseMutation(() => supabase.from('notebook_places').delete().eq('id', id));
+                await runNotebookMutation(() => supabase.from('notebook_places').delete().eq('id', id));
             } catch (error) {
                 if (previousPlace && !isMissingSupabaseObject(error)) {
                     if (wasPending) pendingLocalIdsRef.current.add(id);
@@ -553,7 +462,7 @@ export function NotebookProvider({ children }: { children: React.ReactNode }) {
         setNotebookPlaces(prev => prev.filter(p => !ids.includes(p.id)));
         if (isRemoteMode && supabase) {
             try {
-                await runSupabaseMutation(() => supabase.from('notebook_places').delete().in('id', ids));
+                await runNotebookMutation(() => supabase.from('notebook_places').delete().in('id', ids));
             } catch (error) {
                 if (previousPlaces.length > 0 && !isMissingSupabaseObject(error)) {
                     pendingIds.forEach(id => pendingLocalIdsRef.current.add(id));
@@ -609,7 +518,7 @@ export function NotebookProvider({ children }: { children: React.ReactNode }) {
             return;
         }
 
-        await runSupabaseMutation(() => supabase.from('notebook_invitations').update({
+        await runNotebookMutation(() => supabase.from('notebook_invitations').update({
             status: 'declined',
         }).eq('id', invitationId));
         await refreshContext();

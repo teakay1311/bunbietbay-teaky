@@ -4,21 +4,23 @@ import type { ChangeEvent, FormEvent } from 'react';
 import { Icons } from '../components/Icons';
 import { useAppContext, CURRENCIES, Currency } from '../context/AppContext';
 import { useFeedback } from '../context/FeedbackContext';
-import { useEffect, useState, useMemo, useRef } from 'react';
+import { lazy, Suspense, useEffect, useState, useMemo, useRef } from 'react';
 import { Modal } from '../components/Modal';
 import { FormattedNumberInput } from '../components/FormattedNumberInput';
 import { CategorySelectWithCreate } from '../components/CategorySelectWithCreate';
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
 import { Check } from 'lucide-react';
 import { Expense } from '../context/AppContext';
 import { formatLocalDate, getLocalDateString, normalizeTimeForInput } from '../utils/date';
 import { useSettings, useFormatMoney } from '../context/SettingsContext';
 import { LinkifyText } from '../components/LinkifyText';
 import { getErrorMessage } from '../utils/errorMessage';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'motion/react';
+import { getFinancialMembers } from '../domain/tripLogic';
+import { buildExpenseChartData, calculateMemberBalances } from '../domain/expenseLogic';
 import { SortSelect } from '../components/SortSelect';
 import { chainComparators, compareDate, compareNumber, compareText, stableSort, type SortOption } from '../utils/listSort';
 import { EXPENSE_CATEGORY_OPTIONS, mergeCategoryOptions } from '../utils/tripCategories';
+import { fadeUpVariants, pageStaggerVariants } from '../ui/motion';
 
 const EXPENSE_PRESETS = [
   { icon: '☕', label: 'Cafe', category: 'Ăn uống', title: 'Cafe' },
@@ -28,6 +30,8 @@ const EXPENSE_PRESETS = [
   { icon: '🏨', label: 'Phòng', category: 'Lưu trú', title: 'Tiền phòng' },
   { icon: '🎟️', label: 'Mua vé', category: 'Giải trí', title: 'Mua vé' },
 ];
+
+const ExpenseCharts = lazy(() => import('../features/expenses/ExpenseCharts').then((module) => ({ default: module.ExpenseCharts })));
 
 type ExpenseSortKey = 'dateDesc' | 'dateAsc' | 'amountDesc' | 'amountAsc' | 'categoryAsc' | 'payerAsc' | 'titleAsc';
 
@@ -219,30 +223,8 @@ export function TripExpenses() {
   const filteredExpenseAverage = filteredExpenses.length > 0 ? filteredExpenseTotal / filteredExpenses.length : 0;
   const hasActiveExpenseFilters = Boolean(searchQuery.trim()) || categoryFilter !== 'all' || payerFilter !== 'all' || participantFilter !== 'all';
   const tripMembers = trip?.members ?? [];
-  const financialMembers = useMemo(() => [...tripMembers, ...(trip?.historicalMembers ?? [])], [trip?.historicalMembers, tripMembers]);
-
-  const balances = useMemo(() => {
-    const bals: Record<string, number> = {};
-    financialMembers.forEach(m => bals[m.id] = 0);
-
-    tripExpenses.forEach(expense => {
-      const normalizedAmount = expense.amount;
-
-      if (bals[expense.paidBy] !== undefined) {
-        bals[expense.paidBy] += normalizedAmount;
-      }
-
-      if (expense.participants.length > 0) {
-        const splitAmount = normalizedAmount / expense.participants.length;
-        expense.participants.forEach(pId => {
-          if (bals[pId] !== undefined) {
-            bals[pId] -= splitAmount;
-          }
-        });
-      }
-    });
-    return bals;
-  }, [financialMembers, tripExpenses]);
+  const financialMembers = useMemo(() => getFinancialMembers(trip), [trip]);
+  const balances = useMemo(() => calculateMemberBalances(financialMembers, tripExpenses), [financialMembers, tripExpenses]);
 
   const detailedBalances = useMemo(() => {
     const curBals: Record<string, Record<string, number>> = {};
@@ -272,34 +254,11 @@ export function TripExpenses() {
     return curBals;
   }, [tripExpenses, financialMembers, baseCurrency]);
 
-  const chartsData = useMemo(() => {
-    const categoryTotals: Record<string, number> = {};
-    const dateTotals: Record<string, number> = {};
-    const memberTotals: Record<string, number> = {};
-
-    tripExpensesForDisplay.forEach(exp => {
-      const amt = exp.amount;
-      categoryTotals[exp.category] = (categoryTotals[exp.category] || 0) + amt;
-      dateTotals[exp.date] = (dateTotals[exp.date] || 0) + amt;
-      memberTotals[exp.paidBy] = (memberTotals[exp.paidBy] || 0) + amt;
-    });
-
-    const pieData = Object.entries(categoryTotals).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
-
-    const barData = Object.entries(dateTotals)
-      .map(([date, value]) => ({ date: formatLocalDate(date, { day: '2-digit', month: '2-digit' }), value, rawDate: date }))
-      .sort((a, b) => new Date(a.rawDate).getTime() - new Date(b.rawDate).getTime());
-
-    const memberData = Object.entries(memberTotals).map(([id, value]) => {
-      const member = financialMembers.find(m => m.id === id);
-      return {
-        name: member?.displayName || id,
-        value
-      };
-    }).sort((a, b) => b.value - a.value);
-
-    return { pieData, barData, memberData };
-  }, [financialMembers, tripExpensesForDisplay]);
+  const chartsData = useMemo(() => buildExpenseChartData(
+    tripExpensesForDisplay,
+    financialMembers,
+    (date) => formatLocalDate(date, { day: '2-digit', month: '2-digit' }),
+  ), [financialMembers, tripExpensesForDisplay]);
 
   const categoryBudgetRows = useMemo(() => {
     const budgets = trip?.categoryBudgets ?? {};
@@ -351,14 +310,8 @@ export function TripExpenses() {
   const canManageTrip = trip?.permissions?.canManageTrip ?? false;
   const baseCurrencySymbol = CURRENCIES[baseCurrency].symbol;
 
-  const containerVariants = {
-    hidden: { opacity: 0 },
-    show: { opacity: 1, transition: { staggerChildren: 0.02 } }
-  };
-  const itemVariants = {
-    hidden: { opacity: 0, y: 15 },
-    show: { opacity: 1, y: 0, transition: { ease: 'easeOut', duration: 0.2 } }
-  };
+  const containerVariants = pageStaggerVariants;
+  const itemVariants = fadeUpVariants;
 
 
 
@@ -368,8 +321,6 @@ export function TripExpenses() {
   const safeBudget = trip.budget > 0 ? trip.budget : 0;
   const spentPercentage = safeBudget > 0 ? Math.min((trip.spent / safeBudget) * 100, 100) : 0;
   const avgPerPerson = trip.members.length > 0 ? trip.spent / trip.members.length : 0;
-
-  const COLORS = ['#8A3FFC', '#33B1FF', '#007D79', '#FF7EB3', '#FA4D56', '#F1C21B', '#0043CE'];
 
   const exportExpensesCsv = () => {
     const header = ['Ngay', 'Thoi gian', 'Noi dung', 'Danh muc', 'So tien goc', 'Tien te', 'Quy doi', 'Nguoi tra', 'Nguoi tham gia', 'Ghi chu'];
@@ -937,111 +888,9 @@ export function TripExpenses() {
           )}
 
           {activeTab === 'charts' && (
-            <div className="p-6">
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-                <div className="bg-surface-container-low p-6 rounded-2xl border border-outline-variant/30">
-                  <h4 className="font-label text-sm uppercase tracking-widest font-bold text-secondary dark:text-gray-300 mb-6 text-center">Phân bổ Danh mục</h4>
-                  <div className="h-64 w-full">
-                    {chartsData.pieData.length > 0 ? (
-                      <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
-                          <Pie
-                            data={chartsData.pieData}
-                            dataKey="value"
-                            nameKey="name"
-                            cx="50%"
-                            cy="50%"
-                            innerRadius={60}
-                            outerRadius={90}
-                            paddingAngle={5}
-                            label={({ percent }) => `${(percent * 100).toFixed(0)}%`}
-                            labelLine={false}
-                          >
-                            {chartsData.pieData.map((entry, index) => (
-                              <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                            ))}
-                          </Pie>
-                          <Tooltip formatter={(val: number) => formatMoney(val, baseCurrencySymbol)} />
-                        </PieChart>
-                      </ResponsiveContainer>
-                    ) : (
-                      <div className="w-full h-full flex flex-col items-center justify-center text-secondary dark:text-gray-300">
-                        Chưa có dữ liệu
-                      </div>
-                    )}
-                  </div>
-                  <div className="mt-4 flex flex-wrap justify-center gap-3">
-                    {chartsData.pieData.map((entry, index) => (
-                      <div key={entry.name} className="flex items-center gap-2 text-sm font-medium">
-                        <span className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS[index % COLORS.length] }}></span>
-                        {entry.name}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="bg-surface-container-low p-6 rounded-2xl border border-outline-variant/30">
-                  <h4 className="font-label text-sm uppercase tracking-widest font-bold text-secondary dark:text-gray-300 mb-6 text-center">Chi tiêu theo Ngày</h4>
-                  <div className="h-64 w-full">
-                    {chartsData.barData.length > 0 ? (
-                      <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={chartsData.barData}>
-                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
-                          <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#6B7280' }} />
-                          <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#6B7280' }} tickFormatter={(val) => {
-                            if (val >= 1000000) return `${(val / 1000000).toFixed(1)}M`;
-                            if (val >= 1000) return `${(val / 1000).toFixed(0)}k`;
-                            return val;
-                          }} />
-                          <Tooltip
-                            cursor={{ fill: '#F3F4F6' }}
-                            formatter={(val: number) => [formatMoney(val, baseCurrencySymbol), 'Tổng chi']}
-                            labelFormatter={(label) => `Ngày ${label}`}
-                          />
-                          <Bar dataKey="value" fill="#33B1FF" radius={[4, 4, 0, 0]} maxBarSize={50} />
-                        </BarChart>
-                      </ResponsiveContainer>
-                    ) : (
-                      <div className="w-full h-full flex flex-col items-center justify-center text-secondary dark:text-gray-300">
-                        Chưa có dữ liệu
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-surface-container-low p-6 rounded-2xl border border-outline-variant/30">
-                <h4 className="font-label text-sm uppercase tracking-widest font-bold text-secondary dark:text-gray-300 mb-6 text-center">Người chi nhiều nhất</h4>
-                <div className="h-72 w-full">
-                  {chartsData.memberData.length > 0 ? (
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={chartsData.memberData} layout="vertical">
-                        <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#E5E7EB" />
-                        <XAxis type="number" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#6B7280' }} tickFormatter={(val) => {
-                          if (val >= 1000000) return `${(val / 1000000).toFixed(1)}M`;
-                          if (val >= 1000) return `${(val / 1000).toFixed(0)}k`;
-                          return val;
-                        }} />
-                        <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#6B7280' }} width={100} />
-                        <Tooltip
-                          cursor={{ fill: '#F3F4F6' }}
-                          formatter={(val: number) => [formatMoney(val, baseCurrencySymbol), 'Đã chi']}
-                        />
-                        <Bar dataKey="value" radius={[0, 4, 4, 0]} barSize={24}>
-                          {chartsData.memberData.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                          ))}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
-                  ) : (
-                    <div className="w-full h-full flex flex-col items-center justify-center text-secondary dark:text-gray-300">
-                      Chưa có dữ liệu
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
+            <Suspense fallback={<div className="p-6 text-center text-secondary">Đang tải biểu đồ...</div>}>
+              <ExpenseCharts {...chartsData} currencySymbol={baseCurrencySymbol} formatMoney={formatMoney} />
+            </Suspense>
           )}
         </div>
       </motion.section>
@@ -1219,7 +1068,6 @@ export function TripExpenses() {
                 <div className="space-y-3">
                   {mBals.map(b => {
                     const isOwed = b.amount > 0.01;
-                    const owes = b.amount < -0.01;
                     const symbol = CURRENCIES[b.currency as Currency]?.symbol || b.currency;
                     return (
                       <div key={b.currency} className="relative group rounded-2xl overflow-hidden mb-3 ring-1 ring-surface-variant/30">
@@ -1237,7 +1085,7 @@ export function TripExpenses() {
                           drag="x"
                           dragConstraints={{ left: 0, right: 0 }}
                           dragElastic={0.4}
-                          onDragEnd={async (event, info) => {
+                          onDragEnd={async (_event, info) => {
                             if (!canEdit) return;
                             if (info.offset.x > 80 || info.offset.x < -80) {
                               try {

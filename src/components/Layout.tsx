@@ -1,4 +1,4 @@
-import { ReactNode, useState, useEffect, useLayoutEffect } from 'react';
+import { ReactNode, useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Icons } from './Icons';
 import { clsx } from 'clsx';
@@ -7,7 +7,7 @@ import { useSettings } from '../context/SettingsContext';
 import { useAppContext } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 import { useNotebook } from '../context/NotebookContext';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 
 export function cn(...inputs: (string | undefined | null | false)[]) {
   return twMerge(clsx(inputs));

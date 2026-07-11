@@ -76,8 +76,14 @@ Desktop data is stored on the local machine inside the app `userData` directory.
 
 - Run unit and helper tests:
   `npm test`
+- Run TypeScript contract checks:
+  `npm run typecheck`
+- Run unused-code checks:
+  `npm run lint`
 - Run smoke E2E checks for the main routes:
   `npm run test:smoke`
+
+Generated `dist/`, `release/`, `node_modules/`, and Vite cache files are intentionally not committed. CI and desktop packaging always rebuild them from source with `npm ci`.
 
 The smoke suite opens the trips list, a seeded trip, settings, and an invalid trip route, then fails if the browser emits runtime errors.
 

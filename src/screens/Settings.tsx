@@ -12,7 +12,7 @@ import { useAppContext, type PersistedAppState } from '../context/AppContext';
 import { useFeedback } from '../context/FeedbackContext';
 import { useNotebook } from '../context/NotebookContext';
 import { prepareImportedSnapshot } from '../utils/appState';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 
 type SectionKey = 'account' | 'workspace' | 'appearance' | 'reminders' | 'shortcuts' | 'data';
 

@@ -12,7 +12,8 @@ import { EMBEDDED_PHOTO_WARNING_BYTES, formatBytes, getPhotoStorageSummary, shou
 import { getErrorMessage } from '../utils/errorMessage';
 import { compressImage, blobToDataUrl } from '../utils/photoUpload';
 import { formatLocalDate } from '../utils/date';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
+import { pageStaggerVariants } from '../ui/motion';
 import { SortSelect } from '../components/SortSelect';
 import { chainComparators, compareDate, compareText, stableSort, type SortOption } from '../utils/listSort';
 
@@ -417,10 +418,7 @@ export function TripPhotos() {
     setIsSelectionMode(false);
   };
 
-  const containerVariants = {
-    hidden: { opacity: 0 },
-    show: { opacity: 1, transition: { staggerChildren: 0.02 } }
-  };
+  const containerVariants = pageStaggerVariants;
   const itemVariants = {
     hidden: { opacity: 0, scale: 0.95 },
     show: { opacity: 1, scale: 1, transition: { ease: 'easeOut', duration: 0.2 } }

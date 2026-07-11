@@ -1,6 +1,7 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import type { FormEvent } from 'react';
-import { motion } from 'framer-motion';
+import { motion } from 'motion/react';
+import { pageStaggerVariants } from '../ui/motion';
 
 import { Icons } from '../components/Icons';
 import { useAppContext, CURRENCIES, Currency } from '../context/AppContext';
@@ -277,15 +278,7 @@ export function MyTrips() {
     }
   };
 
-  const containerVariants = {
-    hidden: { opacity: 0 },
-    show: {
-      opacity: 1,
-      transition: {
-        staggerChildren: 0.02
-      }
-    }
-  };
+  const containerVariants = pageStaggerVariants;
 
   const itemVariants = {
     hidden: { opacity: 0, y: 30, scale: 0.95 },

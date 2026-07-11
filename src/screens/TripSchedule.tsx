@@ -10,7 +10,8 @@ import { CategorySelectWithCreate } from '../components/CategorySelectWithCreate
 import { Activity } from '../context/AppContext';
 import { formatLocalDate, getLocalDateRange, normalizeTimeForInput } from '../utils/date';
 import { getErrorMessage } from '../utils/errorMessage';
-import { motion } from 'framer-motion';
+import { motion } from 'motion/react';
+import { pageStaggerVariants } from '../ui/motion';
 import { LinkifyText } from '../components/LinkifyText';
 import { SortSelect } from '../components/SortSelect';
 import { chainComparators, compareDate, compareNumber, compareText, stableSort, type SortOption } from '../utils/listSort';
@@ -362,10 +363,7 @@ export function TripSchedule() {
     }
   };
 
-  const containerVariants = {
-    hidden: { opacity: 0 },
-    show: { opacity: 1, transition: { staggerChildren: 0.02 } }
-  };
+  const containerVariants = pageStaggerVariants;
   const itemVariants = {
     hidden: { opacity: 0, y: 20 },
     show: { opacity: 1, y: 0, transition: { ease: 'easeOut', duration: 0.2 } }

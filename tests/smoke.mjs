@@ -104,6 +104,8 @@ async function runSmoke() {
   await page.getByText('Tú', { exact: true }).first().waitFor();
   await page.getByRole('button', { name: 'Tra soát Công nợ' }).click();
   await page.getByText('Đã thu hồi quyền', { exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Biểu đồ Chi tiêu' }).click();
+  await page.getByText('Phân bổ Danh mục', { exact: true }).waitFor();
 
   for (const route of [
     '/trips', '/trips/t3/schedule', '/trips/t3/overview', '/trips/t3/expenses', '/trips/t3/members',

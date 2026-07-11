@@ -9,7 +9,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { Modal } from '../components/Modal';
 import { CategorySelectWithCreate } from '../components/CategorySelectWithCreate';
 import { getErrorMessage } from '../utils/errorMessage';
-import { motion, useAnimation } from 'framer-motion';
+import { motion } from 'motion/react';
+import { fadeUpVariants, pageStaggerVariants } from '../ui/motion';
 import { Check } from 'lucide-react';
 import { SortSelect } from '../components/SortSelect';
 import { chainComparators, compareDate, compareNumber, compareText, stableSort, type SortOption } from '../utils/listSort';
@@ -294,14 +295,8 @@ export function TripPacking() {
     }));
   }, [packingCategoryOptions]);
 
-  const containerVariants = {
-    hidden: { opacity: 0 },
-    show: { opacity: 1, transition: { staggerChildren: 0.02 } }
-  };
-  const itemVariants = {
-    hidden: { opacity: 0, y: 15 },
-    show: { opacity: 1, y: 0, transition: { ease: 'easeOut', duration: 0.2 } }
-  };
+  const containerVariants = pageStaggerVariants;
+  const itemVariants = fadeUpVariants;
 
   return (
     <motion.div variants={containerVariants} initial="hidden" animate="show" className="pb-10">
@@ -424,7 +419,7 @@ export function TripPacking() {
                       drag="x"
                       dragConstraints={{ left: 0, right: 0 }}
                       dragElastic={0.4}
-                      onDragEnd={async (event, info) => {
+                      onDragEnd={async (_event, info) => {
                         if (!canEdit) return;
                         if (info.offset.x > 60) {
                           try {

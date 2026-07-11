@@ -3,7 +3,6 @@ import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { Icons } from './Icons';
 import { Activity } from '../context/AppContext';
-import { getErrorMessage } from '../utils/errorMessage';
 import { useFeedback } from '../context/FeedbackContext';
 import { LinkifyText } from './LinkifyText';
 

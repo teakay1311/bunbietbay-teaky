@@ -1,16 +1,9 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
+import type { UserProfile } from '../domain/models';
 
-export type UserProfile = {
-  id: string;
-  email: string;
-  displayName: string;
-  avatar: string;
-  phone?: string;
-  birthdate?: string;
-  bio?: string;
-};
+export type { UserProfile } from '../domain/models';
 
 export type PendingInvitation = {
   id: string;

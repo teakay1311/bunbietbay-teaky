@@ -10,7 +10,8 @@ import { formatLocalDate, getLocalDateString, getLocalDateStringWithOffset } fro
 import { sortActivitiesByTime } from '../utils/activitySort';
 import { useSettings, useFormatMoney } from '../context/SettingsContext';
 import { getErrorMessage } from '../utils/errorMessage';
-import { motion } from 'framer-motion';
+import { motion } from 'motion/react';
+import { pageStaggerVariants } from '../ui/motion';
 import { processTripExport } from '../utils/exportTrip';
 import { StarRatingInput } from '../components/StarRatingInput';
 
@@ -234,13 +235,7 @@ export function TripOverview() {
     }
   };
 
-  const containerVariants = {
-    hidden: { opacity: 0 },
-    show: {
-      opacity: 1,
-      transition: { staggerChildren: 0.02 }
-    }
-  };
+  const containerVariants = pageStaggerVariants;
 
   const itemVariants = {
     hidden: { opacity: 0, y: 20, scale: 0.98 },

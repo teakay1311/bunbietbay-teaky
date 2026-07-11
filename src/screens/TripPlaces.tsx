@@ -8,7 +8,8 @@ import { useFeedback } from '../context/FeedbackContext';
 import { useEffect, useState, useMemo } from 'react';
 import { Modal } from '../components/Modal';
 import { getErrorMessage } from '../utils/errorMessage';
-import { motion } from 'framer-motion';
+import { motion } from 'motion/react';
+import { pageStaggerVariants } from '../ui/motion';
 import { ExternalLink } from 'lucide-react';
 import { LinkifyText } from '../components/LinkifyText';
 import { StarRatingInput } from '../components/StarRatingInput';
@@ -175,10 +176,7 @@ export function TripPlaces() {
     }
   };
 
-  const containerVariants = {
-    hidden: { opacity: 0 },
-    show: { opacity: 1, transition: { staggerChildren: 0.02 } }
-  };
+  const containerVariants = pageStaggerVariants;
 
   const itemVariants = {
     hidden: { opacity: 0, scale: 0.95, y: 15 },

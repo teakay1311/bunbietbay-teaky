@@ -1,10 +1,9 @@
 import React, { useState, useMemo } from 'react';
-import { motion } from 'framer-motion';
+import { motion } from 'motion/react';
 import { Icons } from '../components/Icons';
 import { useNotebook, NotebookPlace } from '../context/NotebookContext';
 import { useFeedback } from '../context/FeedbackContext';
 import { Modal } from '../components/Modal';
-import { useSettings } from '../context/SettingsContext';
 import { StarRatingInput } from '../components/StarRatingInput';
 import { SortSelect } from '../components/SortSelect';
 import { chainComparators, compareDate, compareNumber, compareText, stableSort, type SortOption } from '../utils/listSort';
@@ -23,7 +22,6 @@ const NOTEBOOK_PLACE_SORT_OPTIONS: Array<SortOption<NotebookPlaceSortKey>> = [
 export function PlacesNotebook() {
     const { notebooks, addNotebook, deleteNotebook, notebookPlaces, addNotebookPlace, editNotebookPlace, deleteNotebookPlace, bulkDeleteNotebookPlaces, inviteToNotebook } = useNotebook();
     const { showToast, confirm } = useFeedback();
-    const { uiDensity } = useSettings();
 
     const [activeTab, setActiveTab] = useState<'all' | 'hotel' | 'restaurant' | 'cafe' | 'entertainment' | 'other'>('all');
     const [activeNotebookId, setActiveNotebookId] = useState<string>('all');
@@ -389,7 +387,7 @@ export function PlacesNotebook() {
                                     >
                                         <div className="flex min-w-0 flex-1 items-center gap-3">
                                             {place.coverImage ? (
-                                                <img src={place.coverImage} className="h-14 w-14 shrink-0 rounded-xl object-cover" alt={place.name} />
+                                                <img src={place.coverImage} className="h-14 w-14 shrink-0 rounded-xl object-cover" alt={place.name} loading="lazy" decoding="async" />
                                             ) : (
                                                 <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
                                                     {typeIcon}
@@ -502,7 +500,7 @@ export function PlacesNotebook() {
                                             <div className={`flex ${viewMode === 'grid' ? 'flex-col' : 'flex-row gap-6'} w-full`}>
                                                 {place.coverImage && (
                                                     <div className={`${viewMode === 'grid' ? 'h-32 mb-4 w-full -mt-2' : 'h-24 w-24 shrink-0 rounded-xl'} rounded-xl overflow-hidden bg-surface-variant/30 flex items-center justify-center`}>
-                                                        <img src={place.coverImage} className="w-full h-full object-cover" alt={place.name} />
+                                                        <img src={place.coverImage} className="w-full h-full object-cover" alt={place.name} loading="lazy" decoding="async" />
                                                     </div>
                                                 )}
                                                 <div className="flex-1 flex flex-col items-start min-w-0">

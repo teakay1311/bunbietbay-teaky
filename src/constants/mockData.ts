@@ -1,5 +1,5 @@
 import { UserProfile } from '../context/AuthContext';
-import { Currency, TripReview, TripRecord, TripMembership, TripInvitation, Activity, Expense, SavedPlace, PackingItem, Photo, PersistedAppState } from '../context/AppContext';
+import { TripRecord, TripMembership, Activity, Expense, PersistedAppState } from '../context/AppContext';
 import { APP_STATE_VERSION } from '../utils/appState';
 
 function createLocalProfile(id: string, displayName: string, email: string, avatar: string, phone?: string, birthdate?: string): UserProfile {
