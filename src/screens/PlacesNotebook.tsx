@@ -6,9 +6,9 @@ import { useFeedback } from '../context/FeedbackContext';
 import { Modal } from '../components/Modal';
 import { StarRatingInput } from '../components/StarRatingInput';
 import { SortSelect } from '../components/SortSelect';
-import { chainComparators, compareDate, compareNumber, compareText, stableSort, type SortOption } from '../utils/listSort';
-
-type NotebookPlaceSortKey = 'createdDesc' | 'createdAsc' | 'ratingDesc' | 'ratingAsc' | 'nameAsc' | 'nameDesc' | 'typeAsc';
+import { type SortOption } from '../utils/listSort';
+import { useAppContext } from '../context/AppContext';
+import { buildLibraryUsage, filterAndSortLibraryPlaces, type NotebookPlaceSortKey } from '../features/library/selectors';
 
 const NOTEBOOK_PLACE_SORT_OPTIONS: Array<SortOption<NotebookPlaceSortKey>> = [
     { value: 'createdDesc', label: 'Mới nhất' },
@@ -19,8 +19,10 @@ const NOTEBOOK_PLACE_SORT_OPTIONS: Array<SortOption<NotebookPlaceSortKey>> = [
     { value: 'nameDesc', label: 'Tên Z-A' },
     { value: 'typeAsc', label: 'Loại địa điểm' },
 ];
+const NOTEBOOK_ROLE_LABELS = { owner: 'Chủ sở hữu', admin: 'Quản trị', editor: 'Chỉnh sửa', viewer: 'Chỉ xem' } as const;
 export function PlacesNotebook() {
-    const { notebooks, addNotebook, deleteNotebook, notebookPlaces, addNotebookPlace, editNotebookPlace, deleteNotebookPlace, bulkDeleteNotebookPlaces, inviteToNotebook } = useNotebook();
+    const { notebooks, notebookMembers, addNotebook, editNotebook, deleteNotebook, notebookPlaces, addNotebookPlace, editNotebookPlace, deleteNotebookPlace, bulkDeleteNotebookPlaces, inviteToNotebook, updateNotebookMemberRole, transferNotebookOwnership, removeNotebookMember, libraryStatus, libraryError, retryLibrarySync } = useNotebook();
+    const { trips, savedPlaces, addLibraryPlaceToTrip, editSavedPlace, isRemoteMode } = useAppContext();
     const { showToast, confirm } = useFeedback();
 
     const [activeTab, setActiveTab] = useState<'all' | 'hotel' | 'restaurant' | 'cafe' | 'entertainment' | 'other'>('all');
@@ -32,6 +34,7 @@ export function PlacesNotebook() {
     const [sortBy, setSortBy] = useState<NotebookPlaceSortKey>('createdDesc');
 
     const [isCreateNbOpen, setIsCreateNbOpen] = useState(false);
+    const [isRenameNbOpen, setIsRenameNbOpen] = useState(false);
     const [createNbName, setCreateNbName] = useState('');
     const [createNbInvite, setCreateNbInvite] = useState('');
 
@@ -46,40 +49,16 @@ export function PlacesNotebook() {
     // Invite modal state
     const [isInviteOpen, setIsInviteOpen] = useState(false);
     const [inviteEmail, setInviteEmail] = useState('');
+    const [inviteRole, setInviteRole] = useState<'admin' | 'editor' | 'viewer'>('editor');
     const [isInviting, setIsInviting] = useState(false);
-
-    const filteredPlaces = useMemo(() => {
-        let list = notebookPlaces;
-        if (activeNotebookId !== 'all') {
-            list = list.filter(p => p.notebookId === activeNotebookId);
-        }
-        if (activeTab !== 'all') {
-            list = list.filter(p => p.type === activeTab);
-        }
-        if (searchQuery) {
-            const q = searchQuery.toLowerCase();
-            list = list.filter(p =>
-                p.name.toLowerCase().includes(q) ||
-                (p.address?.toLowerCase().includes(q)) ||
-                (p.note?.toLowerCase().includes(q)) ||
-                (p.customFields?.some(c => c.value.toLowerCase().includes(q)))
-            );
-        }
-        const fallbackSort = (a: NotebookPlace, b: NotebookPlace) => compareText(a.name, b.name, 'asc');
-        const sortComparator = (a: NotebookPlace, b: NotebookPlace) => {
-            switch (sortBy) {
-                case 'createdAsc': return compareDate(a.createdAt, b.createdAt, 'asc');
-                case 'ratingDesc': return compareNumber(a.rating, b.rating, 'desc');
-                case 'ratingAsc': return compareNumber(a.rating, b.rating, 'asc');
-                case 'nameAsc': return compareText(a.name, b.name, 'asc');
-                case 'nameDesc': return compareText(a.name, b.name, 'desc');
-                case 'typeAsc': return compareText(a.type, b.type, 'asc');
-                case 'createdDesc':
-                default: return compareDate(a.createdAt, b.createdAt, 'desc');
-            }
-        };
-        return stableSort(list, chainComparators(sortComparator, fallbackSort));
-    }, [notebookPlaces, activeTab, searchQuery, activeNotebookId, sortBy]);
+    const [placeToTrip, setPlaceToTrip] = useState<NotebookPlace | null>(null);
+    const activeNotebook = activeNotebookId === 'all' ? null : notebooks.find((item) => item.id === activeNotebookId) ?? null;
+    const canWriteLibrary = libraryStatus === 'ready-local' || libraryStatus === 'ready-remote';
+    const editableTrips = useMemo(() => trips.filter((trip) => trip.permissions.canEditContent), [trips]);
+    const usageByPlace = useMemo(() => buildLibraryUsage(savedPlaces), [savedPlaces]);
+    const filteredPlaces = useMemo(() => filterAndSortLibraryPlaces({
+        places: notebookPlaces, notebookId: activeNotebookId, type: activeTab, query: searchQuery, sortBy,
+    }), [notebookPlaces, activeTab, searchQuery, activeNotebookId, sortBy]);
 
     const handleOpenForm = (place?: NotebookPlace) => {
         if (place) {
@@ -96,12 +75,12 @@ export function PlacesNotebook() {
 
     const handleShare = () => {
         if (activeNotebookId === 'all') {
-            showToast({ tone: 'info', title: 'Hướng dẫn', message: 'Vui lòng chọn 1 sổ tay cụ thể ở menu trên cùng để thêm thành viên.' });
+            showToast({ tone: 'info', title: 'Hướng dẫn', message: 'Vui lòng chọn một bộ sưu tập cụ thể để thêm thành viên.' });
             return;
         }
         const activeNB = notebooks.find(n => n.id === activeNotebookId);
         if (activeNB?.type === 'personal') {
-            showToast({ tone: 'info', title: 'Sổ tay cá nhân', message: 'Đây là sổ tay mặc định, không thể mời thêm người. Hãy chọn một sổ tay nhóm.' });
+            showToast({ tone: 'info', title: 'Bộ sưu tập cá nhân', message: 'Bộ sưu tập mặc định không thể mời thêm người. Hãy chọn một bộ sưu tập nhóm.' });
             return;
         }
         setInviteEmail('');
@@ -113,7 +92,7 @@ export function PlacesNotebook() {
         if (!inviteEmail.trim()) return;
         setIsInviting(true);
         try {
-            const result = await inviteToNotebook(activeNotebookId, inviteEmail.trim());
+            const result = await inviteToNotebook(activeNotebookId, inviteEmail.trim(), inviteRole);
             if (result.success) {
                 showToast({ tone: 'success', title: 'Gửi lời mời thành công', message: `Đã gửi lời mời đến ${inviteEmail}.` });
                 setInviteEmail('');
@@ -134,18 +113,24 @@ export function PlacesNotebook() {
 
         const placesCount = notebookPlaces.filter(p => p.notebookId === activeNotebookId).length;
         const shouldDelete = await confirm({
-            title: `Xóa sổ tay "${activeNB.name}"?`,
-            message: `Tất cả ${placesCount} địa điểm trong sổ tay này sẽ bị xóa vĩnh viễn. Thành viên và lời mời cũng sẽ bị hủy.`,
+            title: `Xóa bộ sưu tập "${activeNB.name}"?`,
+            message: `Tất cả ${placesCount} địa điểm trong bộ sưu tập này sẽ bị xóa vĩnh viễn. Thành viên và lời mời cũng sẽ bị hủy.`,
             confirmLabel: 'Xóa vĩnh viễn',
             cancelLabel: 'Giữ lại',
             tone: 'danger',
         });
         if (!shouldDelete) return;
 
+        const deletedPlaceIds = notebookPlaces.filter((place) => place.notebookId === activeNotebookId).map((place) => place.id);
         const result = await deleteNotebook(activeNotebookId);
         if (result.success) {
+            if (!isRemoteMode) {
+                await Promise.all(savedPlaces
+                    .filter((place) => place.sourceNotebookPlaceId && deletedPlaceIds.includes(place.sourceNotebookPlaceId))
+                    .map((place) => editSavedPlace(place.id, { sourceNotebookPlaceId: undefined })));
+            }
             setActiveNotebookId('all');
-            showToast({ tone: 'success', title: 'Đã xóa', message: `Sổ tay "${activeNB.name}" đã được xóa.` });
+            showToast({ tone: 'success', title: 'Đã xóa', message: `Bộ sưu tập "${activeNB.name}" đã được xóa.` });
         } else {
             showToast({ tone: 'error', title: 'Không thể xóa', message: result.error || 'Lỗi không xác định.' });
         }
@@ -163,11 +148,11 @@ export function PlacesNotebook() {
                     const inviteResult = await inviteToNotebook(result.id, createNbInvite.trim());
                     showToast({
                         tone: 'success',
-                        title: 'Đã tạo sổ tay',
+                        title: 'Đã tạo bộ sưu tập',
                         message: `Sổ "${createNbName}" đã sẵn sàng. ${inviteResult.success ? 'Đã gửi lời mời.' : inviteResult.error || ''}`
                     });
                 } else {
-                    showToast({ tone: 'success', title: 'Đã tạo sổ tay', message: `Sổ "${createNbName}" đã sẵn sàng.` });
+                    showToast({ tone: 'success', title: 'Đã tạo bộ sưu tập', message: `Bộ sưu tập "${createNbName}" đã sẵn sàng.` });
                 }
             } else {
                 showToast({ tone: 'error', title: 'Không thể tạo', message: result.error || 'Lỗi không xác định.' });
@@ -235,13 +220,21 @@ export function PlacesNotebook() {
     const handleDelete = async (id: string, name: string) => {
         const ok = await confirm({
             title: 'Xóa ' + name,
-            message: 'Địa điểm này sẽ bị xóa khỏi cẩm nang chung.',
+            message: 'Địa điểm này sẽ bị xóa khỏi Thư viện.',
             confirmLabel: 'Xóa',
             cancelLabel: 'Giữ lại',
             tone: 'danger'
         });
-        if (ok) {
-            deleteNotebookPlace(id);
+        if (!ok) return;
+        try {
+            await deleteNotebookPlace(id);
+            if (!isRemoteMode) {
+                await Promise.all(savedPlaces
+                    .filter((place) => place.sourceNotebookPlaceId === id)
+                    .map((place) => editSavedPlace(place.id, { sourceNotebookPlaceId: undefined })));
+            }
+        } catch (error) {
+            showToast({ tone: 'error', title: 'Không thể xóa địa điểm', message: error instanceof Error ? error.message : 'Hãy thử lại.' });
         }
     };
 
@@ -249,67 +242,93 @@ export function PlacesNotebook() {
         setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
     };
 
-    const containerVariants = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.03 } } };
-    const itemVariants = { hidden: { opacity: 0, y: 15 }, show: { opacity: 1, y: 0, transition: { ease: 'easeOut', duration: 0.25 } } };
+    const containerVariants = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.03 } } } as const;
+    const itemVariants = { hidden: { opacity: 0, y: 8 }, show: { opacity: 1, y: 0, transition: { ease: 'easeOut', duration: 0.18 } } } as const;
+
+    if (libraryStatus === 'loading' && notebooks.length === 0) {
+        return <LibraryState icon={<Icons.Loader2 className="size-8 animate-spin" />} title="Đang tải Thư viện địa điểm" message="Đang đồng bộ bộ sưu tập, địa điểm và quyền truy cập." />;
+    }
+
+    if ((libraryStatus === 'schema-incompatible' || libraryStatus === 'remote-unavailable') && notebooks.length === 0) {
+        return <LibraryState icon={<Icons.AlertTriangle className="size-8" />} title={libraryStatus === 'schema-incompatible' ? 'Cơ sở dữ liệu chưa tương thích' : 'Thư viện đang mất kết nối'} message={libraryError ?? 'Không thể tải Thư viện địa điểm.'} action={() => void retryLibrarySync()} />;
+    }
 
     return (
         <React.Fragment>
-            <motion.div variants={containerVariants} initial="hidden" animate="show" className="mx-auto mb-24 max-w-7xl py-2 md:px-8 md:py-8">
+            <motion.div variants={containerVariants} initial="hidden" animate="show" className="mx-auto mb-24 grid max-w-7xl gap-6 py-2 lg:py-8 xl:grid-cols-[230px_minmax(0,1fr)]">
+                <aside className="hidden self-start rounded-2xl border border-outline-variant/50 bg-surface-container-lowest p-3 xl:block">
+                    <div className="flex items-center justify-between px-2 py-2">
+                        <h2 className="font-headline text-lg font-bold">Bộ sưu tập</h2>
+                        {canWriteLibrary && <button type="button" onClick={() => setIsCreateNbOpen(true)} aria-label="Tạo bộ sưu tập" title="Tạo bộ sưu tập" className="flex size-9 items-center justify-center rounded-lg text-primary hover:bg-surface-container-low"><Icons.Plus className="size-5" /></button>}
+                    </div>
+                    <nav aria-label="Bộ sưu tập địa điểm" className="mt-2 space-y-1">
+                        <button type="button" onClick={() => setActiveNotebookId('all')} className={`min-h-11 w-full rounded-xl px-3 text-left text-sm font-semibold ${activeNotebookId === 'all' ? 'bg-primary text-on-primary' : 'hover:bg-surface-container-low'}`}>Tất cả địa điểm</button>
+                        {notebooks.map((notebook) => <button key={notebook.id} type="button" onClick={() => setActiveNotebookId(notebook.id)} className={`min-h-11 w-full rounded-xl px-3 text-left ${activeNotebookId === notebook.id ? 'bg-primary text-on-primary' : 'hover:bg-surface-container-low'}`}><span className="block truncate text-sm font-semibold">{notebook.name}</span><span className="block text-xs opacity-75">{notebook.memberCount} thành viên · {NOTEBOOK_ROLE_LABELS[notebook.membershipRole]}</span></button>)}
+                    </nav>
+                </aside>
+                <div className="min-w-0">
+                    {(libraryStatus === 'schema-incompatible' || libraryStatus === 'remote-unavailable') && (
+                        <div role="alert" className="mb-4 flex flex-col gap-3 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-amber-950 sm:flex-row sm:items-center sm:justify-between">
+                            <p className="text-sm font-medium">{libraryError}</p>
+                            <button type="button" onClick={() => void retryLibrarySync()} className="min-h-11 rounded-xl border border-amber-400 px-4 text-sm font-bold">Thử lại</button>
+                        </div>
+                    )}
+                    {activeNotebook && !activeNotebook.permissions.canEditPlaces && <div className="mb-4 rounded-xl border border-outline-variant bg-surface-container-low px-4 py-3 text-sm text-secondary">Bạn đang xem bộ sưu tập này ở chế độ chỉ đọc.</div>}
 
                 <motion.div variants={itemVariants} className="relative mb-6 flex flex-col gap-3 md:mb-8 md:flex-row md:items-end md:justify-between md:gap-4">
                     <div>
-                        <p className="mb-1.5 font-label text-[11px] font-bold uppercase tracking-[0.16em] text-secondary md:mb-2 md:text-xs md:tracking-[0.2em]">My Global Places</p>
-                        <h1 className="font-headline text-2xl font-extrabold text-on-surface md:text-5xl md:tracking-tighter">Cẩm Nang Địa Điểm</h1>
+                        <p className="mb-1.5 text-xs font-bold text-secondary">Địa điểm dùng lại giữa các chuyến đi</p>
+                        <h1 className="text-balance font-headline text-2xl font-extrabold text-on-surface md:text-5xl">Thư viện địa điểm</h1>
                         <p className="text-sm mt-3 max-w-md text-on-surface-variant leading-relaxed hidden md:block">
                             Nơi bạn lưu trữ mọi nhà hàng, khách sạn, quán cafe tuyệt vời hoặc điểm vui chơi để chuẩn bị cho bất kỳ chuyến đi nào trong tương lai.
                         </p>
                     </div>
 
-                    <div className="flex flex-col items-stretch gap-2 md:flex-row md:items-center md:gap-3">
+                    <div className="flex flex-col items-stretch gap-2 md:items-end md:gap-3">
+                        <div className="flex gap-2 xl:hidden">
                         <select
                             value={activeNotebookId}
                             onChange={e => setActiveNotebookId(e.target.value)}
-                            className="rounded-xl border border-outline/10 bg-surface-container-low px-3 py-2.5 text-sm font-bold text-on-surface outline-none transition-colors hover:bg-surface md:rounded-2xl md:px-4 md:py-3"
+                            aria-label="Chọn bộ sưu tập"
+                            className="min-h-11 min-w-0 flex-1 rounded-xl border border-outline/10 bg-surface-container-low px-3 text-sm font-bold text-on-surface outline-none"
                         >
-                            <option value="all">📚 Tất cả sổ tay</option>
+                            <option value="all">Tất cả địa điểm</option>
                             {notebooks.map(nb => (
                                 <option key={nb.id} value={nb.id}>
                                     {nb.type === 'personal' ? '👤' : '👥'} {nb.name}
                                 </option>
                             ))}
                         </select>
+                        {canWriteLibrary && <button type="button" onClick={() => setIsCreateNbOpen(true)} aria-label="Tạo bộ sưu tập" title="Tạo bộ sưu tập" className="flex size-11 shrink-0 items-center justify-center rounded-xl border border-outline-variant bg-surface-container-low text-primary"><Icons.FolderPlus className="size-5" /></button>}
+                        {canWriteLibrary && activeNotebook?.permissions.canManageMembers && <button type="button" onClick={() => setIsRenameNbOpen(true)} aria-label={`Đổi tên ${activeNotebook.name}`} title="Đổi tên bộ sưu tập" className="flex size-11 shrink-0 items-center justify-center rounded-xl border border-outline-variant bg-surface-container-low text-primary"><Icons.Edit2 className="size-5" /></button>}
+                        </div>
 
-                        <div className="flex flex-wrap gap-0.5 rounded-xl border border-outline/10 bg-surface-container-low p-1 md:rounded-2xl">
-                            <button onClick={() => { setIsSelectMode(!isSelectMode); setSelectedIds([]); }} className={`flex h-9 items-center gap-2 rounded-lg px-3 text-sm font-bold transition-all md:h-10 md:rounded-xl md:px-4 ${isSelectMode ? 'bg-primary text-on-primary' : 'hover:bg-primary/10 text-secondary hover:text-primary active:scale-95'}`} title="Chọn nhiều">
+                        <div className="hidden flex-wrap gap-0.5 rounded-xl border border-outline/10 bg-surface-container-low p-1 md:flex md:rounded-2xl">
+                            {canWriteLibrary && activeNotebook?.permissions.canEditPlaces && <button onClick={() => { setIsSelectMode(!isSelectMode); setSelectedIds([]); }} className={`flex h-9 items-center gap-2 rounded-lg px-3 text-sm font-bold transition-colors md:h-10 ${isSelectMode ? 'bg-primary text-on-primary' : 'text-secondary hover:bg-primary/10 hover:text-primary'}`} title="Chọn nhiều">
                                 <Icons.CheckSquare className="w-4 h-4" />
                                 <span className="hidden md:inline">{isSelectMode ? 'Hủy chọn' : 'Chọn'}</span>
-                            </button>
-                            <div className="w-[1px] bg-outline/20 my-2 mx-1"></div>
-                            <button aria-label="Mời thành viên vào sổ tay" title="Mời thành viên" onClick={handleShare} className="flex h-9 items-center gap-2 rounded-lg px-3 text-sm font-bold text-secondary transition-all hover:bg-primary/10 hover:text-primary active:scale-95 md:h-10 md:rounded-xl md:px-4">
+                            </button>}
+                            {canWriteLibrary && activeNotebook?.permissions.canInvite && <button aria-label="Mời thành viên vào Thư viện" title="Mời thành viên" onClick={handleShare} className="flex h-9 items-center gap-2 rounded-lg px-3 text-sm font-bold text-secondary transition-colors hover:bg-primary/10 hover:text-primary md:h-10">
                                 <Icons.UserPlus className="w-4 h-4" />
                                 <span className="hidden sm:inline">Mời</span>
-                            </button>
-                            <div className="w-[1px] bg-outline/20 my-2 mx-1"></div>
-                            <button onClick={() => setIsCreateNbOpen(true)} className="flex h-9 items-center gap-2 rounded-lg px-3 text-sm font-bold text-secondary transition-all hover:bg-primary/10 hover:text-primary active:scale-95 md:h-10 md:rounded-xl md:px-4" title="Tạo sổ tay mới">
-                                <Icons.FolderPlus className="w-4 h-4" />
-                            </button>
-                            {activeNotebookId !== 'all' && notebooks.find(n => n.id === activeNotebookId)?.type === 'shared' && (
-                                <>
-                                    <div className="w-[1px] bg-outline/20 my-2 mx-1"></div>
-                                    <button onClick={handleDeleteNotebook} className="flex h-9 items-center gap-2 rounded-lg px-3 text-sm font-bold text-secondary transition-all hover:bg-error/10 hover:text-error active:scale-95 md:h-10 md:rounded-xl md:px-4" title="Xóa sổ tay này">
-                                        <Icons.Trash2 className="w-4 h-4" />
-                                    </button>
-                                </>
+                            </button>}
+                            {canWriteLibrary && activeNotebook?.permissions.canManageMembers && <button aria-label={`Đổi tên ${activeNotebook.name}`} title="Đổi tên bộ sưu tập" onClick={() => setIsRenameNbOpen(true)} className="flex h-9 items-center gap-2 rounded-lg px-3 text-sm font-bold text-secondary hover:bg-primary/10 hover:text-primary md:h-10"><Icons.Edit2 className="size-4" /></button>}
+                            {canWriteLibrary && activeNotebook?.type === 'shared' && activeNotebook.permissions.canDeleteNotebook && (
+                                <button aria-label={`Xóa bộ sưu tập ${activeNotebook.name}`} onClick={handleDeleteNotebook} className="flex h-9 items-center gap-2 rounded-lg px-3 text-sm font-bold text-secondary transition-all hover:bg-error/10 hover:text-error active:scale-95 md:h-10 md:rounded-xl md:px-4" title="Xóa bộ sưu tập này">
+                                    <Icons.Trash2 className="w-4 h-4" />
+                                </button>
                             )}
-                            <button aria-label="Thêm địa điểm vào sổ tay" title="Thêm địa điểm" onClick={() => handleOpenForm()} className="ml-1 flex h-9 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-bold text-on-primary shadow-md transition-all hover:scale-105 active:scale-95 md:h-10 md:rounded-xl md:px-5">
+                            {canWriteLibrary && (activeNotebookId === 'all' || activeNotebook?.permissions.canEditPlaces) && <button aria-label="Thêm địa điểm vào Thư viện" title="Thêm địa điểm" onClick={() => handleOpenForm()} className="ml-1 flex h-9 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-bold text-on-primary md:h-10">
                                 <Icons.Plus className="w-4 h-4 mt-0.5" />
-                            </button>
+                            </button>}
                         </div>
+                        {canWriteLibrary && (activeNotebookId === 'all' || activeNotebook?.permissions.canEditPlaces) && <button type="button" onClick={() => handleOpenForm()} className="flex min-h-11 items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-bold text-on-primary md:hidden"><Icons.Plus className="size-4" />Thêm địa điểm</button>}
                     </div>
                 </motion.div>
 
-                <div className="mb-6 flex flex-col items-start justify-between gap-2 rounded-2xl border border-outline-variant/30 bg-surface-container-low p-1.5 md:mb-10 md:flex-row md:items-center md:rounded-full md:p-2">
-                    <motion.div variants={itemVariants} className="flex gap-2 overflow-x-auto no-scrollbar max-w-full">
+                <div className="sticky top-20 z-20 mb-6 flex flex-col items-start justify-between gap-2 rounded-2xl border border-outline-variant/30 bg-surface p-2 md:static md:mb-10 2xl:flex-row 2xl:items-center">
+                    <label className="w-full md:hidden"><span className="sr-only">Lọc loại địa điểm</span><select value={activeTab} onChange={(event) => setActiveTab(event.target.value as typeof activeTab)} className="min-h-11 w-full rounded-xl border border-outline-variant bg-surface-container-low px-3 font-semibold"><option value="all">Tất cả loại địa điểm</option><option value="hotel">Khách sạn</option><option value="restaurant">Nhà hàng</option><option value="cafe">Quán Cafe</option><option value="entertainment">Vui chơi</option><option value="other">Khác</option></select></label>
+                    <motion.div variants={itemVariants} className="hidden max-w-full gap-2 md:flex">
                         {(['all', 'hotel', 'restaurant', 'cafe', 'entertainment', 'other'] as const).map(tab => {
                             let label = 'Tất cả';
                             let icon = <Icons.Globe className="w-4 h-4" />;
@@ -334,7 +353,7 @@ export function PlacesNotebook() {
                         })}
                     </motion.div>
 
-                    <motion.div variants={itemVariants} className="flex w-full flex-col gap-2 md:w-auto md:flex-row">
+                    <motion.div variants={itemVariants} className="flex w-full flex-col gap-2 md:flex-row 2xl:w-auto">
                         <div className="relative w-full bg-surface-container-lowest rounded-full shadow-inner ring-1 ring-outline/10 md:w-72">
                             <Icons.Search className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-secondary opacity-60" />
                             <input
@@ -345,7 +364,7 @@ export function PlacesNotebook() {
                                 className="w-full bg-transparent text-sm text-on-surface rounded-full pl-11 pr-4 py-2.5 focus:ring-2 focus:ring-primary/50 transition-all font-medium outline-none"
                             />
                         </div>
-                        <SortSelect value={sortBy} options={NOTEBOOK_PLACE_SORT_OPTIONS} onChange={setSortBy} className="w-full bg-surface-container-lowest shadow-inner ring-1 ring-outline/10 md:w-auto" />
+                        <SortSelect<NotebookPlaceSortKey> value={sortBy} options={NOTEBOOK_PLACE_SORT_OPTIONS} onChange={setSortBy} className="w-full bg-surface-container-lowest shadow-inner ring-1 ring-outline/10 md:w-auto" />
                     </motion.div>
                 </div>
 
@@ -364,13 +383,17 @@ export function PlacesNotebook() {
                     {filteredPlaces.length === 0 ? (
                         <div className="col-span-full py-16 text-center bg-surface-container-lowest rounded-[2rem] border border-dashed border-outline-variant/60">
                             <Icons.MapPin className="w-12 h-12 text-outline-variant mx-auto mb-4" />
-                            <p className="text-secondary font-medium">Chưa có địa điểm nào trong Cẩm nang.</p>
-                            <p className="text-xs text-on-surface-variant mt-2 max-w-sm mx-auto">Hãy sử dụng Cẩm nang để lưu lại những nhà hàng, khách sạn hay để dùng cho các chuyến du lịch sau này nhé.</p>
+                            <p className="text-secondary font-medium">Chưa có địa điểm nào trong Thư viện.</p>
+                            <p className="text-xs text-on-surface-variant mt-2 max-w-sm mx-auto">Lưu nhà hàng, khách sạn và điểm tham quan để tái sử dụng cho các chuyến đi sau.</p>
                         </div>
                     ) : (
                         filteredPlaces.map(place => {
                             const isSelected = selectedIds.includes(place.id);
-                            const notebookName = notebooks.find(n => n.id === place.notebookId)?.name || 'Cá nhân';
+                            const placeNotebook = notebooks.find(n => n.id === place.notebookId);
+                            const notebookName = placeNotebook?.name || 'Cá nhân';
+                            const canEditPlace = canWriteLibrary && (placeNotebook?.permissions.canEditPlaces ?? false);
+                            const usedTripCount = usageByPlace.get(place.id)?.size ?? 0;
+                            const linkedTripNames = trips.filter((trip) => usageByPlace.get(place.id)?.has(trip.id)).map((trip) => trip.title);
                             const typeIcon = place.type === 'hotel' ? <Icons.Hotel className="w-5 h-5" />
                                 : place.type === 'restaurant' ? <Icons.Utensils className="w-5 h-5" />
                                     : place.type === 'cafe' ? <Icons.MapPin className="w-5 h-5" />
@@ -425,6 +448,8 @@ export function PlacesNotebook() {
                                                 {place.note && (
                                                     <p className="mt-1 line-clamp-1 text-xs italic text-on-surface-variant">"{place.note}"</p>
                                                 )}
+                                                <p className="mt-1 text-xs text-secondary">Đã dùng trong {usedTripCount} chuyến đi</p>
+                                                {linkedTripNames.length > 0 && <p className="mt-1 truncate text-xs text-secondary" title={linkedTripNames.join(', ')}>{linkedTripNames.join(' · ')}</p>}
                                             </div>
                                         </div>
 
@@ -446,12 +471,13 @@ export function PlacesNotebook() {
                                                 </div>
                                             ) : (
                                                 <>
-                                                    <button onClick={(e) => { e.stopPropagation(); handleOpenForm(place); }} className="flex h-9 w-9 items-center justify-center rounded-lg bg-surface-container text-secondary transition-colors hover:bg-surface-variant hover:text-primary" title="Sửa">
+                                                    {editableTrips.length > 0 && <button aria-label={`Thêm ${place.name} vào chuyến đi`} onClick={(e) => { e.stopPropagation(); setPlaceToTrip(place); }} className="flex size-9 items-center justify-center rounded-lg bg-surface-container text-secondary hover:text-primary" title="Thêm vào chuyến đi"><Icons.PlusCircle className="size-4" /></button>}
+                                                    {canEditPlace && <button aria-label={`Sửa địa điểm ${place.name}`} onClick={(e) => { e.stopPropagation(); handleOpenForm(place); }} className="flex size-9 items-center justify-center rounded-lg bg-surface-container text-secondary transition-colors hover:bg-surface-variant hover:text-primary" title="Sửa">
                                                         <Icons.Edit2 className="h-4 w-4" />
-                                                    </button>
-                                                    <button onClick={(e) => { e.stopPropagation(); handleDelete(place.id, place.name); }} className="flex h-9 w-9 items-center justify-center rounded-lg bg-error-container/20 text-error transition-colors hover:bg-error hover:text-white" title="Xóa">
+                                                    </button>}
+                                                    {canEditPlace && <button aria-label={`Xóa địa điểm ${place.name}`} onClick={(e) => { e.stopPropagation(); handleDelete(place.id, place.name); }} className="flex size-9 items-center justify-center rounded-lg bg-error-container/20 text-error transition-colors hover:bg-error hover:text-white" title="Xóa">
                                                         <Icons.Trash2 className="h-4 w-4" />
-                                                    </button>
+                                                    </button>}
                                                 </>
                                             )}
                                         </div>
@@ -476,12 +502,13 @@ export function PlacesNotebook() {
                                                     </div>
                                                 ) : (
                                                     <>
-                                                        <button aria-label={`Sửa địa điểm ${place.name}`} title="Sửa địa điểm" onClick={(e) => { e.stopPropagation(); handleOpenForm(place); }} className="w-8 h-8 flex items-center justify-center bg-surface-container hover:bg-surface-variant hover:text-primary text-secondary rounded-lg transition-colors">
+                                                        {editableTrips.length > 0 && <button aria-label={`Thêm ${place.name} vào chuyến đi`} title="Thêm vào chuyến đi" onClick={(e) => { e.stopPropagation(); setPlaceToTrip(place); }} className="flex size-8 items-center justify-center rounded-lg bg-surface-container text-secondary hover:text-primary"><Icons.PlusCircle className="size-4" /></button>}
+                                                        {canEditPlace && <button aria-label={`Sửa địa điểm ${place.name}`} title="Sửa địa điểm" onClick={(e) => { e.stopPropagation(); handleOpenForm(place); }} className="w-8 h-8 flex items-center justify-center bg-surface-container hover:bg-surface-variant hover:text-primary text-secondary rounded-lg transition-colors">
                                                             <Icons.Edit2 className="w-4 h-4" />
-                                                        </button>
-                                                        <button aria-label={`Xóa địa điểm ${place.name}`} title="Xóa địa điểm" onClick={(e) => { e.stopPropagation(); handleDelete(place.id, place.name); }} className="w-8 h-8 flex items-center justify-center bg-error-container/20 hover:bg-error text-error hover:text-white rounded-lg transition-colors">
+                                                        </button>}
+                                                        {canEditPlace && <button aria-label={`Xóa địa điểm ${place.name}`} title="Xóa địa điểm" onClick={(e) => { e.stopPropagation(); handleDelete(place.id, place.name); }} className="w-8 h-8 flex items-center justify-center bg-error-container/20 hover:bg-error text-error hover:text-white rounded-lg transition-colors">
                                                             <Icons.Trash2 className="w-4 h-4" />
-                                                        </button>
+                                                        </button>}
                                                     </>
                                                 )}
                                             </div>
@@ -496,6 +523,8 @@ export function PlacesNotebook() {
                                                     </span>
                                                 )}
                                             </div>
+                                            <p className="mb-3 text-xs text-secondary">Đã dùng trong {usedTripCount} chuyến đi</p>
+                                            {linkedTripNames.length > 0 && <p className="-mt-2 mb-3 truncate text-xs text-secondary" title={linkedTripNames.join(', ')}>{linkedTripNames.join(' · ')}</p>}
 
                                             <div className={`flex ${viewMode === 'grid' ? 'flex-col' : 'flex-row gap-6'} w-full`}>
                                                 {place.coverImage && (
@@ -547,6 +576,7 @@ export function PlacesNotebook() {
                         })
                     )}
                 </div>
+                </div>
             </motion.div>
 
             {
@@ -562,11 +592,20 @@ export function PlacesNotebook() {
                                 {selectedIds.length === filteredPlaces.length ? 'Bỏ chọn hết' : 'Chọn tất cả'}
                             </button>
                             <button onClick={async () => {
-                                const ok = await confirm({ title: 'Xóa hàng loạt', message: `Xóa ${selectedIds.length} địa điểm khỏi cẩm nang?`, confirmLabel: 'Xóa', tone: 'danger' });
+                                const ok = await confirm({ title: 'Xóa hàng loạt', message: `Xóa ${selectedIds.length} địa điểm khỏi Thư viện?`, confirmLabel: 'Xóa', tone: 'danger' });
                                 if (ok) {
-                                    if (bulkDeleteNotebookPlaces) { bulkDeleteNotebookPlaces(selectedIds); }
-                                    setIsSelectMode(false);
-                                    setSelectedIds([]);
+                                    try {
+                                        await bulkDeleteNotebookPlaces(selectedIds);
+                                        if (!isRemoteMode) {
+                                            await Promise.all(savedPlaces
+                                                .filter((place) => place.sourceNotebookPlaceId && selectedIds.includes(place.sourceNotebookPlaceId))
+                                                .map((place) => editSavedPlace(place.id, { sourceNotebookPlaceId: undefined })));
+                                        }
+                                        setIsSelectMode(false);
+                                        setSelectedIds([]);
+                                    } catch (error) {
+                                        showToast({ tone: 'error', title: 'Không thể xóa địa điểm', message: error instanceof Error ? error.message : 'Hãy thử lại.' });
+                                    }
                                 }
                             }} className="flex items-center gap-2 rounded-full bg-error px-3 py-2 text-sm font-bold text-white shadow-lg transition-all hover:scale-105 active:scale-95 md:px-4">
                                 <Icons.Trash2 className="w-4 h-4" />
@@ -576,6 +615,34 @@ export function PlacesNotebook() {
                     </div>
                 )
             }
+
+            <Modal isOpen={Boolean(placeToTrip)} onClose={() => setPlaceToTrip(null)} title="Thêm địa điểm vào chuyến đi">
+                {placeToTrip && <form className="space-y-4" onSubmit={async (event) => {
+                    event.preventDefault();
+                    const data = new FormData(event.currentTarget);
+                    const tripId = String(data.get('tripId') || '');
+                    const createActivity = data.get('createActivity') === 'on';
+                    try {
+                        await addLibraryPlaceToTrip({
+                            tripId,
+                            notebookPlaceId: placeToTrip.id,
+                            place: { name: placeToTrip.name, type: placeToTrip.type, phone: placeToTrip.phone, address: placeToTrip.address, rating: placeToTrip.rating, note: placeToTrip.note },
+                            createActivity,
+                            date: createActivity ? String(data.get('date') || '') : undefined,
+                            time: String(data.get('time') || '09:00'),
+                        });
+                        showToast({ tone: 'success', title: 'Đã thêm vào chuyến đi', message: 'Bản sao trong chuyến đi giữ liên kết về Thư viện.' });
+                        setPlaceToTrip(null);
+                    } catch (error) {
+                        showToast({ tone: 'error', title: 'Không thể thêm địa điểm', message: error instanceof Error ? error.message : 'Hãy thử lại.' });
+                    }
+                }}>
+                    <label className="block text-sm font-semibold">Chuyến đi<select name="tripId" required className="mt-2 min-h-11 w-full rounded-xl border border-outline-variant bg-surface px-3">{editableTrips.map((trip) => <option key={trip.id} value={trip.id}>{trip.title}</option>)}</select></label>
+                    <label className="flex min-h-11 items-center gap-3 text-sm font-semibold"><input type="checkbox" name="createActivity" />Đồng thời tạo hoạt động lúc 09:00</label>
+                    <div className="grid grid-cols-2 gap-3"><label className="text-sm font-semibold">Ngày<input name="date" type="date" className="mt-2 min-h-11 w-full rounded-xl border border-outline-variant bg-surface px-3" /></label><label className="text-sm font-semibold">Giờ<input name="time" type="time" defaultValue="09:00" className="mt-2 min-h-11 w-full rounded-xl border border-outline-variant bg-surface px-3" /></label></div>
+                    <button type="submit" className="min-h-11 w-full rounded-xl bg-primary px-4 font-semibold text-on-primary">Thêm vào chuyến đi</button>
+                </form>}
+            </Modal>
 
             <Modal isOpen={isAddOpen} onClose={() => setIsAddOpen(false)} title={editingPlace ? "Sửa thông tin địa điểm" : "Lưu địa điểm mới"}>
                 <form onSubmit={handleSavePlace} className="space-y-5">
@@ -682,15 +749,15 @@ export function PlacesNotebook() {
                     </div>
 
                     <button type="submit" className="w-full bg-primary text-on-primary py-4 rounded-xl font-headline font-bold text-base hover:-translate-y-0.5 transition-transform active:scale-95 shadow-md">
-                        Lưu vào Cẩm nang
+                        Lưu vào Thư viện
                     </button>
                 </form>
             </Modal>
 
-            <Modal isOpen={isCreateNbOpen} onClose={() => setIsCreateNbOpen(false)} title="Tạo sổ tay chung mới">
+            <Modal isOpen={isCreateNbOpen} onClose={() => setIsCreateNbOpen(false)} title="Tạo bộ sưu tập chung mới">
                 <form onSubmit={handleCreateNotebook} className="space-y-4">
                     <div>
-                        <label className="block text-xs font-bold uppercase text-secondary mb-1">Tên sổ tay</label>
+                        <label className="block text-xs font-bold uppercase text-secondary mb-1">Tên bộ sưu tập</label>
                         <input required value={createNbName} onChange={e => setCreateNbName(e.target.value)} placeholder="Ví dụ: Hội yêu trà sữa..." className="w-full rounded-xl bg-surface-container-low border border-outline/20 px-4 py-2 focus:ring-1 focus:ring-primary outline-none" />
                     </div>
                     <div>
@@ -698,12 +765,29 @@ export function PlacesNotebook() {
                         <input type="email" value={createNbInvite} onChange={e => setCreateNbInvite(e.target.value)} placeholder="email@example.com" className="w-full rounded-xl bg-surface-container-low border border-outline/20 px-4 py-2 focus:ring-1 focus:ring-primary outline-none" />
                     </div>
                     <button type="submit" className="w-full bg-primary text-on-primary py-3 rounded-xl font-bold hover:scale-105 active:scale-95 transition-all shadow-md">
-                        Tạo Sổ Tay
+                        Tạo bộ sưu tập
                     </button>
                 </form>
             </Modal>
 
-            <Modal isOpen={isInviteOpen} onClose={() => { if (!isInviting) setIsInviteOpen(false); }} title={`Mời thành viên vào "${notebooks.find(n => n.id === activeNotebookId)?.name || 'Sổ tay'}"`}>
+            <Modal isOpen={isRenameNbOpen} onClose={() => setIsRenameNbOpen(false)} title="Đổi tên bộ sưu tập">
+                {activeNotebook && <form className="space-y-4" onSubmit={async (event) => {
+                    event.preventDefault();
+                    const name = String(new FormData(event.currentTarget).get('name') || '');
+                    const result = await editNotebook(activeNotebook.id, name);
+                    if (!result.success) {
+                        showToast({ tone: 'error', title: 'Không thể đổi tên', message: result.error });
+                        return;
+                    }
+                    setIsRenameNbOpen(false);
+                    showToast({ tone: 'success', title: 'Đã đổi tên bộ sưu tập' });
+                }}>
+                    <label className="block text-sm font-semibold">Tên bộ sưu tập<input name="name" required defaultValue={activeNotebook.name} className="mt-2 min-h-11 w-full rounded-xl border border-outline-variant bg-surface px-3" /></label>
+                    <button type="submit" className="min-h-11 w-full rounded-xl bg-primary px-4 font-bold text-on-primary">Lưu tên mới</button>
+                </form>}
+            </Modal>
+
+            <Modal isOpen={isInviteOpen} onClose={() => { if (!isInviting) setIsInviteOpen(false); }} title={`Mời thành viên vào "${notebooks.find(n => n.id === activeNotebookId)?.name || 'Bộ sưu tập'}"`}>
                 <form onSubmit={handleInviteMember} className="space-y-4">
                     <div>
                         <label className="block text-xs font-bold uppercase text-secondary mb-1">Email thành viên</label>
@@ -717,8 +801,9 @@ export function PlacesNotebook() {
                             disabled={isInviting}
                         />
                     </div>
+                    <div><label className="mb-1 block text-xs font-bold text-secondary">Vai trò</label><select value={inviteRole} onChange={(event) => setInviteRole(event.target.value as typeof inviteRole)} className="min-h-11 w-full rounded-xl border border-outline/20 bg-surface-container-low px-4"><option value="admin">Admin · quản lý thành viên</option><option value="editor">Editor · sửa địa điểm</option><option value="viewer">Viewer · chỉ xem</option></select></div>
                     <p className="text-xs text-on-surface-variant leading-relaxed">
-                        Thành viên được mời sẽ có quyền xem và chỉnh sửa các địa điểm trong sổ tay này.
+                        Quyền của thành viên được áp dụng cho toàn bộ địa điểm trong bộ sưu tập này.
                     </p>
                     <button
                         type="submit"
@@ -732,7 +817,46 @@ export function PlacesNotebook() {
                         )}
                     </button>
                 </form>
+                {activeNotebook?.permissions.canManageMembers && <div className="mt-6 border-t border-outline-variant pt-5">
+                    <h3 className="font-headline text-lg font-bold">Thành viên hiện tại</h3>
+                    <div className="mt-3 space-y-2">
+                        {notebookMembers.filter((member) => member.notebookId === activeNotebookId).map((member) => (
+                            <div key={member.id} className="flex flex-wrap items-center gap-2 rounded-xl bg-surface-container-low p-3">
+                                <span className="min-w-0 flex-1 truncate text-sm font-medium">{member.displayName || member.email || member.userId}</span>
+                                {member.role === 'owner' ? <span className="text-sm font-semibold">Chủ sở hữu</span> : <>
+                                    <select aria-label={`Vai trò của ${member.displayName || member.userId}`} value={member.role} onChange={async (event) => {
+                                        try { await updateNotebookMemberRole(member.id, event.target.value as 'admin' | 'editor' | 'viewer'); }
+                                        catch (error) { showToast({ tone: 'error', title: 'Không thể đổi vai trò', message: error instanceof Error ? error.message : 'Hãy thử lại.' }); }
+                                    }} className="min-h-10 rounded-lg border border-outline-variant bg-surface px-2 text-sm">
+                                        <option value="admin">Quản trị</option><option value="editor">Chỉnh sửa</option><option value="viewer">Chỉ xem</option>
+                                    </select>
+                                    {activeNotebook.membershipRole === 'owner' && <button type="button" title="Chuyển quyền sở hữu" aria-label={`Chuyển quyền sở hữu cho ${member.displayName || member.userId}`} onClick={async () => {
+                                        const approved = await confirm({ title: 'Chuyển quyền sở hữu?', message: 'Bạn sẽ trở thành quản trị viên và thành viên này sẽ có toàn quyền với Thư viện.', confirmLabel: 'Chuyển quyền' });
+                                        if (!approved) return;
+                                        try { await transferNotebookOwnership(member.id); showToast({ tone: 'success', title: 'Đã chuyển quyền sở hữu' }); }
+                                        catch (error) { showToast({ tone: 'error', title: 'Không thể chuyển quyền', message: error instanceof Error ? error.message : 'Hãy thử lại.' }); }
+                                    }} className="flex size-10 items-center justify-center rounded-lg text-primary hover:bg-primary/10"><Icons.UserCheck className="size-4" /></button>}
+                                    <button type="button" aria-label={`Xóa ${member.displayName || member.userId} khỏi Thư viện`} onClick={async () => {
+                                        try { await removeNotebookMember(member.id); }
+                                        catch (error) { showToast({ tone: 'error', title: 'Không thể xóa thành viên', message: error instanceof Error ? error.message : 'Hãy thử lại.' }); }
+                                    }} className="flex size-10 items-center justify-center rounded-lg text-error hover:bg-error-container"><Icons.Trash2 className="size-4" /></button>
+                                </>}
+                            </div>
+                        ))}
+                    </div>
+                </div>}
             </Modal>
         </React.Fragment>
+    );
+}
+
+function LibraryState({ icon, title, message, action }: { icon: React.ReactNode; title: string; message: string; action?: () => void }) {
+    return (
+        <section className="mx-auto mt-12 max-w-xl rounded-2xl border border-outline-variant/50 bg-surface-container-lowest p-8 text-center" role="status">
+            <span className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">{icon}</span>
+            <h1 className="mt-4 font-headline text-2xl font-bold">{title}</h1>
+            <p className="mt-2 text-pretty text-sm text-secondary">{message}</p>
+            {action && <button type="button" onClick={action} className="mt-5 min-h-11 rounded-xl bg-primary px-5 text-sm font-bold text-on-primary">Thử lại</button>}
+        </section>
     );
 }

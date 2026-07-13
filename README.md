@@ -31,6 +31,9 @@ This repo now supports 2 runtime modes:
    - `supabase/schema.sql`
    - `supabase/add_trip_enhancements.sql`
    - `supabase/add_revoked_trip_memberships.sql` (required for existing projects)
+   - `supabase/add_trip_entity_links.sql`
+   - `supabase/add_preferences_and_notebook_permissions.sql`
+   - `supabase/protect_owner_memberships.sql`
    - `supabase/accept_invitation_function.sql`
 3. Copy `.env.example` to `.env`.
 4. Set:
@@ -45,6 +48,21 @@ This repo now supports 2 runtime modes:
    - invitations are managed by email in the Trip Members screen
 
 On localhost and desktop, the app can still operate in local mode when you have not signed in yet. On hosted web, login is required when Supabase is configured.
+
+### Recover an existing Supabase project after the revoked-membership update
+
+Do not run `schema.sql` again on a database that already contains trips.
+
+1. Create a Supabase backup, then record row counts for `trips`, `trip_memberships`, `activities`, `expenses`, and `photos`.
+2. Confirm whether `public.trip_memberships.revoked_at` exists in `information_schema.columns`.
+3. Run the additive migrations in order, checking row counts after each file:
+   - `supabase/add_revoked_trip_memberships.sql`
+   - `supabase/add_trip_entity_links.sql`
+   - `supabase/add_preferences_and_notebook_permissions.sql`
+   - `supabase/protect_owner_memberships.sql`
+   - `supabase/accept_invitation_function.sql`
+4. Confirm existing memberships have `revoked_at is null`, then reload the PostgREST schema cache if the API still reports a missing column.
+5. Reload the web app and sign in again. Keep additive columns if the frontend must be rolled back.
 
 ## Configure Cloudinary Photo Storage
 
@@ -82,6 +100,8 @@ Desktop data is stored on the local machine inside the app `userData` directory.
   `npm run lint`
 - Run smoke E2E checks for the main routes:
   `npm run test:smoke`
+- After building the desktop renderer, run Electron with isolated temporary user data:
+  `npm run build:desktop:renderer && npm run test:electron-smoke`
 
 Generated `dist/`, `release/`, `node_modules/`, and Vite cache files are intentionally not committed. CI and desktop packaging always rebuild them from source with `npm ci`.
 
@@ -121,3 +141,13 @@ The workflow will:
 - use `HashRouter` only for the GitHub Pages build, so refreshing sub-pages works
 
 If your default branch is not `main` or `master`, update the workflow branch trigger.
+
+## Deploy to Vercel
+
+Set these variables for both Production and Preview before deploying:
+
+- `VITE_SUPABASE_URL`
+- `VITE_SUPABASE_ANON_KEY`
+- `VITE_REQUIRE_AUTH=true`
+
+Vercel runs `npm run build:vercel`. The read-only preflight blocks promotion when required variables, historical membership support, entity links, or preference tables are missing. Database migrations remain a separate, explicit step and are never run by the frontend build.

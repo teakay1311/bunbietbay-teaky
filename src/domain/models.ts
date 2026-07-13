@@ -10,6 +10,7 @@ export type UserProfile = {
 
 export type Currency = 'VND' | 'USD' | 'EUR' | 'JPY' | 'KRW' | 'THB' | 'SGD';
 export type TripAccessRole = 'owner' | 'admin' | 'editor' | 'viewer';
+export type TripPhase = 'draft' | 'upcoming' | 'active' | 'wrap-up' | 'completed';
 
 export const CURRENCIES: Record<Currency, { symbol: string; name: string; defaultRateToVND: number }> = {
   VND: { symbol: 'đ', name: 'Việt Nam Đồng', defaultRateToVND: 1 },
@@ -96,6 +97,7 @@ export type Activity = {
   image?: string;
   mapUrl?: string;
   bookingCode?: string;
+  placeId?: string;
   isCompleted?: boolean;
   createdAt?: string;
   updatedAt?: string;
@@ -117,6 +119,8 @@ export type Expense = {
   note?: string;
   receiptImage?: string;
   isSettlement?: boolean;
+  activityId?: string;
+  placeId?: string;
   createdAt?: string;
   updatedAt?: string;
 };
@@ -130,6 +134,7 @@ export type SavedPlace = {
   address?: string;
   rating?: number;
   note?: string;
+  sourceNotebookPlaceId?: string;
   createdAt?: string;
   updatedAt?: string;
 };
@@ -160,6 +165,8 @@ export type Photo = {
   tags?: string[];
   itemType?: 'photo' | 'journal';
   content?: string;
+  activityId?: string;
+  placeId?: string;
   updatedAt?: string;
 };
 
@@ -212,6 +219,34 @@ export type Notebook = {
   name: string;
   type: 'personal' | 'shared';
   createdBy?: string;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type NotebookMembershipRole = 'owner' | 'admin' | 'editor' | 'viewer';
+
+export type NotebookPermissions = {
+  canEditNotebook: boolean;
+  canEditPlaces: boolean;
+  canInvite: boolean;
+  canManageMembers: boolean;
+  canDeleteNotebook: boolean;
+};
+
+export type CalculatedNotebook = Notebook & {
+  membershipRole: NotebookMembershipRole;
+  permissions: NotebookPermissions;
+  memberCount: number;
+};
+
+export type NotebookMember = {
+  id: string;
+  notebookId: string;
+  userId: string;
+  role: NotebookMembershipRole;
+  displayName?: string;
+  email?: string;
+  avatar?: string;
 };
 
 export type NotebookPlace = {
@@ -227,6 +262,7 @@ export type NotebookPlace = {
   coverImage?: string;
   photos?: string[];
   createdAt: string;
+  updatedAt: string;
   createdBy?: string;
 };
 
@@ -239,4 +275,37 @@ export type PendingNotebookInvitation = {
   status: 'pending' | 'accepted' | 'declined';
   createdAt: string;
   invitedByName: string | null;
+};
+
+export type UserPreferences = {
+  themeMode: 'light' | 'dark' | 'system';
+  themePresetId: string;
+  uiDensity: 'cozy' | 'compact';
+  isPrivacyMode: boolean;
+  remindersEnabled: boolean;
+  activityLeadMinutes: number;
+  tripStartLeadMinutes: number;
+  updatedAt?: string;
+};
+
+export type TripNotificationPreferences = {
+  tripId: string;
+  userId: string;
+  useDefaults: boolean;
+  enabled?: boolean;
+  activityLeadMinutes?: number;
+  tripStartLeadMinutes?: number;
+  updatedAt?: string;
+};
+
+export type WorkspaceBackupV7 = {
+  version: 7;
+  workspace: PersistedAppState;
+  library: {
+    notebooks: Notebook[];
+    places: NotebookPlace[];
+  };
+  preferences: UserPreferences;
+  tripNotificationPreferences: TripNotificationPreferences[];
+  exportedAt: string;
 };

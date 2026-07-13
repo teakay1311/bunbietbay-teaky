@@ -12,8 +12,9 @@ import { useSettings, useFormatMoney } from '../context/SettingsContext';
 import { getErrorMessage } from '../utils/errorMessage';
 import { motion } from 'motion/react';
 import { pageStaggerVariants } from '../ui/motion';
-import { processTripExport } from '../utils/exportTrip';
 import { StarRatingInput } from '../components/StarRatingInput';
+import { getTripPhase } from '../domain/tripPhase';
+import { getFinancialMembers } from '../domain/tripLogic';
 
 export function TripOverview() {
   const { id } = useParams();
@@ -35,12 +36,12 @@ export function TripOverview() {
 
   const trip = trips.find(t => t.id === id);
   const tripId = trip?.id;
-  const tripMembers = trip?.members ?? [];
+  const financialMembers = useMemo(() => getFinancialMembers(trip), [trip]);
 
   // Calculate debts
   const transactions = useMemo(() => {
-    const debtors = tripMembers.filter(m => m.balance < -1).map(m => ({ ...m, amount: Math.abs(m.balance) })).sort((a, b) => b.amount - a.amount);
-    const creditors = tripMembers.filter(m => m.balance > 1).map(m => ({ ...m, amount: m.balance })).sort((a, b) => b.amount - a.amount);
+    const debtors = financialMembers.filter(m => m.balance < -1).map(m => ({ ...m, amount: Math.abs(m.balance) })).sort((a, b) => b.amount - a.amount);
+    const creditors = financialMembers.filter(m => m.balance > 1).map(m => ({ ...m, amount: m.balance })).sort((a, b) => b.amount - a.amount);
     const nextTransactions: Array<{ debtor: CalculatedMember & { amount: number }; creditor: CalculatedMember & { amount: number }; amount: number; id: string }> = [];
     let debtorIndex = 0;
     let creditorIndex = 0;
@@ -59,7 +60,7 @@ export function TripOverview() {
     }
 
     return nextTransactions;
-  }, [tripMembers]);
+  }, [financialMembers]);
 
   // Upcoming activities (today or tomorrow)
   const today = getLocalDateString();
@@ -92,7 +93,7 @@ export function TripOverview() {
     const sortedCategories = (Object.entries(categoryTotals) as [string, number][]).sort((a, b) => b[1] - a[1]);
     const topCategory = sortedCategories[0]?.[0] ?? null;
     const topAmount = sortedCategories[0]?.[1] ?? 0;
-    const highestDebtor = [...tripMembers]
+    const highestDebtor = [...financialMembers]
       .filter((member) => member.balance < 0)
       .sort((a, b) => a.balance - b.balance)[0] ?? null;
     return {
@@ -100,7 +101,7 @@ export function TripOverview() {
       topPct: total > 0 ? (topAmount / total) * 100 : 0,
       highestDebtor,
     };
-  }, [expenses, tripId, tripMembers]);
+  }, [expenses, financialMembers, tripId]);
   const attentionCards = useMemo(() => {
     const cards: Array<{ title: string; detail: string; to: string; icon: typeof Icons.AlertTriangle; tone: 'warning' | 'primary' | 'neutral' }> = [];
     const missingPackingItems = tripPackingItems.length - packedItemsCount;
@@ -108,7 +109,7 @@ export function TripOverview() {
       cards.push({
         title: 'Hành lý còn thiếu',
         detail: `${missingPackingItems} món chưa được đánh dấu đã chuẩn bị.`,
-        to: `/trips/${tripId}/packing`,
+        to: `/trips/${tripId}/prepare?tab=packing`,
         icon: Icons.Package,
         tone: 'warning',
       });
@@ -117,7 +118,7 @@ export function TripOverview() {
       cards.push({
         title: 'Lịch sắp diễn ra',
         detail: `${upcomingActivities.length} hoạt động trong hôm nay hoặc ngày mai.`,
-        to: `/trips/${tripId}/schedule`,
+        to: `/trips/${tripId}/plan?tab=itinerary`,
         icon: Icons.CalendarDays,
         tone: 'primary',
       });
@@ -126,7 +127,7 @@ export function TripOverview() {
       cards.push({
         title: 'Cần quyết toán',
         detail: `${transactions.length} giao dịch đề xuất để cân bằng công nợ.`,
-        to: `/trips/${tripId}/expenses`,
+        to: `/trips/${tripId}/money`,
         icon: Icons.ArrowRightLeft,
         tone: 'warning',
       });
@@ -135,7 +136,7 @@ export function TripOverview() {
       cards.push({
         title: 'Chưa có ảnh',
         detail: 'Thêm ảnh hoặc nhật ký để lưu lại kỷ niệm chuyến đi.',
-        to: `/trips/${tripId}/photos`,
+        to: `/trips/${tripId}/memories`,
         icon: Icons.ImagePlus,
         tone: 'neutral',
       });
@@ -150,6 +151,14 @@ export function TripOverview() {
   const remaining = trip.budget - trip.spent;
   const spentPercentage = trip.budget > 0 ? Math.min((trip.spent / trip.budget) * 100, 100) : 0;
   const baseCurrencySymbol = CURRENCIES[trip.baseCurrency || 'VND'].symbol;
+  const phase = getTripPhase(trip);
+  const phaseCopy = {
+    draft: ['Đang chuẩn bị', 'Hoàn thiện thông tin, ngân sách và mời thành viên.'],
+    upcoming: ['Sắp khởi hành', 'Kiểm tra lịch trình, địa điểm và checklist còn thiếu.'],
+    active: ['Đang trong chuyến đi', 'Xem lịch hôm nay, địa điểm và ghi chi tiêu nhanh.'],
+    'wrap-up': ['Đang tổng kết', 'Quyết toán công nợ và bổ sung kỷ niệm còn thiếu.'],
+    completed: ['Đã hoàn thành', 'Xem lại tổng kết, ảnh và dữ liệu lịch sử.'],
+  }[phase];
 
   const handleSettleDebt = async (debtorId: string, creditorId: string, amount: number, creditorName: string) => {
     try {
@@ -218,6 +227,7 @@ export function TripOverview() {
       const tripPlaces = savedPlaces.filter(p => p.tripId === trip.id);
       const tripPacking = packingItems.filter(p => p.tripId === trip.id);
       const tripPhotos = photos.filter(p => p.tripId === trip.id);
+      const { processTripExport } = await import('../utils/exportTrip');
 
       await processTripExport({
         trip,
@@ -240,10 +250,11 @@ export function TripOverview() {
   const itemVariants = {
     hidden: { opacity: 0, y: 20, scale: 0.98 },
     show: { opacity: 1, y: 0, scale: 1, transition: { ease: 'easeOut', duration: 0.2 } }
-  };
+  } as const;
 
   return (
     <motion.div variants={containerVariants} initial="hidden" animate="show" className="pb-10">
+      {trip.themeColor && <div aria-hidden="true" className="mb-5 h-1.5 w-24 rounded-full" style={{ backgroundColor: trip.themeColor }} />}
       <div className="flex flex-col gap-2 mb-6">
         {budgetWarning && (
           <div className="bg-error text-on-error px-4 py-3 rounded-lg font-bold text-sm flex items-center justify-center gap-2 animate-in slide-in-from-top-4 shadow-lg">
@@ -266,6 +277,7 @@ export function TripOverview() {
             <Icons.MapPin className="w-4 h-4" />
             {trip.location}
           </p>
+          <div className="mt-4 rounded-xl border border-outline-variant/50 bg-surface-container-low px-4 py-3"><p className="text-sm font-bold text-primary">{phaseCopy[0]}</p><p className="mt-1 text-pretty text-sm text-secondary">{phaseCopy[1]}</p></div>
         </div>
         <div className="group relative min-w-0 flex-1 overflow-hidden rounded-2xl border border-outline-variant/30 bg-surface-container-low p-4 text-center editorial-shadow md:min-w-[200px] md:rounded-[2rem] md:p-6">
           <h2 className="mb-2 font-label text-xs font-bold uppercase tracking-wide text-primary md:mb-3 md:text-sm md:tracking-widest">Ngân sách tổng</h2>
@@ -394,7 +406,7 @@ export function TripOverview() {
 
           <div className="flex items-center justify-between mb-2">
             <h2 className="font-headline text-xl font-bold text-on-surface">Thành viên ({trip.members.length})</h2>
-            <Link to={`/trips/${trip.id}/members`} className="flex items-center gap-2 text-primary dark:text-white font-label text-xs font-bold uppercase tracking-wider hover:bg-primary/10 px-3 py-2 rounded-lg transition-colors">
+            <Link to={`/trips/${trip.id}/prepare?tab=team`} className="flex items-center gap-2 text-primary dark:text-white font-label text-xs font-bold uppercase tracking-wider hover:bg-primary/10 px-3 py-2 rounded-lg transition-colors">
               <Icons.UserPlus className="w-4 h-4" /> {canManageMembers ? 'Quản lý quyền' : 'Xem quyền'}
             </Link>
           </div>
@@ -473,7 +485,7 @@ export function TripOverview() {
                     <Icons.Package className="h-6 w-6" />
                   </div>
                 </div>
-                <Link to={`/trips/${trip.id}/packing`} className="mt-5 inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-bold text-on-primary transition-opacity hover:opacity-90">
+                <Link to={`/trips/${trip.id}/prepare?tab=packing`} className="mt-5 inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-bold text-on-primary transition-opacity hover:opacity-90">
                   Mở hành lý
                   <Icons.ArrowRight className="h-4 w-4" />
                 </Link>
@@ -490,7 +502,7 @@ export function TripOverview() {
                     <Icons.Image className="h-6 w-6" />
                   </div>
                 </div>
-                <Link to={`/trips/${trip.id}/photos`} className="mt-5 inline-flex items-center gap-2 rounded-xl bg-surface-container-high px-4 py-3 text-sm font-bold text-on-surface transition-colors hover:bg-surface-variant">
+                <Link to={`/trips/${trip.id}/memories`} className="mt-5 inline-flex items-center gap-2 rounded-xl bg-surface-container-high px-4 py-3 text-sm font-bold text-on-surface transition-colors hover:bg-surface-variant">
                   Mở thư viện ảnh
                   <Icons.ArrowRight className="h-4 w-4" />
                 </Link>

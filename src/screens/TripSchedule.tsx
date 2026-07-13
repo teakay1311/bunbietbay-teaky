@@ -4,7 +4,7 @@ import type { FormEvent } from 'react';
 import { Icons } from '../components/Icons';
 import { useAppContext } from '../context/AppContext';
 import { useFeedback } from '../context/FeedbackContext';
-import { useCallback, useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { Modal } from '../components/Modal';
 import { CategorySelectWithCreate } from '../components/CategorySelectWithCreate';
 import { Activity } from '../context/AppContext';
@@ -14,7 +14,7 @@ import { motion } from 'motion/react';
 import { pageStaggerVariants } from '../ui/motion';
 import { LinkifyText } from '../components/LinkifyText';
 import { SortSelect } from '../components/SortSelect';
-import { chainComparators, compareDate, compareNumber, compareText, stableSort, type SortOption } from '../utils/listSort';
+import { type SortOption } from '../utils/listSort';
 import { ACTIVITY_TYPE_OPTIONS, mergeCategoryOptions } from '../utils/tripCategories';
 import {
   DndContext,
@@ -32,8 +32,8 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { SortableActivityItem } from '../components/SortableActivityItem';
+import { filterAndSortActivities, filterAndSortCompactActivities, getScheduleInsights, groupActivitiesByDate, type ActivitySortKey } from '../features/schedule/selectors';
 
-type ActivitySortKey = 'timeAsc' | 'timeDesc' | 'createdDesc' | 'createdAsc' | 'incompleteFirst' | 'typeAsc' | 'titleAsc';
 type ScheduleViewMode = 'timeline' | 'compact';
 
 const ACTIVITY_SORT_OPTIONS: Array<SortOption<ActivitySortKey>> = [
@@ -79,6 +79,7 @@ export function TripSchedule() {
           note: formData.get('note') as string,
           mapUrl: formData.get('mapUrl') as string,
           bookingCode: (formData.get('bookingCode') as string) || undefined,
+          placeId: (formData.get('placeId') as string) || undefined,
         });
         setEditingActivity(null);
       } else {
@@ -92,6 +93,7 @@ export function TripSchedule() {
           note: formData.get('note') as string,
           mapUrl: formData.get('mapUrl') as string,
           bookingCode: (formData.get('bookingCode') as string) || undefined,
+          placeId: (formData.get('placeId') as string) || undefined,
         });
       }
       setIsAddOpen(false);
@@ -172,6 +174,7 @@ export function TripSchedule() {
   const hotelPlaces = useMemo(() => {
     return savedPlaces.filter(p => p.tripId === id && p.type === 'hotel');
   }, [savedPlaces, id]);
+  const tripPlaces = useMemo(() => savedPlaces.filter((place) => place.tripId === id), [savedPlaces, id]);
 
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -189,91 +192,21 @@ export function TripSchedule() {
     }
   }, [uniqueDates, selectedDate]);
 
-  const compareActivitiesForView = useCallback((a: Activity, b: Activity) => {
-    const fallbackSort = (a: Activity, b: Activity) => compareText(normalizeTimeForInput(a.time), normalizeTimeForInput(b.time), 'asc');
-    switch (sortBy) {
-      case 'timeDesc': return compareText(normalizeTimeForInput(a.time), normalizeTimeForInput(b.time), 'desc');
-      case 'createdDesc': return compareDate(a.createdAt ?? `${a.date}T${normalizeTimeForInput(a.time)}`, b.createdAt ?? `${b.date}T${normalizeTimeForInput(b.time)}`, 'desc');
-      case 'createdAsc': return compareDate(a.createdAt ?? `${a.date}T${normalizeTimeForInput(a.time)}`, b.createdAt ?? `${b.date}T${normalizeTimeForInput(b.time)}`, 'asc');
-      case 'incompleteFirst': return compareNumber(a.isCompleted ? 1 : 0, b.isCompleted ? 1 : 0, 'asc');
-      case 'typeAsc': return compareText(a.type, b.type, 'asc');
-      case 'titleAsc': return compareText(a.title, b.title, 'asc');
-      case 'timeAsc':
-      default: return fallbackSort(a, b);
-    }
-  }, [sortBy]);
-
-  const sortActivitiesForView = useCallback((list: Activity[]) => {
-    const fallbackSort = (a: Activity, b: Activity) => compareText(normalizeTimeForInput(a.time), normalizeTimeForInput(b.time), 'asc');
-    return stableSort(list, chainComparators(compareActivitiesForView, fallbackSort));
-  }, [compareActivitiesForView]);
-
-  const filterActivitiesBySearch = useCallback((list: Activity[]) => {
-    if (!searchQuery) {
-      return list;
-    }
-      const q = searchQuery.toLowerCase();
-      return list.filter(a =>
-        a.title.toLowerCase().includes(q) ||
-        (a.location?.toLowerCase().includes(q)) ||
-        (a.note?.toLowerCase().includes(q))
-      );
-  }, [searchQuery]);
-
-  const filteredActivities = useMemo(() => {
-    return sortActivitiesForView(filterActivitiesBySearch(tripActivities.filter(a => a.date === selectedDate)));
-  }, [selectedDate, tripActivities, sortActivitiesForView, filterActivitiesBySearch]);
-
-  const compactActivities = useMemo(() => {
-    return stableSort(filterActivitiesBySearch(tripActivities), chainComparators(
-      (a: Activity, b: Activity) => compareDate(a.date, b.date, 'asc'),
-      compareActivitiesForView,
-      (a: Activity, b: Activity) => compareText(normalizeTimeForInput(a.time), normalizeTimeForInput(b.time), 'asc'),
-    ));
-  }, [tripActivities, filterActivitiesBySearch, compareActivitiesForView]);
-
-  const compactActivitiesByDate = useMemo(() => {
-    return compactActivities.reduce<Record<string, Activity[]>>((groups, activity) => {
-      groups[activity.date] = groups[activity.date] ?? [];
-      groups[activity.date].push(activity);
-      return groups;
-    }, {});
-  }, [compactActivities]);
+  const filteredActivities = useMemo(
+    () => filterAndSortActivities(tripActivities.filter((activity) => activity.date === selectedDate), searchQuery, sortBy),
+    [selectedDate, tripActivities, searchQuery, sortBy],
+  );
+  const compactActivities = useMemo(
+    () => filterAndSortCompactActivities(tripActivities, searchQuery, sortBy),
+    [tripActivities, searchQuery, sortBy],
+  );
+  const compactActivitiesByDate = useMemo(() => groupActivitiesByDate(compactActivities), [compactActivities]);
 
   const visibleActivities = viewMode === 'compact' ? compactActivities : filteredActivities;
-  const scheduleInsights = useMemo(() => {
-    if (!selectedDate || filteredActivities.length < 2) {
-      return [];
-    }
-    const toMinutes = (time: string) => {
-      const [hours, minutes] = normalizeTimeForInput(time).split(':').map(Number);
-      return hours * 60 + minutes;
-    };
-    const orderedActivities = stableSort<Activity>(filteredActivities, (a, b) => compareNumber(toMinutes(a.time), toMinutes(b.time), 'asc'));
-    const insights: Array<{ type: 'warning' | 'info'; title: string; message: string }> = [];
-
-    for (let index = 0; index < orderedActivities.length - 1; index += 1) {
-      const current = orderedActivities[index];
-      const next = orderedActivities[index + 1];
-      const gap = toMinutes(next.time) - toMinutes(current.time);
-      if (gap < 30) {
-        insights.push({
-          type: 'warning',
-          title: 'Lịch có thể bị sát giờ',
-          message: `${current.time} ${current.title} và ${next.time} ${next.title} chỉ cách nhau ${Math.max(gap, 0)} phút.`,
-        });
-      } else if (gap >= 180) {
-        insights.push({
-          type: 'info',
-          title: 'Khoảng trống dài',
-          message: `Có khoảng ${Math.round(gap / 60)} giờ giữa ${current.title} và ${next.title}.`,
-        });
-      }
-      if (insights.length >= 3) break;
-    }
-
-    return insights;
-  }, [filteredActivities, selectedDate]);
+  const scheduleInsights = useMemo(
+    () => selectedDate ? getScheduleInsights(filteredActivities) : [],
+    [filteredActivities, selectedDate],
+  );
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -367,7 +300,7 @@ export function TripSchedule() {
   const itemVariants = {
     hidden: { opacity: 0, y: 20 },
     show: { opacity: 1, y: 0, transition: { ease: 'easeOut', duration: 0.2 } }
-  };
+  } as const;
 
   return (
     <motion.div variants={containerVariants} initial="hidden" animate="show" className="pb-10">
@@ -487,7 +420,7 @@ export function TripSchedule() {
                     className="w-full bg-surface-container-high text-sm text-on-surface rounded-full pl-9 pr-4 py-1.5 font-medium outline-none focus:ring-1 focus:ring-primary/50 transition-all"
                   />
                 </div>
-                <SortSelect value={sortBy} options={ACTIVITY_SORT_OPTIONS} onChange={setSortBy} className="w-full py-1.5 md:w-auto md:flex-none" />
+                <SortSelect<ActivitySortKey> value={sortBy} options={ACTIVITY_SORT_OPTIONS} onChange={setSortBy} className="w-full py-1.5 md:w-auto md:flex-none" />
                 <button type="button" onClick={handleOpenMap} className="group flex shrink-0 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-bold text-primary transition-colors hover:bg-primary/10 md:py-1.5">
                   <Icons.Map className="w-4 h-4 group-hover:scale-110 transition-transform" /> Bản đồ
                 </button>
@@ -816,6 +749,13 @@ export function TripSchedule() {
             <div>
               <label className="block font-label text-xs font-bold text-secondary dark:text-gray-300 mb-1">Địa điểm</label>
               <input required name="location" type="text" defaultValue={editingActivity?.location || ''} placeholder="VD: 123 Đường ABC..." className="density-control w-full rounded-xl bg-surface-container-low border border-outline-variant/50 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all" />
+            </div>
+            <div>
+              <label className="block font-label text-xs font-bold text-secondary dark:text-gray-300 mb-1">Liên kết địa điểm trong chuyến đi</label>
+              <select name="placeId" defaultValue={editingActivity?.placeId || ''} className="density-control w-full rounded-xl border border-outline-variant/50 bg-surface-container-low">
+                <option value="">Không liên kết</option>
+                {tripPlaces.map((place) => <option key={place.id} value={place.id}>{place.name}</option>)}
+              </select>
             </div>
             <div>
               <label className="block font-label text-xs font-bold text-secondary dark:text-gray-300 mb-1">Link Google Maps (Tuỳ chọn)</label>

@@ -1,7 +1,7 @@
 import type { ActivityLogEntry, PersistedAppState, Photo, TripMembership, TripRecord, TripInvitation } from '../context/AppContext';
 import type { UserProfile } from '../context/AuthContext';
 
-export const APP_STATE_VERSION = 5;
+export const APP_STATE_VERSION = 6;
 
 type LegacyState = {
   version?: number;
@@ -39,7 +39,7 @@ function inferPhotoProvider(url: string): Photo['provider'] {
 }
 
 function migratePhotos(photos: Photo[] | undefined): Photo[] {
-  return ensureArray(photos, []).map((photo, index) => ({
+  return ensureArray<Photo>(photos, []).map((photo, index) => ({
     ...photo,
     createdAt: photo.createdAt ?? new Date(Date.UTC(2024, 0, 1, 0, 0, index)).toISOString(),
     updatedAt: photo.updatedAt ?? photo.createdAt ?? new Date(Date.UTC(2024, 0, 1, 0, 0, index)).toISOString(),
@@ -63,7 +63,7 @@ function fallbackTimestamp(index: number) {
 }
 
 function withTimestamps<T extends { createdAt?: string; updatedAt?: string }>(items: T[] | undefined): T[] {
-  return ensureArray(items, []).map((item, index) => {
+  return ensureArray<T>(items, []).map((item, index) => {
     const createdAt = item.createdAt ?? fallbackTimestamp(index);
     return {
       ...item,
@@ -266,7 +266,8 @@ function isValidActivity(value: unknown) {
     && typeof value.title === 'string'
     && typeof value.location === 'string'
     && typeof value.note === 'string'
-    && typeof value.type === 'string';
+    && typeof value.type === 'string'
+    && (value.placeId === undefined || typeof value.placeId === 'string');
 }
 
 function isValidExpense(value: unknown) {
@@ -281,7 +282,9 @@ function isValidExpense(value: unknown) {
     && typeof value.category === 'string'
     && typeof value.amount === 'number' && Number.isFinite(value.amount) && value.amount > 0
     && typeof value.paidBy === 'string'
-    && isStringArray(value.participants);
+    && isStringArray(value.participants)
+    && (value.activityId === undefined || typeof value.activityId === 'string')
+    && (value.placeId === undefined || typeof value.placeId === 'string');
 }
 
 function isValidSavedPlace(value: unknown) {
@@ -291,7 +294,8 @@ function isValidSavedPlace(value: unknown) {
   return typeof value.id === 'string'
     && typeof value.tripId === 'string'
     && typeof value.name === 'string'
-    && typeof value.type === 'string';
+    && typeof value.type === 'string'
+    && (value.sourceNotebookPlaceId === undefined || typeof value.sourceNotebookPlaceId === 'string');
 }
 
 function isValidPackingItem(value: unknown) {
@@ -315,7 +319,9 @@ function isValidPhoto(value: unknown) {
     && typeof value.url === 'string'
     && typeof value.album === 'string'
     && (value.people === undefined || isStringArray(value.people))
-    && (value.tags === undefined || isStringArray(value.tags));
+    && (value.tags === undefined || isStringArray(value.tags))
+    && (value.activityId === undefined || typeof value.activityId === 'string')
+    && (value.placeId === undefined || typeof value.placeId === 'string');
 }
 
 function isValidActivityLog(value: unknown): value is ActivityLogEntry {
@@ -417,9 +423,24 @@ export function validateImportedSnapshot(state: Partial<PersistedAppState>): ass
       throw new Error('Backup chứa lời mời không liên kết với hồ sơ hợp lệ.');
     }
   });
-  snapshot.activities.forEach((activity) => assertTripLink(activity.tripId, 'hoạt động'));
+  const activityMap = new Map(snapshot.activities.map((activity) => [activity.id, activity]));
+  const placeMap = new Map(snapshot.savedPlaces.map((place) => [place.id, place]));
   snapshot.savedPlaces.forEach((place) => assertTripLink(place.tripId, 'địa điểm'));
-  snapshot.photos.forEach((photo) => assertTripLink(photo.tripId, 'ảnh'));
+  snapshot.activities.forEach((activity) => {
+    assertTripLink(activity.tripId, 'hoạt động');
+    if (activity.placeId && placeMap.get(activity.placeId)?.tripId !== activity.tripId) {
+      throw new Error('Backup chứa hoạt động liên kết với địa điểm không hợp lệ.');
+    }
+  });
+  snapshot.photos.forEach((photo) => {
+    assertTripLink(photo.tripId, 'ảnh');
+    if (photo.activityId && activityMap.get(photo.activityId)?.tripId !== photo.tripId) {
+      throw new Error('Backup chứa ảnh liên kết với hoạt động không hợp lệ.');
+    }
+    if (photo.placeId && placeMap.get(photo.placeId)?.tripId !== photo.tripId) {
+      throw new Error('Backup chứa ảnh liên kết với địa điểm không hợp lệ.');
+    }
+  });
   snapshot.activityLogs.forEach((log) => {
     assertTripLink(log.tripId, 'nhật ký');
     if (log.actorId && !profileIds.has(log.actorId)) throw new Error('Backup chứa nhật ký không liên kết với hồ sơ hợp lệ.');
@@ -429,6 +450,12 @@ export function validateImportedSnapshot(state: Partial<PersistedAppState>): ass
     if (!membershipKeys.has(`${expense.tripId}:${expense.paidBy}`)
       || expense.participants.some((participantId) => !membershipKeys.has(`${expense.tripId}:${participantId}`))) {
       throw new Error('Backup chứa chi tiêu không liên kết với thành viên hợp lệ.');
+    }
+    if (expense.activityId && activityMap.get(expense.activityId)?.tripId !== expense.tripId) {
+      throw new Error('Backup chứa chi tiêu liên kết với hoạt động không hợp lệ.');
+    }
+    if (expense.placeId && placeMap.get(expense.placeId)?.tripId !== expense.tripId) {
+      throw new Error('Backup chứa chi tiêu liên kết với địa điểm không hợp lệ.');
     }
   });
   snapshot.packingItems.forEach((item) => {
@@ -442,7 +469,7 @@ export function validateImportedSnapshot(state: Partial<PersistedAppState>): ass
   if ((snapshot.pinnedTripIds ?? []).some((tripId) => !tripIds.has(tripId))) throw new Error('Backup chứa chuyến đi đã ghim không hợp lệ.');
 }
 
-const EMPTY_PERSISTED_STATE: PersistedAppState = {
+export const EMPTY_PERSISTED_STATE: PersistedAppState = {
   version: APP_STATE_VERSION,
   trips: [], profiles: [], memberships: [], invitations: [], activities: [], expenses: [],
   savedPlaces: [], packingItems: [], photos: [], activityLogs: [], currentTripId: null, viewerProfileId: null, pinnedTripIds: [],

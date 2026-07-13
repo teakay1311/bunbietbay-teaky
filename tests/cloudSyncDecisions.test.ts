@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { hasUnsyncedLocalChanges, shouldOpenSyncConflict } from '../src/utils/cloudSyncDecisions';
+import { classifyRemoteWorkspaceError, hasUnsyncedLocalChanges, shouldOpenSyncConflict } from '../src/utils/cloudSyncDecisions';
 
 test('detects unsynced local changes using snapshot hashes', () => {
   assert.equal(hasUnsyncedLocalChanges('abc', 'abc'), false);
@@ -38,4 +38,12 @@ test('falls back safely when timestamps are non-ISO strings', () => {
     lastSyncedHash: 'old',
     currentHash: 'new',
   }), true);
+});
+
+test('classifies Supabase workspace failures without relying on one message shape', () => {
+  assert.equal(classifyRemoteWorkspaceError({ code: '42703', message: 'column revoked_at does not exist' }), 'schema-incompatible');
+  assert.equal(classifyRemoteWorkspaceError({ code: 'PGRST204', message: 'missing schema cache field' }), 'schema-incompatible');
+  assert.equal(classifyRemoteWorkspaceError({ status: 401, message: 'JWT expired' }), 'auth');
+  assert.equal(classifyRemoteWorkspaceError({ code: '42501', message: 'permission denied' }), 'permission');
+  assert.equal(classifyRemoteWorkspaceError(new TypeError('Failed to fetch')), 'network');
 });

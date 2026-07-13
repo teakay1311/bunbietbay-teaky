@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabase';
 import type { PendingNotebookInvitation } from '../domain/models';
+import { mapNotebookInvitations } from './notebookMappers';
 
 export async function runNotebookMutation(run: () => PromiseLike<{ error: unknown }>) {
   const response = await Promise.resolve(run());
@@ -23,16 +24,7 @@ export async function fetchNotebookInvitations(email: string | null): Promise<Pe
 
   if (error) throw error;
 
-  return ((data ?? []) as Array<Record<string, any>>).map((invitation) => ({
-    id: invitation.id,
-    notebookId: invitation.notebook_id,
-    notebookName: invitation.notebooks?.name ?? 'Sổ tay',
-    email: invitation.email,
-    role: invitation.role,
-    status: invitation.status,
-    createdAt: invitation.created_at,
-    invitedByName: invitation.inviter?.display_name ?? null,
-  }));
+  return mapNotebookInvitations(data ?? []);
 }
 
 export async function acceptNotebookInvitationRemote(invitationId: string) {

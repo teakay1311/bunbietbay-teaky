@@ -1,4 +1,4 @@
-import { useParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import type { FormEvent } from 'react';
 
 import { Icons } from '../components/Icons';
@@ -32,8 +32,9 @@ const PLACE_SORT_OPTIONS: Array<SortOption<PlaceSortKey>> = [
 
 export function TripPlaces() {
   const { id } = useParams();
-  const { trips, savedPlaces, addSavedPlace, editSavedPlace, deleteSavedPlace, addActivity, setCurrentTripId, undoLastAction } = useAppContext();
-  const { notebookPlaces } = useNotebook();
+  const [searchParams] = useSearchParams();
+  const { trips, savedPlaces, addSavedPlace, editSavedPlace, deleteSavedPlace, addLibraryPlaceToTrip, setCurrentTripId, undoLastAction } = useAppContext();
+  const { notebooks, notebookPlaces, saveTripPlaceToLibrary, deleteNotebookPlace } = useNotebook();
   const { showToast, confirm } = useFeedback();
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [editingPlace, setEditingPlace] = useState<SavedPlace | null>(null);
@@ -44,6 +45,8 @@ export function TripPlaces() {
   const [sortBy, setSortBy] = useState<PlaceSortKey>('ratingDesc');
   const [viewingPlace, setViewingPlace] = useState<SavedPlace | null>(null);
   const [isNotebookImportOpen, setIsNotebookImportOpen] = useState(false);
+  const [placeToLibrary, setPlaceToLibrary] = useState<SavedPlace | null>(null);
+  const editableNotebooks = useMemo(() => notebooks.filter((notebook) => notebook.permissions.canEditPlaces), [notebooks]);
 
   useEffect(() => {
     if (id) setCurrentTripId(id);
@@ -51,6 +54,10 @@ export function TripPlaces() {
 
   const trip = trips.find(t => t.id === id);
   const places = useMemo(() => savedPlaces.filter(p => p.tripId === id), [savedPlaces, id]);
+  useEffect(() => {
+    const linkedPlace = places.find((place) => place.id === searchParams.get('placeId'));
+    if (linkedPlace) setViewingPlace(linkedPlace);
+  }, [places, searchParams]);
   const placeTypeOptions = useMemo(() => mergeCategoryOptions(PLACE_TYPE_OPTIONS, places.map((place) => place.type)), [places]);
   const notebookImportCandidates = useMemo(() => {
     const existingNames = new Set(places.map((place) => place.name.trim().toLowerCase()));
@@ -140,27 +147,20 @@ export function TripPlaces() {
   const importNotebookPlace = async (place: NotebookPlace, createActivity = false) => {
     try {
       const placeType = mapNotebookPlaceType(place.type);
-      await addSavedPlace({
+      await addLibraryPlaceToTrip({
         tripId: trip.id,
-        name: place.name,
-        type: placeType,
-        phone: place.phone,
-        address: place.address,
-        rating: place.rating,
-        note: place.note,
+        notebookPlaceId: place.id,
+        place: {
+          name: place.name,
+          type: placeType,
+          phone: place.phone,
+          address: place.address,
+          rating: place.rating,
+          note: place.note,
+        },
+        createActivity,
+        date: trip.startDate,
       });
-
-      if (createActivity) {
-        await addActivity({
-          tripId: trip.id,
-          date: trip.startDate,
-          time: '09:00',
-          title: place.name,
-          location: place.address || place.name,
-          note: place.note || '',
-          type: placeType === 'hotel' ? 'hotel' : placeType === 'restaurant' ? 'restaurant' : 'activity',
-        });
-      }
 
       showToast({
         tone: 'success',
@@ -171,7 +171,7 @@ export function TripPlaces() {
       showToast({
         tone: 'error',
         title: 'Không thể nhập địa điểm',
-        message: getErrorMessage(error, 'Không thể nhập địa điểm từ sổ tay.'),
+        message: getErrorMessage(error, 'Không thể nhập địa điểm từ Thư viện.'),
       });
     }
   };
@@ -181,7 +181,7 @@ export function TripPlaces() {
   const itemVariants = {
     hidden: { opacity: 0, scale: 0.95, y: 15 },
     show: { opacity: 1, scale: 1, y: 0, transition: { ease: 'easeOut', duration: 0.2 } }
-  };
+  } as const;
 
   return (
     <motion.div variants={containerVariants} initial="hidden" animate="show" className="pb-10">
@@ -226,7 +226,7 @@ export function TripPlaces() {
               className="w-full bg-surface-container-high text-sm text-on-surface rounded-full pl-9 pr-4 py-2 focus:ring-1 focus:ring-primary/50 transition-all font-medium outline-none"
             />
           </div>
-          <SortSelect value={sortBy} options={PLACE_SORT_OPTIONS} onChange={setSortBy} className="w-full md:w-auto md:min-w-[180px]" />
+          <SortSelect<PlaceSortKey> value={sortBy} options={PLACE_SORT_OPTIONS} onChange={setSortBy} className="w-full md:w-auto md:min-w-[180px]" />
         </motion.div>
       </div>
 
@@ -257,7 +257,7 @@ export function TripPlaces() {
             className="flex w-full items-center justify-between gap-4 text-left"
           >
             <div>
-              <p className="font-label text-[10px] font-bold uppercase tracking-[0.22em] text-secondary dark:text-gray-300">Từ cẩm nang địa điểm</p>
+              <p className="font-label text-[10px] font-bold uppercase tracking-[0.22em] text-secondary dark:text-gray-300">Từ Thư viện địa điểm</p>
               <h2 className="mt-1 font-headline text-xl font-bold text-on-surface">Đưa nhanh địa điểm đã lưu vào chuyến đi</h2>
               <p className="mt-1 text-xs font-medium text-secondary dark:text-gray-300">{notebookImportCandidates.length} địa điểm có thể thêm nhanh</p>
             </div>
@@ -303,10 +303,11 @@ export function TripPlaces() {
           >
             {canEdit && (
               <div className="absolute top-4 right-4 flex gap-2 md:opacity-0 transition-opacity md:group-hover:opacity-100" onClick={(e) => e.stopPropagation()}>
-                <button onClick={() => { setEditingPlace(place); setSubmitError(null); setIsAddOpen(true); }} className="p-2 text-secondary dark:text-gray-300 hover:text-primary dark:text-white hover:bg-surface-container rounded-lg transition-colors">
+                {!place.sourceNotebookPlaceId && editableNotebooks.length > 0 && <button aria-label={`Lưu ${place.name} vào Thư viện`} title="Lưu vào Thư viện" onClick={() => setPlaceToLibrary(place)} className="p-2 text-secondary hover:bg-surface-container hover:text-primary"><Icons.Bookmark className="size-4" /></button>}
+                <button aria-label={`Sửa địa điểm ${place.name}`} onClick={() => { setEditingPlace(place); setSubmitError(null); setIsAddOpen(true); }} className="p-2 text-secondary dark:text-gray-300 hover:text-primary dark:text-white hover:bg-surface-container rounded-lg transition-colors">
                   <Icons.Edit2 className="w-4 h-4" />
                 </button>
-                <button onClick={async () => {
+                <button aria-label={`Xóa địa điểm ${place.name}`} onClick={async () => {
                   const shouldDelete = await confirm({
                     title: `Xóa địa điểm "${place.name}"`,
                     message: 'Địa điểm này sẽ bị gỡ khỏi danh sách lưu trữ của chuyến đi.',
@@ -442,6 +443,26 @@ export function TripPlaces() {
             </button>
           </div>
         </form>
+      </Modal>
+
+      <Modal isOpen={Boolean(placeToLibrary)} onClose={() => setPlaceToLibrary(null)} title="Lưu vào Thư viện địa điểm">
+        {placeToLibrary && <form className="space-y-4" onSubmit={async (event) => {
+          event.preventDefault();
+          const notebookId = String(new FormData(event.currentTarget).get('notebookId') || '');
+          const result = await saveTripPlaceToLibrary(notebookId, placeToLibrary);
+          if (!result.success || !result.id) {
+            showToast({ tone: 'error', title: 'Không thể lưu vào Thư viện', message: result.error });
+            return;
+          }
+          try {
+            await editSavedPlace(placeToLibrary.id, { sourceNotebookPlaceId: result.id });
+            showToast({ tone: 'success', title: 'Đã lưu vào Thư viện', message: 'Địa điểm chuyến đi đã được liên kết với bản có thể tái sử dụng.' });
+            setPlaceToLibrary(null);
+          } catch (error) {
+            await deleteNotebookPlace(result.id).catch(() => undefined);
+            showToast({ tone: 'error', title: 'Không thể tạo liên kết', message: getErrorMessage(error, 'Dữ liệu Thư viện đã được hoàn tác.') });
+          }
+        }}><label className="block text-sm font-semibold">Bộ sưu tập<select name="notebookId" required className="mt-2 min-h-11 w-full rounded-xl border border-outline-variant bg-surface px-3">{editableNotebooks.map((notebook) => <option key={notebook.id} value={notebook.id}>{notebook.name}</option>)}</select></label><button type="submit" className="min-h-11 w-full rounded-xl bg-primary px-4 font-semibold text-on-primary">Lưu địa điểm</button></form>}
       </Modal>
 
       {/* Detail modal */}

@@ -107,6 +107,11 @@ export function TripPacking() {
   const trip = trips.find(t => t.id === id);
   const tripMembers = trip?.members ?? [];
   const displayMembers = useMemo(() => [...tripMembers, ...(trip?.historicalMembers ?? [])], [trip?.historicalMembers, tripMembers]);
+  const packingFormMembers = useMemo(() => {
+    if (!editingItem?.assigneeId) return tripMembers;
+    const archivedAssignee = trip?.historicalMembers.find((member) => member.id === editingItem.assigneeId);
+    return archivedAssignee ? [...tripMembers, archivedAssignee] : tripMembers;
+  }, [editingItem?.assigneeId, trip?.historicalMembers, tripMembers]);
   const tripPackingItems = useMemo(() => packingItems.filter((item) => item.tripId === id), [packingItems, id]);
 
   const memberMap = useMemo(() => {
@@ -321,7 +326,7 @@ export function TripPacking() {
                 className="w-full bg-surface-container-high text-sm text-on-surface rounded-full pl-9 pr-4 py-1.5 focus:ring-1 focus:ring-primary/50 transition-all font-medium outline-none"
               />
             </div>
-            <SortSelect value={sortBy} options={PACKING_SORT_OPTIONS} onChange={setSortBy} className="mb-1 w-full self-end py-1.5 md:w-auto" />
+            <SortSelect<PackingSortKey> value={sortBy} options={PACKING_SORT_OPTIONS} onChange={setSortBy} className="mb-1 w-full self-end py-1.5 md:w-auto" />
           </div>
         </div>
         {canEdit && (
@@ -627,8 +632,8 @@ export function TripPacking() {
               <label className="block font-label text-xs font-bold text-secondary dark:text-gray-300 mb-1">Người phụ trách (Tuỳ chọn)</label>
               <select name="assigneeId" defaultValue={editingItem?.assigneeId || ''} className="density-control w-full rounded-xl bg-surface-container-low border border-outline-variant/50 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all">
                 <option value="">Không phân công</option>
-                {trip.members.map(m => (
-                  <option key={m.id} value={m.id}>{m.displayName}</option>
+                {packingFormMembers.map(m => (
+                  <option key={m.id} value={m.id}>{m.displayName}{m.isArchived ? ' (đã rời chuyến)' : ''}</option>
                 ))}
               </select>
             </div>

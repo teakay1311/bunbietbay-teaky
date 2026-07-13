@@ -250,3 +250,18 @@ body[data-density='compact'] .density-table td {
   padding-top: 0.6rem !important;
   padding-bottom: 0.6rem !important;
 }
+
+@media (prefers-reduced-motion: reduce) {
+  html:focus-within {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}

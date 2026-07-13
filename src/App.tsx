@@ -1,5 +1,5 @@
-import { Suspense, useEffect, type CSSProperties } from 'react';
-import { BrowserRouter, HashRouter, Navigate, Outlet, Route, Routes, useParams } from 'react-router-dom';
+import { Suspense, useEffect } from 'react';
+import { BrowserRouter, HashRouter, Navigate, Outlet, Route, Routes, useLocation, useParams } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { CommandPalette } from './components/CommandPalette';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -11,6 +11,7 @@ import { NotebookProvider } from './context/NotebookContext';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { useTripReminders } from './hooks/useTripReminders';
 import { lazyWithRetry } from './utils/lazyWithRetry';
+import { TripSectionTabs } from './components/TripSectionTabs';
 
 const Login = lazyWithRetry(() => import('./screens/Login').then((module) => ({ default: module.Login })));
 const MyTrips = lazyWithRetry(() => import('./screens/MyTrips').then((module) => ({ default: module.MyTrips })));
@@ -23,6 +24,36 @@ const TripPacking = lazyWithRetry(() => import('./screens/TripPacking').then((mo
 const TripPhotos = lazyWithRetry(() => import('./screens/TripPhotos').then((module) => ({ default: module.TripPhotos })));
 const Settings = lazyWithRetry(() => import('./screens/Settings').then((module) => ({ default: module.Settings })));
 const PlacesNotebook = lazyWithRetry(() => import('./screens/PlacesNotebook').then((module) => ({ default: module.PlacesNotebook })));
+const Inbox = lazyWithRetry(() => import('./screens/Inbox').then((module) => ({ default: module.Inbox })));
+const TripMore = lazyWithRetry(() => import('./screens/TripMore').then((module) => ({ default: module.TripMore })));
+const TripSettings = lazyWithRetry(() => import('./screens/TripSettings').then((module) => ({ default: module.TripSettings })));
+
+function TripPlanRoute() {
+  return <TripSectionTabs tabs={[{ value: 'itinerary', label: 'Lịch trình' }, { value: 'places', label: 'Địa điểm' }]} fallback="itinerary">
+    {(tab) => tab === 'places' ? <TripPlaces /> : <TripSchedule />}
+  </TripSectionTabs>;
+}
+
+function TripPrepareRoute() {
+  return <TripSectionTabs tabs={[{ value: 'packing', label: 'Checklist' }, { value: 'team', label: 'Nhóm' }]} fallback="packing">
+    {(tab) => tab === 'team' ? <TripMembers /> : <TripPacking />}
+  </TripSectionTabs>;
+}
+
+function LegacyTripRedirect({ path }: { path: string }) {
+  const { id } = useParams();
+  const location = useLocation();
+  const [pathname, targetSearch = ''] = path.split('?');
+  const searchParams = new URLSearchParams(location.search);
+  new URLSearchParams(targetSearch).forEach((value, key) => searchParams.set(key, value));
+  const search = searchParams.size > 0 ? `?${searchParams.toString()}` : '';
+  return <Navigate to={`/trips/${id}${pathname}${search}${location.hash}`} replace />;
+}
+
+function LegacyRedirect({ to }: { to: string }) {
+  const location = useLocation();
+  return <Navigate to={`${to}${location.search}${location.hash}`} replace />;
+}
 
 function RouteLoadingFallback() {
   return (
@@ -50,9 +81,9 @@ function BootLoadingFallback() {
 
 function ProtectedRoutes() {
   const { requiresAuth, session, isAuthLoading } = useAuth();
-  const { isHydrated } = useAppContext();
+  const { isHydrated, workspaceStatus } = useAppContext();
 
-  if (isAuthLoading || !isHydrated) {
+  if (isAuthLoading || !isHydrated || workspaceStatus === 'hydrating' || workspaceStatus === 'loading-remote') {
     return <BootLoadingFallback />;
   }
 
@@ -109,17 +140,13 @@ function GlobalSettingsLayoutWrapper() {
 
 function TripLayoutWrapper() {
   const { id } = useParams();
-  const { trips } = useAppContext();
-  const trip = trips.find(t => t.id === id);
 
   return (
-    <div style={trip?.themeColor ? { '--color-primary': trip.themeColor } as CSSProperties : {}} className="contents">
-      <Layout tripId={id}>
-        <Suspense fallback={<RouteLoadingFallback />}>
-          <Outlet />
-        </Suspense>
-      </Layout>
-    </div>
+    <Layout tripId={id}>
+      <Suspense fallback={<RouteLoadingFallback />}>
+        <Outlet />
+      </Suspense>
+    </Layout>
   );
 }
 
@@ -132,22 +159,32 @@ function AppRoutes() {
 
         <Route element={<GlobalLayoutWrapper />}>
           <Route path="/trips" element={<MyTrips />} />
-          <Route path="/notebook" element={<PlacesNotebook />} />
+          <Route path="/library" element={<PlacesNotebook />} />
+          <Route path="/inbox" element={<Inbox />} />
+          <Route path="/notebook" element={<LegacyRedirect to="/library" />} />
         </Route>
 
         <Route element={<GlobalSettingsLayoutWrapper />}>
-          <Route path="/settings" element={<Settings />} />
+          <Route path="/account" element={<Navigate to="/account/profile" replace />} />
+          <Route path="/account/:section" element={<Settings />} />
+          <Route path="/settings" element={<LegacyRedirect to="/account/profile" />} />
         </Route>
 
         <Route path="/trips/:id" element={<TripLayoutWrapper />}>
-          <Route index element={<Navigate to="schedule" replace />} />
-          <Route path="schedule" element={<TripSchedule />} />
-          <Route path="overview" element={<TripOverview />} />
-          <Route path="expenses" element={<TripExpenses />} />
-          <Route path="members" element={<TripMembers />} />
-          <Route path="places" element={<TripPlaces />} />
-          <Route path="packing" element={<TripPacking />} />
-          <Route path="photos" element={<TripPhotos />} />
+          <Route index element={<TripOverview />} />
+          <Route path="plan" element={<TripPlanRoute />} />
+          <Route path="money" element={<TripExpenses />} />
+          <Route path="prepare" element={<TripPrepareRoute />} />
+          <Route path="memories" element={<TripPhotos />} />
+          <Route path="more" element={<TripMore />} />
+          <Route path="settings" element={<TripSettings />} />
+          <Route path="overview" element={<LegacyTripRedirect path="" />} />
+          <Route path="schedule" element={<LegacyTripRedirect path="/plan?tab=itinerary" />} />
+          <Route path="expenses" element={<LegacyTripRedirect path="/money" />} />
+          <Route path="members" element={<LegacyTripRedirect path="/prepare?tab=team" />} />
+          <Route path="places" element={<LegacyTripRedirect path="/plan?tab=places" />} />
+          <Route path="packing" element={<LegacyTripRedirect path="/prepare?tab=packing" />} />
+          <Route path="photos" element={<LegacyTripRedirect path="/memories" />} />
         </Route>
       </Route>
       <Route path="*" element={<Navigate to="/trips" replace />} />
@@ -165,7 +202,7 @@ function GlobalExperienceEffects() {
       showToast({
         tone: 'success',
         title: 'Lời mời mới',
-        message: 'Bạn vừa được mời vào một chuyến đi mới! Bấm vào logo Avatar góc phải để nhận quyền nhé.',
+        message: 'Bạn vừa được mời vào một chuyến đi mới. Mở Hộp thư để phản hồi.',
       });
       if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate([100, 50, 100]);
     };
@@ -177,8 +214,8 @@ function GlobalExperienceEffects() {
     const handleNewNotebookInvitation = () => {
       showToast({
         tone: 'success',
-        title: 'Lời mời sổ tay mới',
-        message: 'Bạn vừa được mời vào một sổ tay mới. Mở Cài đặt để nhận quyền nhé.',
+        title: 'Lời mời Thư viện mới',
+        message: 'Bạn vừa được mời vào một Thư viện mới. Mở Hộp thư để phản hồi.',
       });
       if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate([100, 50, 100]);
     };
@@ -205,15 +242,15 @@ export default function App() {
   return (
     <ErrorBoundary>
       <FeedbackProvider>
-        <SettingsProvider>
-          <AuthProvider>
+        <AuthProvider>
+          <SettingsProvider>
             <AppProvider>
               <NotebookProvider>
                 <AppShell />
               </NotebookProvider>
             </AppProvider>
-          </AuthProvider>
-        </SettingsProvider>
+          </SettingsProvider>
+        </AuthProvider>
       </FeedbackProvider>
     </ErrorBoundary>
   );

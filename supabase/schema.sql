@@ -98,6 +98,7 @@ create table if not exists public.activities (
   image text,
   map_url text,
   booking_code text,
+  place_id uuid,
   is_completed boolean not null default false,
   created_at timestamptz not null default timezone('utc', now()),
   updated_at timestamptz not null default timezone('utc', now())
@@ -119,6 +120,8 @@ create table if not exists public.expenses (
   note text,
   receipt_image text,
   is_settlement boolean not null default false,
+  activity_id uuid,
+  place_id uuid,
   created_at timestamptz not null default timezone('utc', now()),
   updated_at timestamptz not null default timezone('utc', now())
 );
@@ -132,6 +135,7 @@ create table if not exists public.saved_places (
   address text,
   rating numeric,
   note text,
+  source_notebook_place_id uuid,
   created_at timestamptz not null default timezone('utc', now()),
   updated_at timestamptz not null default timezone('utc', now())
 );
@@ -161,6 +165,8 @@ create table if not exists public.photos (
   tags text[] not null default '{}',
   item_type text not null default 'photo',
   content text,
+  activity_id uuid references public.activities (id) on delete set null,
+  place_id uuid references public.saved_places (id) on delete set null,
   created_at timestamptz not null default timezone('utc', now()),
   updated_at timestamptz not null default timezone('utc', now())
 );
@@ -199,6 +205,65 @@ create table if not exists public.notebook_places (
   created_at timestamptz not null default timezone('utc', now()),
   updated_at timestamptz not null default timezone('utc', now())
 );
+
+create table if not exists public.user_preferences (
+  user_id uuid primary key references public.profiles (id) on delete cascade,
+  theme_mode text not null default 'system' check (theme_mode in ('light', 'dark', 'system')),
+  theme_preset_id text not null default 'teal-editorial',
+  ui_density text not null default 'cozy' check (ui_density in ('cozy', 'compact')),
+  is_privacy_mode boolean not null default false,
+  reminders_enabled boolean not null default true,
+  activity_lead_minutes integer not null default 120 check (activity_lead_minutes between 1 and 10080),
+  trip_start_lead_minutes integer not null default 1440 check (trip_start_lead_minutes between 1 and 20160),
+  updated_at timestamptz not null default timezone('utc', now())
+);
+
+create table if not exists public.trip_notification_preferences (
+  trip_id uuid not null references public.trips (id) on delete cascade,
+  user_id uuid not null references public.profiles (id) on delete cascade,
+  use_defaults boolean not null default true,
+  enabled boolean,
+  activity_lead_minutes integer check (activity_lead_minutes between 1 and 10080),
+  trip_start_lead_minutes integer check (trip_start_lead_minutes between 1 and 20160),
+  updated_at timestamptz not null default timezone('utc', now()),
+  primary key (trip_id, user_id)
+);
+
+do $entity_link_constraints$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'saved_places_source_notebook_place_id_fkey') then
+    alter table public.saved_places add constraint saved_places_source_notebook_place_id_fkey
+      foreign key (source_notebook_place_id) references public.notebook_places (id) on delete set null;
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'activities_place_id_fkey') then
+    alter table public.activities add constraint activities_place_id_fkey
+      foreign key (place_id) references public.saved_places (id) on delete set null;
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'expenses_activity_id_fkey') then
+    alter table public.expenses add constraint expenses_activity_id_fkey
+      foreign key (activity_id) references public.activities (id) on delete set null;
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'expenses_place_id_fkey') then
+    alter table public.expenses add constraint expenses_place_id_fkey
+      foreign key (place_id) references public.saved_places (id) on delete set null;
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'photos_activity_id_fkey') then
+    alter table public.photos add constraint photos_activity_id_fkey
+      foreign key (activity_id) references public.activities (id) on delete set null;
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'photos_place_id_fkey') then
+    alter table public.photos add constraint photos_place_id_fkey
+      foreign key (place_id) references public.saved_places (id) on delete set null;
+  end if;
+end;
+$entity_link_constraints$;
+
+create index if not exists activities_place_id_idx on public.activities (place_id);
+create index if not exists expenses_activity_id_idx on public.expenses (activity_id);
+create index if not exists expenses_place_id_idx on public.expenses (place_id);
+create index if not exists saved_places_source_notebook_place_id_idx on public.saved_places (source_notebook_place_id);
+create index if not exists photos_activity_id_idx on public.photos (activity_id);
+create index if not exists photos_place_id_idx on public.photos (place_id);
 
 create or replace function public.set_updated_at()
 returns trigger
@@ -248,6 +313,14 @@ for each row execute procedure public.set_updated_at();
 
 drop trigger if exists notebook_places_set_updated_at on public.notebook_places;
 create trigger notebook_places_set_updated_at before update on public.notebook_places
+for each row execute procedure public.set_updated_at();
+
+drop trigger if exists user_preferences_set_updated_at on public.user_preferences;
+create trigger user_preferences_set_updated_at before update on public.user_preferences
+for each row execute procedure public.set_updated_at();
+
+drop trigger if exists trip_notification_preferences_set_updated_at on public.trip_notification_preferences;
+create trigger trip_notification_preferences_set_updated_at before update on public.trip_notification_preferences
 for each row execute procedure public.set_updated_at();
 
 create or replace function public.is_trip_member(target_trip_id uuid)
@@ -369,6 +442,34 @@ as $is_nb_editor$
   );
 $is_nb_editor$;
 
+create or replace function public.is_notebook_manager(target_nb_id uuid)
+returns boolean
+language sql
+security definer
+set search_path = public
+stable
+as $is_nb_manager$
+  select exists (
+    select 1 from public.notebook_memberships membership
+    where membership.notebook_id = target_nb_id
+      and membership.user_id = auth.uid()
+      and membership.role in ('owner', 'admin')
+  ) or exists (
+    select 1 from public.notebooks notebook
+    where notebook.id = target_nb_id and notebook.created_by = auth.uid()
+  );
+$is_nb_manager$;
+
+create or replace function public.has_shared_notebook(target_user_id uuid)
+returns boolean language sql security definer set search_path = public stable
+as $has_shared_notebook$
+  select exists (
+    select 1 from public.notebook_memberships mine
+    join public.notebook_memberships theirs on theirs.notebook_id = mine.notebook_id
+    where mine.user_id = auth.uid() and theirs.user_id = target_user_id
+  );
+$has_shared_notebook$;
+
 alter table public.profiles enable row level security;
 alter table public.trips enable row level security;
 alter table public.trip_memberships enable row level security;
@@ -381,13 +482,15 @@ alter table public.photos enable row level security;
 alter table public.notebooks enable row level security;
 alter table public.notebook_memberships enable row level security;
 alter table public.notebook_places enable row level security;
+alter table public.user_preferences enable row level security;
+alter table public.trip_notification_preferences enable row level security;
 
 drop policy if exists "Profiles are visible to shared trip members" on public.profiles;
 create policy "Profiles are visible to shared trip members"
 on public.profiles
 for select
 to authenticated
-using (auth.uid() = id or public.has_shared_trip(id));
+using (auth.uid() = id or public.has_shared_trip(id) or public.has_shared_notebook(id));
 
 drop policy if exists "Users can update their own profile" on public.profiles;
 create policy "Users can update their own profile"
@@ -448,9 +551,13 @@ on public.trip_memberships
 for insert
 to authenticated
 with check (
-  public.is_trip_manager(trip_id)
-  or exists (select 1 from public.trips trip where trip.id = trip_id and trip.created_by = auth.uid())
-  or (
+  (role = 'owner' and user_id = auth.uid() and exists (
+    select 1 from public.trips trip where trip.id = trip_id and trip.created_by = auth.uid()
+  ))
+  or (role <> 'owner' and (
+    public.is_trip_manager(trip_id)
+    or exists (select 1 from public.trips trip where trip.id = trip_id and trip.created_by = auth.uid())
+    or (
     user_id = auth.uid()
     and exists (
       select 1
@@ -460,7 +567,8 @@ with check (
         and lower(invitation.email) = lower(coalesce(auth.jwt() ->> 'email', ''))
         and invitation.status = 'pending'
     )
-  )
+    )
+  ))
 );
 
 drop policy if exists "Managers can update memberships" on public.trip_memberships;
@@ -468,21 +576,21 @@ create policy "Managers can update memberships"
 on public.trip_memberships
 for update
 to authenticated
-using (public.is_trip_manager(trip_id) or exists (
+using (role <> 'owner' and (public.is_trip_manager(trip_id) or exists (
   select 1 from public.trips trip where trip.id = trip_id and trip.created_by = auth.uid()
-))
-with check (public.is_trip_manager(trip_id) or exists (
+)))
+with check (role <> 'owner' and (public.is_trip_manager(trip_id) or exists (
   select 1 from public.trips trip where trip.id = trip_id and trip.created_by = auth.uid()
-));
+)));
 
 drop policy if exists "Managers can delete memberships" on public.trip_memberships;
 create policy "Managers can delete memberships"
 on public.trip_memberships
 for delete
 to authenticated
-using (public.is_trip_manager(trip_id) or exists (
+using (role <> 'owner' and (public.is_trip_manager(trip_id) or exists (
   select 1 from public.trips trip where trip.id = trip_id and trip.created_by = auth.uid()
-));
+)));
 
 drop policy if exists "Managers and invited users can read invitations" on public.trip_invitations;
 create policy "Managers and invited users can read invitations"
@@ -689,7 +797,36 @@ create policy "Notebook members can update"
 on public.notebooks
 for update
 to authenticated
-using (created_by = auth.uid() or public.is_notebook_editor(id));
+using (created_by = auth.uid() or public.is_notebook_manager(id));
+
+create or replace function public.validate_notebook_owner_change()
+returns trigger language plpgsql security definer set search_path = public
+as $validate_notebook_owner$
+begin
+  if new.created_by is distinct from old.created_by and not (
+    old.created_by = auth.uid()
+    and exists (
+      select 1 from public.notebook_memberships membership
+      where membership.notebook_id = old.id
+        and membership.user_id = old.created_by
+        and membership.role = 'admin'
+    )
+    and exists (
+      select 1 from public.notebook_memberships membership
+      where membership.notebook_id = old.id
+        and membership.user_id = new.created_by
+        and membership.role = 'owner'
+    )
+  ) then
+    raise exception 'Notebook ownership must be transferred with the ownership RPC' using errcode = '42501';
+  end if;
+  return new;
+end;
+$validate_notebook_owner$;
+
+drop trigger if exists notebooks_validate_owner_change on public.notebooks;
+create trigger notebooks_validate_owner_change before update on public.notebooks
+for each row execute procedure public.validate_notebook_owner_change();
 
 drop policy if exists "Notebook owner can delete" on public.notebooks;
 create policy "Notebook owner can delete"
@@ -707,18 +844,58 @@ to authenticated
 using (public.is_notebook_member(notebook_id) or exists(select 1 from public.notebooks where id = notebook_id and created_by = auth.uid()));
 
 drop policy if exists "Owner can insert notebook memberships" on public.notebook_memberships;
-create policy "Owner can insert notebook memberships"
+drop policy if exists "Managers can insert notebook memberships" on public.notebook_memberships;
+create policy "Managers can insert notebook memberships"
 on public.notebook_memberships
 for insert
 to authenticated
-with check (exists(select 1 from public.notebooks where id = notebook_id and created_by = auth.uid()));
+with check (
+  (role = 'owner' and user_id = auth.uid() and exists (
+    select 1 from public.notebooks notebook
+    where notebook.id = notebook_id and notebook.created_by = auth.uid()
+  ))
+  or (public.is_notebook_manager(notebook_id) and role <> 'owner')
+);
+
+drop policy if exists "Managers can update notebook memberships" on public.notebook_memberships;
+create policy "Managers can update notebook memberships"
+on public.notebook_memberships
+for update
+to authenticated
+using (public.is_notebook_manager(notebook_id) and role <> 'owner')
+with check (public.is_notebook_manager(notebook_id) and role <> 'owner');
 
 drop policy if exists "Owner can delete notebook memberships" on public.notebook_memberships;
-create policy "Owner can delete notebook memberships"
+drop policy if exists "Managers can delete notebook memberships" on public.notebook_memberships;
+create policy "Managers can delete notebook memberships"
 on public.notebook_memberships
 for delete
 to authenticated
-using (exists(select 1 from public.notebooks where id = notebook_id and created_by = auth.uid()) or user_id = auth.uid());
+using (role <> 'owner' and (public.is_notebook_manager(notebook_id) or user_id = auth.uid()));
+
+create or replace function public.transfer_notebook_ownership(target_membership_id uuid)
+returns void language plpgsql security definer set search_path = public
+as $transfer_notebook_owner$
+declare
+  target_membership public.notebook_memberships%rowtype;
+  current_owner_id uuid;
+begin
+  select * into target_membership from public.notebook_memberships where id = target_membership_id for update;
+  if not found or target_membership.user_id = auth.uid() then
+    raise exception 'Invalid ownership target' using errcode = '22023';
+  end if;
+  select id into current_owner_id from public.notebook_memberships
+  where notebook_id = target_membership.notebook_id and user_id = auth.uid() and role = 'owner' for update;
+  if current_owner_id is null then
+    raise exception 'Only the owner can transfer this library' using errcode = '42501';
+  end if;
+  update public.notebook_memberships set role = 'admin' where id = current_owner_id;
+  update public.notebook_memberships set role = 'owner' where id = target_membership_id;
+  update public.notebooks set created_by = target_membership.user_id where id = target_membership.notebook_id;
+end;
+$transfer_notebook_owner$;
+
+grant execute on function public.transfer_notebook_ownership(uuid) to authenticated;
 
 -- Notebook Places
 drop policy if exists "Members can read notebook places" on public.notebook_places;
@@ -762,6 +939,7 @@ create index if not exists packing_items_trip_idx on public.packing_items (trip_
 create index if not exists photos_trip_idx on public.photos (trip_id);
 create index if not exists notebook_memberships_nb_idx on public.notebook_memberships (notebook_id);
 create index if not exists notebook_places_nb_idx on public.notebook_places (notebook_id);
+create index if not exists trip_notification_preferences_user_idx on public.trip_notification_preferences (user_id);
 
 -- Notebook Invitations
 create table if not exists public.notebook_invitations (
@@ -778,34 +956,47 @@ create table if not exists public.notebook_invitations (
 alter table public.notebook_invitations enable row level security;
 
 drop policy if exists "Notebook owners can read invitations" on public.notebook_invitations;
-create policy "Notebook owners can read invitations"
+drop policy if exists "Notebook managers can read invitations" on public.notebook_invitations;
+create policy "Notebook managers can read invitations"
 on public.notebook_invitations
 for select
 to authenticated
 using (
-  exists(select 1 from public.notebooks where id = notebook_id and created_by = auth.uid())
+  public.is_notebook_manager(notebook_id)
   or lower(email) = lower(coalesce(auth.jwt() ->> 'email', ''))
 );
 
 drop policy if exists "Notebook owners can create invitations" on public.notebook_invitations;
-create policy "Notebook owners can create invitations"
+drop policy if exists "Notebook managers can create invitations" on public.notebook_invitations;
+create policy "Notebook managers can create invitations"
 on public.notebook_invitations
 for insert
 to authenticated
 with check (
   invited_by = auth.uid()
-  and exists(select 1 from public.notebooks where id = notebook_id and created_by = auth.uid())
+  and public.is_notebook_manager(notebook_id)
 );
 
 drop policy if exists "Notebook owners can update invitations" on public.notebook_invitations;
-create policy "Notebook owners can update invitations"
+drop policy if exists "Notebook managers can update invitations" on public.notebook_invitations;
+create policy "Notebook managers can update invitations"
 on public.notebook_invitations
 for update
 to authenticated
 using (
-  exists(select 1 from public.notebooks where id = notebook_id and created_by = auth.uid())
+  public.is_notebook_manager(notebook_id)
   or lower(email) = lower(coalesce(auth.jwt() ->> 'email', ''))
 );
 
 create index if not exists notebook_invitations_nb_idx on public.notebook_invitations (notebook_id);
 create index if not exists notebook_invitations_email_idx on public.notebook_invitations (lower(email));
+
+drop policy if exists "Users manage own preferences" on public.user_preferences;
+create policy "Users manage own preferences" on public.user_preferences
+for all to authenticated using (user_id = auth.uid()) with check (user_id = auth.uid());
+
+drop policy if exists "Members manage own trip notification preferences" on public.trip_notification_preferences;
+create policy "Members manage own trip notification preferences" on public.trip_notification_preferences
+for all to authenticated
+using (user_id = auth.uid() and public.is_trip_member(trip_id))
+with check (user_id = auth.uid() and public.is_trip_member(trip_id));

@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Icons } from '../components/Icons';
+import { Modal } from '../components/Modal';
 
 type ToastTone = 'info' | 'success' | 'error';
 
@@ -61,7 +62,7 @@ export function FeedbackProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<ToastRecord[]>([]);
   const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
   const confirmResolverRef = useRef<((value: boolean) => void) | null>(null);
-  const toastTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const toastTimersRef = useRef<Map<string, number>>(new Map());
 
   const dismissToast = useCallback((toastId: string) => {
     toastTimersRef.current.delete(toastId);
@@ -170,16 +171,11 @@ export function FeedbackProvider({ children }: { children: ReactNode }) {
         </div>
       </div>
 
-      {confirmState && (
-        <div className="fixed inset-0 z-[130] flex items-center justify-center bg-slate-900/55 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-lg rounded-[2rem] bg-surface-container-lowest shadow-2xl">
-            <div className="border-b border-outline-variant/30 px-6 py-5">
-              <p className="font-headline text-2xl font-black tracking-[-0.03em] text-on-surface">{confirmState.title}</p>
-            </div>
-            <div className="px-6 py-5">
-              <p className="text-sm leading-7 text-secondary">{confirmState.message}</p>
-            </div>
-            <div className="flex flex-col gap-3 border-t border-outline-variant/30 px-6 py-5 sm:flex-row sm:justify-end">
+      <Modal isOpen={Boolean(confirmState)} onClose={() => closeConfirm(false)} title={confirmState?.title ?? 'Xác nhận'}>
+        {confirmState && (
+          <div>
+            <p className="text-sm leading-7 text-secondary">{confirmState.message}</p>
+            <div className="mt-6 flex flex-col gap-3 border-t border-outline-variant/30 pt-5 sm:flex-row sm:justify-end">
               <button
                 type="button"
                 onClick={() => closeConfirm(false)}
@@ -196,8 +192,8 @@ export function FeedbackProvider({ children }: { children: ReactNode }) {
               </button>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </Modal>
     </FeedbackContext.Provider>
   );
 }

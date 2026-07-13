@@ -1,8 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { getTripPermissions } from '../src/domain/tripLogic';
+import { calculateTrips } from '../src/domain/calculateTrips';
 import { buildExpenseChartData, calculateMemberBalances } from '../src/domain/expenseLogic';
-import type { CalculatedMember, Expense } from '../src/domain/models';
+import type { CalculatedMember, Expense, PersistedAppState } from '../src/domain/models';
 
 const member = (id: string, isArchived = false): CalculatedMember => ({
   id,
@@ -47,4 +48,31 @@ test('builds stable chart data and resolves archived member names', () => {
   assert.deepEqual(data.pieData, [{ name: 'Food', value: 150 }]);
   assert.deepEqual(data.barData.map((item) => item.rawDate), ['2026-01-01', '2026-01-02']);
   assert.equal(data.memberData[0].name, 'archived');
+});
+
+test('derives active and historical trip members without changing persisted data', () => {
+  const state: PersistedAppState = {
+    version: 7,
+    trips: [{ id: 't1', title: 'Trip', location: 'Hue', startDate: '2026-01-01', endDate: '2026-01-02', budget: 500, status: 'upcoming', image: '' }],
+    profiles: [
+      { id: 'active', email: 'active@example.com', displayName: 'Active', avatar: '' },
+      { id: 'archived', email: 'archived@example.com', displayName: 'Archived', avatar: '' },
+    ],
+    memberships: [
+      { id: 'm1', tripId: 't1', userId: 'active', role: 'owner' },
+      { id: 'm2', tripId: 't1', userId: 'archived', role: 'editor', revokedAt: '2026-01-03T00:00:00.000Z' },
+    ],
+    invitations: [], activities: [], savedPlaces: [], packingItems: [], photos: [], activityLogs: [],
+    expenses: [{ id: 'e1', tripId: 't1', date: '2026-01-01', time: '09:00', title: 'Lunch', category: 'Food', amount: 200, paidBy: 'archived', participants: ['active', 'archived'] }],
+    currentTripId: 't1', viewerProfileId: 'active', pinnedTripIds: ['t1'],
+  };
+
+  const [trip] = calculateTrips(state, 'active');
+  assert.equal(trip.members[0].displayName, 'Active');
+  assert.equal(trip.historicalMembers[0].displayName, 'Archived');
+  assert.equal(trip.historicalMembers[0].balance, 100);
+  assert.equal(trip.membershipRole, 'owner');
+  assert.equal(trip.spent, 200);
+  assert.equal(trip.isPinned, true);
+  assert.equal(state.memberships[1].revokedAt, '2026-01-03T00:00:00.000Z');
 });

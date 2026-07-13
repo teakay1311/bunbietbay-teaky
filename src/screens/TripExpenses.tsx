@@ -1,4 +1,4 @@
-import { useParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import type { ChangeEvent, FormEvent } from 'react';
 
 import { Icons } from '../components/Icons';
@@ -10,7 +10,7 @@ import { FormattedNumberInput } from '../components/FormattedNumberInput';
 import { CategorySelectWithCreate } from '../components/CategorySelectWithCreate';
 import { Check } from 'lucide-react';
 import { Expense } from '../context/AppContext';
-import { formatLocalDate, getLocalDateString, normalizeTimeForInput } from '../utils/date';
+import { formatLocalDate, getLocalDateString } from '../utils/date';
 import { useSettings, useFormatMoney } from '../context/SettingsContext';
 import { LinkifyText } from '../components/LinkifyText';
 import { getErrorMessage } from '../utils/errorMessage';
@@ -18,9 +18,10 @@ import { motion } from 'motion/react';
 import { getFinancialMembers } from '../domain/tripLogic';
 import { buildExpenseChartData, calculateMemberBalances } from '../domain/expenseLogic';
 import { SortSelect } from '../components/SortSelect';
-import { chainComparators, compareDate, compareNumber, compareText, stableSort, type SortOption } from '../utils/listSort';
+import { type SortOption } from '../utils/listSort';
 import { EXPENSE_CATEGORY_OPTIONS, mergeCategoryOptions } from '../utils/tripCategories';
 import { fadeUpVariants, pageStaggerVariants } from '../ui/motion';
+import { buildCategoryBudgetRows, calculateCurrencyBalances, filterAndSortExpenses, getExpenseFormMembers, type ExpenseSortKey } from '../features/expenses/selectors';
 
 const EXPENSE_PRESETS = [
   { icon: '☕', label: 'Cafe', category: 'Ăn uống', title: 'Cafe' },
@@ -32,8 +33,6 @@ const EXPENSE_PRESETS = [
 ];
 
 const ExpenseCharts = lazy(() => import('../features/expenses/ExpenseCharts').then((module) => ({ default: module.ExpenseCharts })));
-
-type ExpenseSortKey = 'dateDesc' | 'dateAsc' | 'amountDesc' | 'amountAsc' | 'categoryAsc' | 'payerAsc' | 'titleAsc';
 
 const EXPENSE_SORT_OPTIONS: Array<SortOption<ExpenseSortKey>> = [
   { value: 'dateDesc', label: 'Ngày mới nhất' },
@@ -47,7 +46,8 @@ const EXPENSE_SORT_OPTIONS: Array<SortOption<ExpenseSortKey>> = [
 
 export function TripExpenses() {
   const { id } = useParams();
-  const { trips, expenses, setCurrentTripId, addExpense, deleteExpense, editExpense, editTrip, undoLastAction } = useAppContext();
+  const [searchParams] = useSearchParams();
+  const { trips, expenses, activities, savedPlaces, setCurrentTripId, addExpense, deleteExpense, editExpense, editTrip, undoLastAction } = useAppContext();
   const { showToast, confirm } = useFeedback();
   const { uiDensity } = useSettings();
   const formatMoney = useFormatMoney();
@@ -149,6 +149,8 @@ export function TripExpenses() {
           participants: participants.length > 0 ? participants : trip!.members.map(m => m.id),
           note: formData.get('note') as string,
           receiptImage: formData.get('receiptImage') as string,
+          activityId: String(formData.get('activityId') || '') || undefined,
+          placeId: String(formData.get('placeId') || '') || undefined,
         });
         setEditingExpense(null);
       } else {
@@ -166,6 +168,8 @@ export function TripExpenses() {
           participants: participants.length > 0 ? participants : trip!.members.map(m => m.id),
           note: formData.get('note') as string,
           receiptImage: formData.get('receiptImage') as string,
+          activityId: String(formData.get('activityId') || '') || undefined,
+          placeId: String(formData.get('placeId') || '') || undefined,
         });
       }
       setIsAddOpen(false);
@@ -181,6 +185,17 @@ export function TripExpenses() {
   }, [id, setCurrentTripId]);
 
   const tripExpensesRaw = useMemo(() => expenses.filter((e) => e.tripId === trip?.id), [expenses, trip?.id]);
+  const tripActivities = useMemo(() => activities.filter((item) => item.tripId === trip?.id), [activities, trip?.id]);
+  const tripPlaces = useMemo(() => savedPlaces.filter((item) => item.tripId === trip?.id), [savedPlaces, trip?.id]);
+  const contextActivityId = tripActivities.some((item) => item.id === searchParams.get('activityId')) ? searchParams.get('activityId') ?? '' : '';
+  const contextPlaceId = tripPlaces.some((item) => item.id === searchParams.get('placeId')) ? searchParams.get('placeId') ?? '' : '';
+  useEffect(() => {
+    if (searchParams.get('action') !== 'add') return;
+    setEditingExpense(null);
+    setIsAddOpen(true);
+  }, [searchParams]);
+  const activityNameById = useMemo(() => new Map(tripActivities.map((item) => [item.id, item.title])), [tripActivities]);
+  const placeNameById = useMemo(() => new Map(tripPlaces.map((item) => [item.id, item.name])), [tripPlaces]);
   const tripExpensesForDisplay = useMemo(() => tripExpensesRaw.filter((e) => !e.isSettlement), [tripExpensesRaw]);
   const tripExpenses = tripExpensesRaw; // include settlements in balance calculations
   const expenseCategoryOptions = useMemo(() => {
@@ -192,67 +207,26 @@ export function TripExpenses() {
       ],
     );
   }, [trip?.categoryBudgets, tripExpensesForDisplay]);
-  const filteredExpenses = useMemo(() => {
-    const filteredList = tripExpensesForDisplay.filter(expense => {
-      const query = searchQuery.toLowerCase();
-      const matchesSearch = expense.title.toLowerCase().includes(query) ||
-        expense.category.toLowerCase().includes(query) ||
-        (expense.note && expense.note.toLowerCase().includes(query));
-      const matchesCategory = categoryFilter === 'all' || expense.category === categoryFilter;
-      const matchesPayer = payerFilter === 'all' || expense.paidBy === payerFilter;
-      const matchesParticipant = participantFilter === 'all' || expense.participants.includes(participantFilter);
-      return matchesSearch && matchesCategory && matchesPayer && matchesParticipant;
-    });
-    const memberNameById = new Map<string, string>([...(trip?.members ?? []), ...(trip?.historicalMembers ?? [])].map((member) => [member.id, member.displayName]));
-    const fallbackSort = (a: Expense, b: Expense) => compareDate(`${a.date}T${normalizeTimeForInput(a.time)}`, `${b.date}T${normalizeTimeForInput(b.time)}`, 'desc');
-    const sortComparator = (a: Expense, b: Expense) => {
-      switch (sortBy) {
-        case 'dateAsc': return compareDate(`${a.date}T${normalizeTimeForInput(a.time)}`, `${b.date}T${normalizeTimeForInput(b.time)}`, 'asc');
-        case 'amountDesc': return compareNumber(a.amount, b.amount, 'desc');
-        case 'amountAsc': return compareNumber(a.amount, b.amount, 'asc');
-        case 'categoryAsc': return compareText(a.category, b.category, 'asc');
-        case 'payerAsc': return compareText(memberNameById.get(a.paidBy) ?? a.paidBy, memberNameById.get(b.paidBy) ?? b.paidBy, 'asc');
-        case 'titleAsc': return compareText(a.title, b.title, 'asc');
-        case 'dateDesc':
-        default: return fallbackSort(a, b);
-      }
-    };
-    return stableSort(filteredList, chainComparators(sortComparator, fallbackSort));
-  }, [tripExpensesForDisplay, searchQuery, categoryFilter, payerFilter, participantFilter, sortBy, trip?.historicalMembers, trip?.members]);
+  const filteredExpenses = useMemo(() => filterAndSortExpenses({
+    expenses: tripExpensesForDisplay,
+    query: searchQuery,
+    category: categoryFilter,
+    payer: payerFilter,
+    participant: participantFilter,
+    sortBy,
+    members: [...(trip?.members ?? []), ...(trip?.historicalMembers ?? [])],
+  }), [tripExpensesForDisplay, searchQuery, categoryFilter, payerFilter, participantFilter, sortBy, trip?.historicalMembers, trip?.members]);
   const filteredExpenseTotal = useMemo(() => filteredExpenses.reduce((sum, expense) => sum + expense.amount, 0), [filteredExpenses]);
   const filteredExpenseAverage = filteredExpenses.length > 0 ? filteredExpenseTotal / filteredExpenses.length : 0;
   const hasActiveExpenseFilters = Boolean(searchQuery.trim()) || categoryFilter !== 'all' || payerFilter !== 'all' || participantFilter !== 'all';
-  const tripMembers = trip?.members ?? [];
   const financialMembers = useMemo(() => getFinancialMembers(trip), [trip]);
+  const expenseFormMembers = useMemo(() => getExpenseFormMembers(trip, editingExpense), [editingExpense, trip]);
   const balances = useMemo(() => calculateMemberBalances(financialMembers, tripExpenses), [financialMembers, tripExpenses]);
 
-  const detailedBalances = useMemo(() => {
-    const curBals: Record<string, Record<string, number>> = {};
-
-    tripExpenses.forEach(expense => {
-      const currency = expense.currency || baseCurrency;
-      if (!curBals[currency]) {
-        curBals[currency] = {};
-        financialMembers.forEach(m => curBals[currency][m.id] = 0);
-      }
-      const amt = expense.originalAmount || expense.amount;
-
-      if (curBals[currency][expense.paidBy] !== undefined) {
-        curBals[currency][expense.paidBy] += amt;
-      }
-
-      if (expense.participants && expense.participants.length > 0) {
-        const split = amt / expense.participants.length;
-        expense.participants.forEach(pId => {
-          if (curBals[currency][pId] !== undefined) {
-            curBals[currency][pId] -= split;
-          }
-        });
-      }
-    });
-
-    return curBals;
-  }, [tripExpenses, financialMembers, baseCurrency]);
+  const detailedBalances = useMemo(
+    () => calculateCurrencyBalances(tripExpenses, financialMembers, baseCurrency),
+    [tripExpenses, financialMembers, baseCurrency],
+  );
 
   const chartsData = useMemo(() => buildExpenseChartData(
     tripExpensesForDisplay,
@@ -260,21 +234,10 @@ export function TripExpenses() {
     (date) => formatLocalDate(date, { day: '2-digit', month: '2-digit' }),
   ), [financialMembers, tripExpensesForDisplay]);
 
-  const categoryBudgetRows = useMemo(() => {
-    const budgets = trip?.categoryBudgets ?? {};
-    const totals = tripExpensesForDisplay.reduce<Record<string, number>>((acc, expense) => {
-      acc[expense.category] = (acc[expense.category] ?? 0) + expense.amount;
-      return acc;
-    }, {});
-    const categories = Array.from(new Set([...expenseCategoryOptions.map((option) => option.value), ...Object.keys(budgets), ...Object.keys(totals)]));
-    return categories
-      .map((category) => ({
-        category,
-        budget: budgets[category] ?? 0,
-        spent: totals[category] ?? 0,
-      }))
-      .filter((row) => row.budget > 0 || row.spent > 0);
-  }, [expenseCategoryOptions, trip?.categoryBudgets, tripExpensesForDisplay]);
+  const categoryBudgetRows = useMemo(
+    () => buildCategoryBudgetRows(tripExpensesForDisplay, trip?.categoryBudgets ?? {}, expenseCategoryOptions.map((option) => option.value)),
+    [expenseCategoryOptions, trip?.categoryBudgets, tripExpensesForDisplay],
+  );
 
   const saveBudgetSettings = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -586,7 +549,7 @@ export function TripExpenses() {
                     className="min-w-0 flex-1 rounded-lg border border-outline-variant/50 bg-surface-container-low px-3 py-2 text-sm text-on-surface lg:flex-none"
                   >
                     <option value="all">Mọi người chi</option>
-                    {trip.members.map((m) => (
+                    {financialMembers.map((m) => (
                       <option key={`payer-${m.id}`} value={m.id}>Người chi: {m.displayName}</option>
                     ))}
                   </select>
@@ -596,14 +559,14 @@ export function TripExpenses() {
                     className="min-w-0 flex-1 rounded-lg border border-outline-variant/50 bg-surface-container-low px-3 py-2 text-sm text-on-surface lg:flex-none"
                   >
                     <option value="all">Mọi người nợ</option>
-                    {trip.members.map((m) => (
+                    {financialMembers.map((m) => (
                       <option key={`part-${m.id}`} value={m.id}>Người nợ: {m.displayName}</option>
                     ))}
                   </select>
-                  <SortSelect value={sortBy} options={EXPENSE_SORT_OPTIONS} onChange={setSortBy} className="w-full border border-outline-variant/50 bg-surface-container-low sm:col-span-2 lg:w-auto lg:flex-none" />
-                  <button className="p-2 rounded-lg transition-colors text-secondary dark:text-gray-300" title="Bộ lọc đang bật">
+                  <SortSelect<ExpenseSortKey> value={sortBy} options={EXPENSE_SORT_OPTIONS} onChange={setSortBy} className="w-full border border-outline-variant/50 bg-surface-container-low sm:col-span-2 lg:w-auto lg:flex-none" />
+                  <span className="p-2 text-secondary dark:text-gray-300" aria-hidden="true">
                     <Icons.Filter className="w-5 h-5" />
-                  </button>
+                  </span>
                 </div>
               </div>
               <div className="border-b border-surface-variant/30 bg-surface-container-low/40 px-4 py-4 md:px-6">
@@ -651,6 +614,7 @@ export function TripExpenses() {
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <p className="truncate font-headline text-base font-bold text-on-surface">{expense.title}</p>
+                          {(expense.activityId || expense.placeId) && <p className="mt-1 truncate text-xs text-secondary">{expense.activityId ? `Hoạt động: ${activityNameById.get(expense.activityId) ?? 'Đã xóa'}` : `Địa điểm: ${placeNameById.get(expense.placeId!) ?? 'Đã xóa'}`}</p>}
                           <p className="mt-1 text-xs font-semibold uppercase tracking-wider text-secondary dark:text-gray-300">
                             {formatLocalDate(expense.date, { day: '2-digit', month: 'short' })} · {expense.time}
                           </p>
@@ -743,6 +707,7 @@ export function TripExpenses() {
                           </td>
                           <td className="px-6 py-5 align-middle">
                             <div className="font-headline font-bold text-on-surface mb-1">{expense.title}</div>
+                            {(expense.activityId || expense.placeId) && <div className="mb-1 text-xs text-secondary">{expense.activityId ? `Hoạt động: ${activityNameById.get(expense.activityId) ?? 'Đã xóa'}` : `Địa điểm: ${placeNameById.get(expense.placeId!) ?? 'Đã xóa'}`}</div>}
                             <div className="text-xs text-secondary dark:text-gray-300 italic"><LinkifyText text={expense.note} /></div>
                           </td>
                           <td className="px-6 py-5 align-middle text-right">
@@ -938,6 +903,10 @@ export function TripExpenses() {
               </select>
             </div>
           </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="block text-xs font-bold text-secondary">Hoạt động liên quan<select name="activityId" defaultValue={editingExpense?.activityId || contextActivityId} className="mt-1 min-h-11 w-full rounded-xl border border-outline-variant/50 bg-surface-container-low px-3 text-sm"><option value="">Không gắn hoạt động</option>{tripActivities.map((activity) => <option key={activity.id} value={activity.id}>{activity.date} · {activity.title}</option>)}</select></label>
+            <label className="block text-xs font-bold text-secondary">Địa điểm liên quan<select name="placeId" defaultValue={editingExpense?.placeId || contextPlaceId} className="mt-1 min-h-11 w-full rounded-xl border border-outline-variant/50 bg-surface-container-low px-3 text-sm"><option value="">Không gắn địa điểm</option>{tripPlaces.map((place) => <option key={place.id} value={place.id}>{place.name}</option>)}</select></label>
+          </div>
           {selectedCurrency !== baseCurrency && (
             <div className="bg-surface-container-low p-4 rounded-xl border border-outline-variant/30">
               <label className="block font-label text-xs font-bold text-secondary dark:text-gray-300 mb-1">Tỉ giá (1 {selectedCurrency} = ? {baseCurrency})</label>
@@ -966,18 +935,18 @@ export function TripExpenses() {
           <div>
             <label className="block font-label text-xs font-bold text-secondary dark:text-gray-300 mb-1">Người trả tiền</label>
             <select required name="paidBy" defaultValue={editingExpense?.paidBy || ''} className="density-control w-full rounded-xl bg-surface-container-low border border-outline-variant/50 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all">
-              {trip.members.map(m => (
-                <option key={m.id} value={m.id}>{m.displayName}</option>
+              {expenseFormMembers.map(m => (
+                <option key={m.id} value={m.id}>{m.displayName}{m.isArchived ? ' (đã rời chuyến)' : ''}</option>
               ))}
             </select>
           </div>
           <div>
             <label className="block font-label text-xs font-bold text-secondary dark:text-gray-300 mb-1">Chia cho ai? (Mặc định: Tất cả)</label>
             <div className="flex flex-wrap gap-2 mt-2">
-              {trip.members.map(m => (
+              {expenseFormMembers.map(m => (
                 <label key={m.id} className="flex items-center gap-2 bg-surface-container-low px-3 py-2 rounded-lg cursor-pointer hover:bg-surface-container-high transition-colors">
                   <input type="checkbox" name="participants" value={m.id} defaultChecked={editingExpense ? editingExpense.participants.includes(m.id) : true} className="rounded text-primary dark:text-white focus:ring-primary" />
-                  <span className="text-sm">{m.displayName}</span>
+                  <span className="text-sm">{m.displayName}{m.isArchived ? ' (đã rời chuyến)' : ''}</span>
                 </label>
               ))}
             </div>
@@ -1045,7 +1014,7 @@ export function TripExpenses() {
 
       <Modal isOpen={!!settlementMemberId} onClose={() => setSettlementMemberId(null)} title="Chi tiết Quyết toán Đa tiền tệ">
         {settlementMemberId && (() => {
-          const member = trip.members.find(m => m.id === settlementMemberId);
+          const member = financialMembers.find(m => m.id === settlementMemberId);
           const mBals = Object.entries(detailedBalances)
             .map(([cur, bals]) => ({ currency: cur, amount: bals[settlementMemberId] || 0 }))
             .filter(b => Math.abs(b.amount) > 0.01);
@@ -1096,7 +1065,7 @@ export function TripExpenses() {
                                 let remainingAmount = Math.abs(b.amount);
 
                                 if (b.amount < -0.01) {
-                                  const creditors = tripMembers
+                                  const creditors = financialMembers
                                     .filter((tripMember) => tripMember.id !== settlementMemberId && (currencyBalances[tripMember.id] || 0) > 0.01)
                                     .sort((left, right) => (currencyBalances[right.id] || 0) - (currencyBalances[left.id] || 0));
 
@@ -1107,7 +1076,7 @@ export function TripExpenses() {
                                     remainingAmount -= originalAmount;
                                   });
                                 } else {
-                                  const debtors = tripMembers
+                                  const debtors = financialMembers
                                     .filter((tripMember) => tripMember.id !== settlementMemberId && (currencyBalances[tripMember.id] || 0) < -0.01)
                                     .sort((left, right) => Math.abs(currencyBalances[right.id] || 0) - Math.abs(currencyBalances[left.id] || 0));
 

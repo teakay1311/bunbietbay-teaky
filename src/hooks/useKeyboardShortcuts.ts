@@ -17,15 +17,15 @@ export function useKeyboardShortcuts() {
   const { currentTripId } = useAppContext();
   const pendingSequenceRef = useRef<{ key: string; expiresAt: number } | null>(null);
   const routeTripId = location.pathname.match(/^\/trips\/([^/]+)/)?.[1] ?? null;
-  const activeTripId = currentTripId ?? routeTripId;
+  const activeTripId = routeTripId ?? currentTripId;
 
   useEffect(() => {
-    const openTripRoute = (path: string) => {
+    const openTripRoute = (path = '') => {
       if (!activeTripId) {
         return;
       }
 
-      navigate(`/trips/${activeTripId}/${path}`);
+      navigate(`/trips/${activeTripId}${path}`);
     };
 
     const focusSearch = () => {
@@ -52,7 +52,7 @@ export function useKeyboardShortcuts() {
 
       if (isMetaPressed && key === ',') {
         event.preventDefault();
-        navigate('/settings');
+        navigate('/account/profile');
         return;
       }
 
@@ -64,7 +64,7 @@ export function useKeyboardShortcuts() {
 
       if (isMetaPressed && event.shiftKey && key === 'm' && activeTripId) {
         event.preventDefault();
-        navigate(`/trips/${activeTripId}/members`, { state: { openInviteMemberModal: true } });
+        navigate(`/trips/${activeTripId}/prepare?tab=team`, { state: { openInviteMemberModal: true } });
         return;
       }
 
@@ -76,7 +76,7 @@ export function useKeyboardShortcuts() {
 
       if (!isTyping && key === '?') {
         event.preventDefault();
-        navigate('/settings', { state: { section: 'shortcuts' } });
+        navigate('/account/shortcuts');
         return;
       }
 
@@ -86,31 +86,31 @@ export function useKeyboardShortcuts() {
         switch (`${pendingSequence.key}:${key}`) {
           case 'g:s':
             event.preventDefault();
-            openTripRoute('schedule');
+            openTripRoute('/plan?tab=itinerary');
             return;
           case 'g:o':
             event.preventDefault();
-            openTripRoute('overview');
+            openTripRoute();
             return;
           case 'g:e':
             event.preventDefault();
-            openTripRoute('expenses');
+            openTripRoute('/money');
             return;
           case 'g:m':
             event.preventDefault();
-            openTripRoute('members');
+            openTripRoute('/prepare?tab=team');
             return;
           case 'g:p':
             event.preventDefault();
-            openTripRoute('places');
+            openTripRoute('/plan?tab=places');
             return;
           case 'g:h':
             event.preventDefault();
-            openTripRoute('packing');
+            openTripRoute('/prepare?tab=packing');
             return;
           case 'g:i':
             event.preventDefault();
-            openTripRoute('photos');
+            openTripRoute('/memories');
             return;
           default:
             break;

@@ -14,9 +14,9 @@ import { SortSelect } from '../components/SortSelect';
 import { chainComparators, compareDate, compareNumber, compareText, stableSort, type SortOption } from '../utils/listSort';
 
 const ROLE_OPTIONS: Array<{ value: Exclude<TripAccessRole, 'owner'>; label: string; description: string }> = [
-  { value: 'admin', label: 'Admin', description: 'Quản lý thành viên, nội dung và thiết lập chuyến đi' },
-  { value: 'editor', label: 'Editor', description: 'Chỉnh sửa lịch trình, chi tiêu, địa điểm, ảnh và hành lý' },
-  { value: 'viewer', label: 'Viewer', description: 'Chỉ xem, không chỉnh sửa nội dung chuyến đi' },
+  { value: 'admin', label: 'Quản trị viên', description: 'Quản lý thành viên, nội dung và thiết lập chuyến đi' },
+  { value: 'editor', label: 'Người chỉnh sửa', description: 'Chỉnh sửa lịch trình, chi tiêu, địa điểm, ảnh và hành lý' },
+  { value: 'viewer', label: 'Chỉ xem', description: 'Xem nhưng không chỉnh sửa nội dung chuyến đi' },
 ];
 
 type MemberSortKey = 'roleAsc' | 'nameAsc' | 'spentDesc' | 'spentAsc' | 'balanceDesc' | 'balanceAsc' | 'joinedDesc' | 'joinedAsc';
@@ -153,11 +153,11 @@ export function TripMembers() {
         <div className="rounded-2xl bg-surface-container-lowest p-4 shadow-[0_12px_28px_rgba(0,0,0,0.05)] md:rounded-[2rem] md:p-6 md:shadow-[0_18px_40px_rgba(0,0,0,0.06)]">
           <div className="mb-6 flex flex-col items-start gap-4 md:flex-row md:items-center md:justify-between">
             <div>
-              <p className="font-label text-[11px] font-bold uppercase tracking-[0.16em] text-secondary dark:text-gray-300 md:text-xs md:tracking-[0.24em]">Current members</p>
+              <p className="font-label text-[11px] font-bold uppercase tracking-[0.16em] text-secondary dark:text-gray-300 md:text-xs md:tracking-[0.24em]">Thành viên hiện tại</p>
               <h2 className="mt-2 font-headline text-2xl font-black text-on-surface md:text-3xl md:tracking-[-0.04em]">{trip.members.length} người đang có quyền</h2>
             </div>
             <div className="flex w-full flex-wrap items-center gap-2 md:w-auto">
-              <SortSelect value={memberSortBy} options={MEMBER_SORT_OPTIONS} onChange={setMemberSortBy} className="w-full md:w-auto" />
+              <SortSelect<MemberSortKey> value={memberSortBy} options={MEMBER_SORT_OPTIONS} onChange={setMemberSortBy} className="w-full md:w-auto" />
               {currentMembership && (
                 <div className="rounded-full bg-slate-950 px-4 py-2 text-xs font-bold uppercase tracking-[0.22em] text-white">
                   Bạn là {currentMembership.role}
@@ -281,7 +281,7 @@ export function TripMembers() {
                 <h2 className="mt-2 font-headline text-xl font-black text-on-surface md:text-2xl md:tracking-[-0.04em]">Lời mời đang chờ</h2>
               </div>
               <div className="flex flex-wrap items-center gap-2 md:justify-end">
-                <SortSelect value={invitationSortBy} options={INVITATION_SORT_OPTIONS} onChange={setInvitationSortBy} className="w-full py-2 md:w-auto" />
+                <SortSelect<InvitationSortKey> value={invitationSortBy} options={INVITATION_SORT_OPTIONS} onChange={setInvitationSortBy} className="w-full py-2 md:w-auto" />
                 <div className="rounded-full bg-surface-container-low px-3 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-secondary dark:text-gray-300">
                   {tripInvitations.filter((invitation) => invitation.status === 'pending').length} pending
                 </div>

@@ -16,9 +16,8 @@ import { getTripDateValidationError } from '../utils/tripValidation';
 import { getErrorMessage } from '../utils/errorMessage';
 import { CoverPhotoSelector } from '../components/CoverPhotoSelector';
 import { SortSelect } from '../components/SortSelect';
-import { chainComparators, compareDate, compareNumber, compareText, stableSort, type SortOption } from '../utils/listSort';
-
-type TripSortKey = 'startDateDesc' | 'startDateAsc' | 'createdDesc' | 'createdAsc' | 'budgetDesc' | 'budgetAsc' | 'spentDesc' | 'spentAsc' | 'titleAsc' | 'titleDesc';
+import { type SortOption } from '../utils/listSort';
+import { countPackingByTrip, countPhotosByTrip, filterAndSortTrips, sumExpensesByTrip, type TripSortKey } from '../features/trips/selectors';
 
 const TRIP_SORT_OPTIONS: Array<SortOption<TripSortKey>> = [
   { value: 'startDateDesc', label: 'Ngày đi mới nhất' },
@@ -187,68 +186,13 @@ export function MyTrips() {
   };
 
   const editingTrip = trips.find(t => t.id === editingTripId);
-  const packingCountByTrip = useMemo(() => {
-    return packingItems.reduce<Record<string, number>>((counts, item) => {
-      counts[item.tripId] = (counts[item.tripId] ?? 0) + 1;
-      return counts;
-    }, {});
-  }, [packingItems]);
-
-  const photoCountByTrip = useMemo(() => {
-    return photos.reduce<Record<string, number>>((counts, photo) => {
-      counts[photo.tripId] = (counts[photo.tripId] ?? 0) + 1;
-      return counts;
-    }, {});
-  }, [photos]);
-
-  const packedCountByTrip = useMemo(() => {
-    return packingItems.reduce<Record<string, number>>((counts, item) => {
-      if (item.isPacked) {
-        counts[item.tripId] = (counts[item.tripId] ?? 0) + 1;
-      }
-      return counts;
-    }, {});
-  }, [packingItems]);
-
-  const spentByTrip = useMemo(() => {
-    return expenses.filter(e => !e.isSettlement).reduce<Record<string, number>>((totals, expense) => {
-      totals[expense.tripId] = (totals[expense.tripId] ?? 0) + expense.amount;
-      return totals;
-    }, {});
-  }, [expenses]);
-
-  const filteredTrips = useMemo(() => {
-    const filteredList = trips.filter((trip) => {
-      if (statusFilter !== 'all' && trip.status !== statusFilter) return false;
-      if (searchQuery) {
-        const query = searchQuery.toLowerCase();
-        if (!trip.title.toLowerCase().includes(query) && !trip.location.toLowerCase().includes(query)) return false;
-      }
-      if (startDateFilter && trip.startDate < startDateFilter) return false;
-      if (endDateFilter && trip.startDate > endDateFilter) return false;
-      return true;
-    });
-
-    const pinnedFirst = (a: typeof trips[number], b: typeof trips[number]) => Number(b.isPinned) - Number(a.isPinned);
-    const fallbackSort = (a: typeof trips[number], b: typeof trips[number]) => compareDate(a.startDate, b.startDate, 'desc');
-    const sortComparator = (a: typeof trips[number], b: typeof trips[number]) => {
-      switch (sortBy) {
-        case 'startDateAsc': return compareDate(a.startDate, b.startDate, 'asc');
-        case 'createdDesc': return compareDate(a.createdAt ?? a.startDate, b.createdAt ?? b.startDate, 'desc');
-        case 'createdAsc': return compareDate(a.createdAt ?? a.startDate, b.createdAt ?? b.startDate, 'asc');
-        case 'budgetDesc': return compareNumber(a.budget, b.budget, 'desc');
-        case 'budgetAsc': return compareNumber(a.budget, b.budget, 'asc');
-        case 'spentDesc': return compareNumber(spentByTrip[a.id] ?? 0, spentByTrip[b.id] ?? 0, 'desc');
-        case 'spentAsc': return compareNumber(spentByTrip[a.id] ?? 0, spentByTrip[b.id] ?? 0, 'asc');
-        case 'titleAsc': return compareText(a.title, b.title, 'asc');
-        case 'titleDesc': return compareText(a.title, b.title, 'desc');
-        case 'startDateDesc':
-        default: return compareDate(a.startDate, b.startDate, 'desc');
-      }
-    };
-
-    return stableSort(filteredList, chainComparators(pinnedFirst, sortComparator, fallbackSort));
-  }, [trips, statusFilter, searchQuery, startDateFilter, endDateFilter, sortBy, spentByTrip]);
+  const packingCountByTrip = useMemo(() => countPackingByTrip(packingItems), [packingItems]);
+  const photoCountByTrip = useMemo(() => countPhotosByTrip(photos), [photos]);
+  const packedCountByTrip = useMemo(() => countPackingByTrip(packingItems, true), [packingItems]);
+  const spentByTrip = useMemo(() => sumExpensesByTrip(expenses), [expenses]);
+  const filteredTrips = useMemo(() => filterAndSortTrips({
+    trips, status: statusFilter, query: searchQuery, startDate: startDateFilter, endDate: endDateFilter, sortBy, spentByTrip,
+  }), [trips, statusFilter, searchQuery, startDateFilter, endDateFilter, sortBy, spentByTrip]);
   const today = getLocalDateString();
 
   const handleDuplicateTrip = async (e: FormEvent<HTMLFormElement>) => {
@@ -283,7 +227,7 @@ export function MyTrips() {
   const itemVariants = {
     hidden: { opacity: 0, y: 30, scale: 0.95 },
     show: { opacity: 1, y: 0, scale: 1, transition: { ease: 'easeOut', duration: 0.2 } }
-  };
+  } as const;
 
   return (
     <>
@@ -291,7 +235,7 @@ export function MyTrips() {
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.5, ease: 'easeOut' }}
+          transition={{ duration: 0.2, ease: 'easeOut' }}
           className="density-hero relative flex h-[180px] items-center overflow-hidden rounded-xl bg-gradient-to-br from-primary via-primary to-primary-container p-5 shadow-[0_18px_36px_-18px_rgba(0,0,0,0.18)] ring-1 ring-white/10 md:h-[300px] md:p-12 md:shadow-[0_24px_48px_-12px_rgba(0,0,0,0.15)]"
         >
           <div className="absolute right-0 top-0 w-1/2 h-full opacity-20 pointer-events-none mix-blend-overlay">
@@ -369,7 +313,7 @@ export function MyTrips() {
                 <option value="draft">Bản nháp</option>
               </select>
             </div>
-            <SortSelect value={sortBy} options={TRIP_SORT_OPTIONS} onChange={setSortBy} className="w-full sm:col-span-2 lg:w-auto lg:min-w-[190px]" />
+            <SortSelect<TripSortKey> value={sortBy} options={TRIP_SORT_OPTIONS} onChange={setSortBy} className="w-full sm:col-span-2 lg:w-auto lg:min-w-[190px]" />
           </div>
         </div>
 
@@ -420,7 +364,7 @@ export function MyTrips() {
             if (viewMode === 'list') {
               return (
                 <motion.div variants={itemVariants} key={trip.id}>
-                  <Link to={`/trips/${trip.id}/schedule`} className={cn("bg-surface-container-lowest rounded-2xl shadow-[0_8px_20px_rgba(0,0,0,0.05)] ring-1 ring-outline/10 hover:shadow-[0_16px_36px_-14px_rgba(0,0,0,0.16)] hover:-translate-y-0.5 transition-all duration-300 group flex items-center gap-4 density-card active:scale-[0.98]", uiDensity === 'compact' ? 'p-2.5' : 'p-3')}>
+                  <Link to={`/trips/${trip.id}`} className={cn("bg-surface-container-lowest rounded-2xl shadow-[0_8px_20px_rgba(0,0,0,0.05)] ring-1 ring-outline/10 hover:shadow-[0_16px_36px_-14px_rgba(0,0,0,0.16)] hover:-translate-y-0.5 transition-all duration-300 group flex items-center gap-4 density-card active:scale-[0.98]", uiDensity === 'compact' ? 'p-2.5' : 'p-3')}>
                     <div className="h-14 w-14 shrink-0 rounded-lg bg-secondary-container flex items-center justify-center text-primary dark:text-white overflow-hidden">
                       <img alt={trip.title} className="h-full w-full object-cover" src={trip.image} loading="lazy" decoding="async" />
                     </div>
@@ -523,7 +467,7 @@ export function MyTrips() {
 
             return (
               <motion.div variants={itemVariants} key={trip.id}>
-                  <Link to={`/trips/${trip.id}/schedule`} className={cn("group block rounded-[1.25rem] bg-surface-container-lowest shadow-[0_12px_24px_rgba(0,0,0,0.06)] ring-1 ring-outline/10 transition-all duration-300 hover:-translate-y-2 hover:shadow-[0_24px_48px_-12px_rgba(0,0,0,0.12)] active:scale-[0.98] md:rounded-[1.5rem]", uiDensity === 'compact' ? 'p-4' : 'p-4 md:p-6')}>
+                  <Link to={`/trips/${trip.id}`} className={cn("group block rounded-[1.25rem] bg-surface-container-lowest shadow-[0_12px_24px_rgba(0,0,0,0.06)] ring-1 ring-outline/10 transition-all duration-300 hover:-translate-y-2 hover:shadow-[0_24px_48px_-12px_rgba(0,0,0,0.12)] active:scale-[0.98] md:rounded-[1.5rem]", uiDensity === 'compact' ? 'p-4' : 'p-4 md:p-6')}>
                   <div className="mb-5 flex items-start justify-between gap-3 md:mb-6">
                     <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-secondary-container text-primary dark:text-white md:h-16 md:w-16">
                       <img alt={trip.title} className="h-full w-full object-cover" src={trip.image} loading="lazy" decoding="async" />
@@ -651,9 +595,9 @@ export function MyTrips() {
           })}
           {filteredTrips.length === 0 && (
             <motion.div variants={itemVariants} className="col-span-full py-16 text-center border-2 border-dashed border-outline/30 rounded-[2rem] bg-surface-container-lowest/50">
-              <motion.div animate={{ y: [0, -10, 0] }} transition={{ repeat: Infinity, duration: 4, ease: 'easeInOut' }}>
+              <div>
                 <Icons.MapPin className="w-16 h-16 mx-auto text-primary/50 mb-6 drop-shadow-md" />
-              </motion.div>
+              </div>
               <p className="text-on-surface font-headline font-bold text-xl">
                 {statusFilter === 'all'
                   ? 'Chưa có chuyến đi nào. Hãy tạo chuyến đi đầu tiên!'

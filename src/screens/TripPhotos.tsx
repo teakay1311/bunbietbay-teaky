@@ -1,4 +1,4 @@
-import { useParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import type { FormEvent } from 'react';
 
 import { Icons } from '../components/Icons';
@@ -15,9 +15,8 @@ import { formatLocalDate } from '../utils/date';
 import { motion, AnimatePresence } from 'motion/react';
 import { pageStaggerVariants } from '../ui/motion';
 import { SortSelect } from '../components/SortSelect';
-import { chainComparators, compareDate, compareText, stableSort, type SortOption } from '../utils/listSort';
-
-type PhotoSortKey = 'createdDesc' | 'createdAsc' | 'takenDesc' | 'takenAsc' | 'albumAsc' | 'placeAsc' | 'photosFirst' | 'journalsFirst';
+import { type SortOption } from '../utils/listSort';
+import { filterAndSortPhotos, getPhotoAlbums, groupPhotosByTimeline, type PhotoSortKey } from '../features/photos/selectors';
 
 const PHOTO_SORT_OPTIONS: Array<SortOption<PhotoSortKey>> = [
   { value: 'createdDesc', label: 'Mới nhất' },
@@ -32,7 +31,8 @@ const PHOTO_SORT_OPTIONS: Array<SortOption<PhotoSortKey>> = [
 
 export function TripPhotos() {
   const { id } = useParams();
-  const { trips, photos, addPhotos, editPhoto, deletePhoto, setCurrentTripId } = useAppContext();
+  const [searchParams] = useSearchParams();
+  const { trips, photos, activities, savedPlaces, addPhotos, editPhoto, deletePhoto, setCurrentTripId } = useAppContext();
   const { showToast, confirm } = useFeedback();
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isAddJournalOpen, setIsAddJournalOpen] = useState(false);
@@ -79,52 +79,27 @@ export function TripPhotos() {
 
   const trip = trips.find(t => t.id === id);
   const tripPhotos = useMemo(() => photos.filter(p => p.tripId === id), [photos, id]);
+  const tripActivities = useMemo(() => activities.filter((item) => item.tripId === id), [activities, id]);
+  const tripPlaces = useMemo(() => savedPlaces.filter((item) => item.tripId === id), [savedPlaces, id]);
+  const contextActivityId = tripActivities.some((item) => item.id === searchParams.get('activityId')) ? searchParams.get('activityId') ?? '' : '';
+  const contextPlaceId = tripPlaces.some((item) => item.id === searchParams.get('placeId')) ? searchParams.get('placeId') ?? '' : '';
+  useEffect(() => {
+    if (searchParams.get('action') === 'journal') setIsAddJournalOpen(true);
+    if (searchParams.get('action') === 'photo') setIsAddOpen(true);
+  }, [searchParams]);
+  const activityNameById = useMemo(() => new Map(tripActivities.map((item) => [item.id, item.title])), [tripActivities]);
+  const placeNameById = useMemo(() => new Map(tripPlaces.map((item) => [item.id, item.name])), [tripPlaces]);
   const photoStorageSummary = useMemo(() => getPhotoStorageSummary(tripPhotos), [tripPhotos]);
   const shouldWarnAboutLocalPhotoStorage = useMemo(() => shouldWarnAboutEmbeddedStorage(tripPhotos), [tripPhotos]);
 
-  const albums = useMemo(() => ['Tất cả', ...Array.from(new Set(tripPhotos.map(p => p.album)))], [tripPhotos]);
-  const displayedPhotos = useMemo(() => {
-    const photosByAlbum = selectedAlbum === 'Tất cả' ? tripPhotos : tripPhotos.filter((photo) => photo.album === selectedAlbum);
-    const query = photoSearch.trim().toLowerCase();
-
-    const filteredList = !query ? photosByAlbum : photosByAlbum.filter((photo) => {
-      return photo.album.toLowerCase().includes(query)
-        || photo.place?.toLowerCase().includes(query)
-        || photo.tags?.some((tag) => tag.toLowerCase().includes(query))
-        || photo.people?.some((person) => person.toLowerCase().includes(query))
-        || photo.takenOn?.includes(query);
-    });
-
-    const fallbackSort = (a: Photo, b: Photo) => compareDate(a.createdAt, b.createdAt, 'desc');
-    const typeRank = (photo: Photo, journalFirst = false) => {
-      const isJournal = photo.itemType === 'journal';
-      return journalFirst ? (isJournal ? 0 : 1) : (isJournal ? 1 : 0);
-    };
-    const sortComparator = (a: Photo, b: Photo) => {
-      switch (sortBy) {
-        case 'createdAsc': return compareDate(a.createdAt, b.createdAt, 'asc');
-        case 'takenDesc': return compareDate(a.takenOn ?? a.createdAt, b.takenOn ?? b.createdAt, 'desc');
-        case 'takenAsc': return compareDate(a.takenOn ?? a.createdAt, b.takenOn ?? b.createdAt, 'asc');
-        case 'albumAsc': return compareText(a.album, b.album, 'asc');
-        case 'placeAsc': return compareText(a.place, b.place, 'asc');
-        case 'photosFirst': return typeRank(a) - typeRank(b);
-        case 'journalsFirst': return typeRank(a, true) - typeRank(b, true);
-        case 'createdDesc':
-        default: return compareDate(a.createdAt, b.createdAt, 'desc');
-      }
-    };
-    return stableSort(filteredList, chainComparators(sortComparator, fallbackSort));
-  }, [photoSearch, selectedAlbum, tripPhotos, sortBy]);
+  const albums = useMemo(() => getPhotoAlbums(tripPhotos), [tripPhotos]);
+  const displayedPhotos = useMemo(
+    () => filterAndSortPhotos(tripPhotos, selectedAlbum, photoSearch, sortBy),
+    [photoSearch, selectedAlbum, tripPhotos, sortBy],
+  );
 
   const visiblePhotos = useMemo(() => displayedPhotos.slice(0, visibleCount), [displayedPhotos, visibleCount]);
-  const timelineGroups = useMemo(() => {
-    const groupMap = new Map<string, Photo[]>();
-    displayedPhotos.forEach((photo) => {
-      const date = photo.takenOn || photo.createdAt.slice(0, 10);
-      groupMap.set(date, [...(groupMap.get(date) ?? []), photo]);
-    });
-    return Array.from(groupMap.entries()).map(([date, groupPhotos]) => ({ date, photos: groupPhotos }));
-  }, [displayedPhotos]);
+  const timelineGroups = useMemo(() => groupPhotosByTimeline(displayedPhotos), [displayedPhotos]);
 
   const selectedPhoto = useMemo(
     () => tripPhotos.find((photo) => photo.id === selectedPhotoId) ?? null,
@@ -203,6 +178,8 @@ export function TripPhotos() {
         place,
         people,
         tags,
+        activityId: String(formData.get('activityId') || '') || undefined,
+        placeId: String(formData.get('placeId') || '') || undefined,
         ...(selectedPhoto.itemType === 'journal' ? { content } : {}),
       });
       setIsEditMetadataOpen(false);
@@ -240,6 +217,8 @@ export function TripPhotos() {
         place,
         tags,
         people,
+        activityId: String(formData.get('activityId') || '') || undefined,
+        placeId: String(formData.get('placeId') || '') || undefined,
       } as Photo]);
       setIsAddJournalOpen(false);
     } catch (error) {
@@ -257,6 +236,8 @@ export function TripPhotos() {
     const place = formData.get('place') as string;
     const tags = ((formData.get('tags') as string) || '').split(',').map((value) => value.trim()).filter(Boolean);
     const people = ((formData.get('people') as string) || '').split(',').map((value) => value.trim()).filter(Boolean);
+    const activityId = String(formData.get('activityId') || '') || undefined;
+    const placeId = String(formData.get('placeId') || '') || undefined;
     const files = selectedFiles.length > 0 ? selectedFiles : Array.from(fileInputRef.current?.files ?? []);
 
     if (!files || files.length === 0) {
@@ -290,6 +271,8 @@ export function TripPhotos() {
             place,
             tags,
             people,
+            activityId,
+            placeId,
           });
           continue;
         }
@@ -304,6 +287,8 @@ export function TripPhotos() {
           place,
           tags,
           people,
+          activityId,
+          placeId,
         });
       }
       if (nextPhotos.length > 0) {
@@ -347,16 +332,17 @@ export function TripPhotos() {
     }
 
     void (async () => {
+      await deletePhoto(photoId);
       let cloudDeleteFailed = false;
       if (targetPhoto?.provider === 'cloudinary' && targetPhoto.providerPublicId) {
         try {
-          await deleteImageFromCloudinary(targetPhoto.providerPublicId);
+          const wasDeleted = await deleteImageFromCloudinary(targetPhoto.providerPublicId);
+          if (!wasDeleted) cloudDeleteFailed = true;
         } catch (cloudError) {
           console.error('Failed to delete image from Cloudinary', cloudError);
           cloudDeleteFailed = true;
         }
       }
-      await deletePhoto(photoId);
       if (cloudDeleteFailed) {
         showToast({
           tone: 'error',
@@ -394,11 +380,18 @@ export function TripPhotos() {
     const targets = selectedPhotoIds
       .map((photoId) => tripPhotos.find((photo) => photo.id === photoId))
       .filter(Boolean) as Photo[];
+    let cloudCleanupFailedCount = 0;
     const deleteResults = await Promise.allSettled(targets.map(async (photo) => {
-      if (photo.provider === 'cloudinary' && photo.providerPublicId) {
-        await deleteImageFromCloudinary(photo.providerPublicId);
-      }
       await deletePhoto(photo.id);
+      if (photo.provider === 'cloudinary' && photo.providerPublicId) {
+        try {
+          const wasDeleted = await deleteImageFromCloudinary(photo.providerPublicId);
+          if (!wasDeleted) cloudCleanupFailedCount += 1;
+        } catch (error) {
+          cloudCleanupFailedCount += 1;
+          console.error('Failed to delete image from Cloudinary', error);
+        }
+      }
     }));
     const failedCount = deleteResults.filter((result) => result.status === 'rejected').length;
     if (failedCount > 0) {
@@ -406,6 +399,12 @@ export function TripPhotos() {
         tone: 'error',
         title: 'Xóa ảnh chưa hoàn tất',
         message: `Có ${failedCount}/${targets.length} ảnh không xóa được. Vui lòng thử lại.`,
+      });
+    } else if (cloudCleanupFailedCount > 0) {
+      showToast({
+        tone: 'error',
+        title: 'Đã gỡ ảnh khỏi chuyến đi',
+        message: `${cloudCleanupFailedCount} file gốc trên Cloudinary có thể chưa bị xóa.`,
       });
     } else {
       showToast({
@@ -422,7 +421,7 @@ export function TripPhotos() {
   const itemVariants = {
     hidden: { opacity: 0, scale: 0.95 },
     show: { opacity: 1, scale: 1, transition: { ease: 'easeOut', duration: 0.2 } }
-  };
+  } as const;
 
   return (
     <motion.div variants={containerVariants} initial="hidden" animate="show" className="pb-10">
@@ -488,7 +487,7 @@ export function TripPhotos() {
             className="w-full rounded-xl border border-outline-variant/50 bg-surface-container-low py-3 pl-10 pr-4 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
           />
           </div>
-          <SortSelect value={sortBy} options={PHOTO_SORT_OPTIONS} onChange={setSortBy} className="w-full border border-outline-variant/50 bg-surface-container-low py-3 md:w-auto md:min-w-[190px]" />
+          <SortSelect<PhotoSortKey> value={sortBy} options={PHOTO_SORT_OPTIONS} onChange={setSortBy} className="w-full border border-outline-variant/50 bg-surface-container-low py-3 md:w-auto md:min-w-[190px]" />
           <div className="flex rounded-xl bg-surface-container-low p-1 ring-1 ring-outline-variant/40 sm:col-span-2">
             <button type="button" onClick={() => setViewMode('grid')} className={`rounded-lg px-3 py-2 text-sm font-bold transition ${viewMode === 'grid' ? 'bg-primary text-on-primary' : 'text-secondary hover:bg-surface-container'}`}>
               Grid
@@ -574,6 +573,7 @@ export function TripPhotos() {
                       <p className="mt-1 line-clamp-2 text-sm text-secondary dark:text-gray-300">
                         {photo.itemType === 'journal' ? photo.content : [photo.place, ...(photo.tags ?? [])].filter(Boolean).join(' · ') || photo.album}
                       </p>
+                      {(photo.activityId || photo.placeId) && <p className="mt-1 truncate text-xs text-secondary">{photo.activityId ? `Hoạt động: ${activityNameById.get(photo.activityId) ?? 'Đã xóa'}` : `Địa điểm: ${placeNameById.get(photo.placeId!) ?? 'Đã xóa'}`}</p>}
                     </div>
                   </button>
                 ))}
@@ -747,6 +747,7 @@ export function TripPhotos() {
               <input name="place" type="text" placeholder="VD: Hồ Xuân Hương" className="w-full rounded-xl border border-outline-variant/50 bg-surface-container-low px-4 py-3 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" />
             </div>
           </div>
+          <div className="grid gap-4 sm:grid-cols-2"><label className="text-xs font-bold text-secondary">Hoạt động liên quan<select name="activityId" defaultValue={contextActivityId} className="mt-1 min-h-11 w-full rounded-xl border border-outline-variant/50 bg-surface-container-low px-3 text-sm"><option value="">Không gắn hoạt động</option>{tripActivities.map((activity) => <option key={activity.id} value={activity.id}>{activity.date} · {activity.title}</option>)}</select></label><label className="text-xs font-bold text-secondary">Địa điểm liên quan<select name="placeId" defaultValue={contextPlaceId} className="mt-1 min-h-11 w-full rounded-xl border border-outline-variant/50 bg-surface-container-low px-3 text-sm"><option value="">Không gắn địa điểm</option>{tripPlaces.map((place) => <option key={place.id} value={place.id}>{place.name}</option>)}</select></label></div>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block font-label text-xs font-bold text-secondary dark:text-gray-300 mb-1">Người trong ảnh</label>
@@ -803,6 +804,7 @@ export function TripPhotos() {
               <input name="place" type="text" placeholder="VD: Quán cà phê X" className="w-full rounded-xl border border-outline-variant/50 bg-surface-container-low px-4 py-3 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" />
             </div>
           </div>
+          <div className="grid gap-4 sm:grid-cols-2"><label className="text-xs font-bold text-secondary">Hoạt động liên quan<select name="activityId" defaultValue={contextActivityId} className="mt-1 min-h-11 w-full rounded-xl border border-outline-variant/50 bg-surface-container-low px-3 text-sm"><option value="">Không gắn hoạt động</option>{tripActivities.map((activity) => <option key={activity.id} value={activity.id}>{activity.date} · {activity.title}</option>)}</select></label><label className="text-xs font-bold text-secondary">Địa điểm liên quan<select name="placeId" defaultValue={contextPlaceId} className="mt-1 min-h-11 w-full rounded-xl border border-outline-variant/50 bg-surface-container-low px-3 text-sm"><option value="">Không gắn địa điểm</option>{tripPlaces.map((place) => <option key={place.id} value={place.id}>{place.name}</option>)}</select></label></div>
           <div className="pt-4">
             <button disabled={isUploading} type="submit" className="w-full bg-primary text-on-primary py-4 rounded-xl font-bold hover:opacity-90 transition-opacity disabled:opacity-50 flex justify-center items-center gap-2">
               {isUploading ? (
@@ -957,6 +959,7 @@ export function TripPhotos() {
                 <input name="place" type="text" defaultValue={selectedPhoto.place ?? ''} className="w-full rounded-xl border border-outline-variant/50 bg-surface-container-low px-4 py-3 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" />
               </div>
             </div>
+            <div className="grid gap-4 sm:grid-cols-2"><label className="text-xs font-bold text-secondary">Hoạt động liên quan<select name="activityId" defaultValue={selectedPhoto.activityId ?? ''} className="mt-1 min-h-11 w-full rounded-xl border border-outline-variant/50 bg-surface-container-low px-3 text-sm"><option value="">Không gắn hoạt động</option>{tripActivities.map((activity) => <option key={activity.id} value={activity.id}>{activity.date} · {activity.title}</option>)}</select></label><label className="text-xs font-bold text-secondary">Địa điểm liên quan<select name="placeId" defaultValue={selectedPhoto.placeId ?? ''} className="mt-1 min-h-11 w-full rounded-xl border border-outline-variant/50 bg-surface-container-low px-3 text-sm"><option value="">Không gắn địa điểm</option>{tripPlaces.map((place) => <option key={place.id} value={place.id}>{place.name}</option>)}</select></label></div>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <label className="mb-1 block font-label text-xs font-bold text-secondary dark:text-gray-300">Người trong ảnh</label>

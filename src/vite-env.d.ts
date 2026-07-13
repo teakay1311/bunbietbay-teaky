@@ -17,6 +17,7 @@ interface ImportMeta {
 }
 
 interface Window {
+  deferredPrompt?: BeforeInstallPromptEvent | null;
   desktopApi?: {
     isDesktopApp: boolean;
     loadState: () => Promise<unknown | null>;
@@ -25,4 +26,9 @@ interface Window {
     getDataDirectory: () => Promise<string>;
     openDataDirectory: () => Promise<string>;
   };
+}
+
+interface BeforeInstallPromptEvent extends Event {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>;
 }

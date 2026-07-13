@@ -31,6 +31,13 @@ const validSnapshot: PersistedAppState = {
   viewerProfileId: 'm1',
 };
 
+test('keeps a new production workspace empty instead of injecting demo trips', () => {
+  const normalizedState = normalizePersistedState(null, fallbackState);
+  assert.deepEqual(normalizedState.trips, []);
+  assert.deepEqual(normalizedState.memberships, []);
+  assert.equal(normalizedState.currentTripId, null);
+});
+
 test('migrates persisted photos to include storage metadata', () => {
   const normalizedState = normalizePersistedState({
     version: 1,
@@ -171,6 +178,17 @@ test('migrates a legacy backup before full validation', () => {
     members: [{ id: 'legacy-user', name: 'Legacy User', avatar: '', email: 'legacy@example.com' }],
   });
   assert.equal(imported.memberships[0]?.role, 'owner');
+});
+
+test('accepts linked trip entities and rejects cross-trip links', () => {
+  const linked = structuredClone(validSnapshot);
+  linked.savedPlaces.push({ id: 'place-1', tripId: 't1', name: 'Quán ăn', type: 'restaurant' });
+  linked.activities.push({ id: 'activity-1', tripId: 't1', date: '2026-01-02', time: '09:00', title: 'Ăn sáng', location: 'Quán ăn', note: '', type: 'restaurant', placeId: 'place-1' });
+  linked.expenses.push({ id: 'expense-1', tripId: 't1', date: '2026-01-02', time: '09:30', title: 'Ăn sáng', category: 'Ăn uống', amount: 100000, paidBy: 'm1', participants: ['m1'], activityId: 'activity-1', placeId: 'place-1' });
+  validateImportedSnapshot(linked);
+
+  linked.expenses[0].activityId = 'missing';
+  assert.throws(() => validateImportedSnapshot(linked), /hoạt động không hợp lệ/i);
 });
 
 test('duplicates active memberships with the creator as owner', () => {

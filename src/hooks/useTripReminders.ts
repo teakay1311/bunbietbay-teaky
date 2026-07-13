@@ -45,20 +45,22 @@ function cleanupReminderMarks(activeReminderIds: Set<string>) {
 
 export function useTripReminders() {
   const { trips, activities, isHydrated } = useAppContext();
-  const { remindersEnabled, reminderLeadMinutes, notificationPermission } = useSettings();
+  const { getEffectiveTripReminders, notificationPermission } = useSettings();
 
   useEffect(() => {
-    if (!isHydrated || !remindersEnabled || notificationPermission !== 'granted' || typeof Notification === 'undefined') {
+    if (!isHydrated || notificationPermission !== 'granted' || typeof Notification === 'undefined') {
       return;
     }
 
     const checkReminders = () => {
       const activeReminderIds = new Set<string>();
       trips.forEach((trip) => {
+        const settings = getEffectiveTripReminders(trip.id);
+        if (!settings.enabled) return;
         const tripStartAt = parseLocalDate(trip.startDate).getTime();
         const tripReminderId = `trip-start:${trip.id}:${trip.startDate}`;
         activeReminderIds.add(tripReminderId);
-        if (shouldSendReminder(tripReminderId, tripStartAt, 24 * 60)) {
+        if (shouldSendReminder(tripReminderId, tripStartAt, settings.tripStartLeadMinutes)) {
           new Notification('Chuyến đi sắp bắt đầu', {
             body: `${trip.title} sẽ bắt đầu vào ${trip.startDate}. Kiểm tra lại hành lý và lịch trình nhé.`,
           });
@@ -67,6 +69,8 @@ export function useTripReminders() {
       });
 
       activities.forEach((activity) => {
+        const settings = getEffectiveTripReminders(activity.tripId);
+        if (!settings.enabled) return;
         const normalizedTime = normalizeTimeForInput(activity.time);
         if (!normalizedTime) {
           return;
@@ -78,7 +82,7 @@ export function useTripReminders() {
         const activityReminderId = `activity:${activity.id}:${activity.date}:${normalizedTime}`;
         activeReminderIds.add(activityReminderId);
 
-        if (shouldSendReminder(activityReminderId, activityDate.getTime(), reminderLeadMinutes)) {
+        if (shouldSendReminder(activityReminderId, activityDate.getTime(), settings.activityLeadMinutes)) {
           new Notification('Hoạt động sắp diễn ra', {
             body: `${activity.title} tại ${activity.location} sẽ bắt đầu lúc ${activity.time}.`,
           });
@@ -91,5 +95,5 @@ export function useTripReminders() {
     checkReminders();
     const intervalId = window.setInterval(checkReminders, 60_000);
     return () => window.clearInterval(intervalId);
-  }, [activities, isHydrated, notificationPermission, reminderLeadMinutes, remindersEnabled, trips]);
+  }, [activities, getEffectiveTripReminders, isHydrated, notificationPermission, trips]);
 }

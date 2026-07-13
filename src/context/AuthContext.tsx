@@ -2,19 +2,11 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import type { Session } from '@supabase/supabase-js';
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
 import type { UserProfile } from '../domain/models';
+import { ensureProfile, fetchInvitations, type PendingInvitation } from '../data/authService';
+import { buildDefaultAvatar, getDefaultDisplayName } from '../domain/profileDefaults';
 
 export type { UserProfile } from '../domain/models';
-
-export type PendingInvitation = {
-  id: string;
-  tripId: string;
-  tripTitle: string;
-  email: string;
-  role: 'admin' | 'editor' | 'viewer';
-  status: 'pending' | 'accepted' | 'declined' | 'revoked';
-  createdAt: string;
-  invitedByName: string | null;
-};
+export type { PendingInvitation } from '../data/authService';
 
 type AuthContextType = {
   isConfigured: boolean;
@@ -41,17 +33,6 @@ type AuthContextType = {
   refreshAuthData: () => Promise<void>;
 };
 
-type InvitationRow = {
-  id: string;
-  trip_id: string;
-  email: string;
-  role: PendingInvitation['role'];
-  status: PendingInvitation['status'];
-  created_at: string;
-  trips?: { title?: string | null } | null;
-  inviter?: { display_name?: string | null } | null;
-};
-
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 function isLocalHost() {
@@ -60,121 +41,6 @@ function isLocalHost() {
   }
 
   return window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-}
-
-function getDefaultDisplayName(email: string | null) {
-  if (!email) {
-    return 'Traveler';
-  }
-
-  const [localPart] = email.split('@');
-  return localPart ? localPart.slice(0, 1).toUpperCase() + localPart.slice(1) : 'Traveler';
-}
-
-function buildDefaultAvatar(seed: string | null) {
-  return `https://api.dicebear.com/9.x/glass/svg?seed=${encodeURIComponent(seed || 'traveler')}`;
-}
-
-async function fetchProfile(userId: string): Promise<UserProfile | null> {
-  if (!supabase) {
-    return null;
-  }
-
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('id, email, display_name, avatar_url, phone, birthdate, bio')
-    .eq('id', userId)
-    .maybeSingle();
-
-  if (error) {
-    throw error;
-  }
-
-  if (!data) {
-    return null;
-  }
-
-  return {
-    id: data.id as string,
-    email: data.email as string,
-    displayName: data.display_name as string,
-    avatar: data.avatar_url as string,
-    phone: (data.phone as string | null) ?? undefined,
-    birthdate: (data.birthdate as string | null) ?? undefined,
-    bio: (data.bio as string | null) ?? undefined,
-  };
-}
-
-async function ensureProfile(session: Session): Promise<UserProfile> {
-  if (!supabase) {
-    throw new Error('Supabase chưa được cấu hình');
-  }
-
-  const existing = await fetchProfile(session.user.id);
-  if (existing) {
-    return existing;
-  }
-
-  const email = session.user.email?.toLowerCase() ?? '';
-  const displayName = getDefaultDisplayName(email);
-  const avatar = buildDefaultAvatar(session.user.id);
-
-  const { error } = await supabase
-    .from('profiles')
-    .insert({
-      id: session.user.id,
-      email,
-      display_name: displayName,
-      avatar_url: avatar,
-    });
-
-  if (error) {
-    throw error;
-  }
-
-  const profile = await fetchProfile(session.user.id);
-  if (!profile) {
-    throw new Error('Không thể khởi tạo hồ sơ người dùng');
-  }
-
-  return profile;
-}
-
-async function fetchInvitations(email: string | null): Promise<PendingInvitation[]> {
-  if (!supabase || !email) {
-    return [];
-  }
-
-  const { data, error } = await supabase
-    .from('trip_invitations')
-    .select(`
-      id,
-      trip_id,
-      email,
-      role,
-      status,
-      created_at,
-      trips:trip_id(title),
-      inviter:invited_by(display_name)
-    `)
-    .eq('email', email.toLowerCase())
-    .eq('status', 'pending')
-    .order('created_at', { ascending: false });
-
-  if (error) {
-    throw error;
-  }
-
-  return ((data ?? []) as InvitationRow[]).map((invitation) => ({
-    id: invitation.id,
-    tripId: invitation.trip_id,
-    tripTitle: invitation.trips?.title ?? 'Chuyến đi',
-    email: invitation.email,
-    role: invitation.role,
-    status: invitation.status,
-    createdAt: invitation.created_at,
-    invitedByName: invitation.inviter?.display_name ?? null,
-  }));
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -221,31 +87,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       ]);
       setProfile(nextProfile);
       setPendingInvitations(nextInvitations);
-
-      // Auto-accept trip invitations if setting is enabled
-      // Read directly from localStorage to avoid circular dependency with SettingsContext
-      const shouldAutoAcceptTrips = localStorage.getItem('autoAcceptTripInvites') !== 'false';
-      if (shouldAutoAcceptTrips && supabase && nextInvitations.length > 0) {
-        const pendingTrips = nextInvitations.filter(inv => inv.status === 'pending');
-        if (pendingTrips.length > 0) {
-          const results = await Promise.allSettled(
-            pendingTrips.map(inv =>
-              supabase.rpc('accept_trip_invitation', { target_invitation_id: inv.id })
-            )
-          );
-          const accepted = results.filter(r => r.status === 'fulfilled').length;
-          if (accepted > 0) {
-            console.log(`[Auto-accept] Accepted ${accepted}/${pendingTrips.length} trip invitation(s)`);
-            // Re-fetch to update state after auto-accepting
-            const [updatedProfile, updatedInvitations] = await Promise.all([
-              ensureProfile(session),
-              fetchInvitations(session.user.email ?? null),
-            ]);
-            setProfile(updatedProfile);
-            setPendingInvitations(updatedInvitations);
-          }
-        }
-      }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       const isTableMissing = errorMessage.includes('schema cache') || errorMessage.includes('does not exist') || errorMessage.includes('relation');
@@ -319,8 +160,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (!supabase || !session.user?.email) return;
 
+    const client = supabase;
     let isSubscribed = true;
-    const channel = supabase
+    const channel = client
       .channel('public:trip_invitations:authContext')
       .on(
         'postgres_changes',
@@ -344,7 +186,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     return () => {
       isSubscribed = false;
-      void supabase.removeChannel(channel);
+      void client.removeChannel(channel);
     };
   }, [refreshAuthData, session]);
 

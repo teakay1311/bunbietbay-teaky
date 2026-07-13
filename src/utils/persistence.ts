@@ -82,18 +82,22 @@ async function clearIndexedDbState() {
 
 
 
-export async function loadPersistedState<T>() {
+export async function loadPersistedState<T>(prepare: (state: unknown) => T = (state) => state as T) {
   if (typeof window === 'undefined') {
     return null as T | null;
   }
 
   if (window.desktopApi?.loadState) {
-    return (await window.desktopApi.loadState()) as T | null;
+    const state = await window.desktopApi.loadState();
+    return state === null ? null : prepare(state);
   }
 
   if (supportsIndexedDb()) {
     try {
-      return await readIndexedDbState<T>();
+      const state = await readIndexedDbState<unknown>();
+      if (state !== null) {
+        return prepare(state);
+      }
     } catch (error) {
       console.error('Failed to load persisted state from IndexedDB, falling back to localStorage', error);
     }
@@ -104,7 +108,15 @@ export async function loadPersistedState<T>() {
     return null as T | null;
   }
 
-  return JSON.parse(rawState) as T;
+  const preparedState = prepare(JSON.parse(rawState));
+  if (supportsIndexedDb()) {
+    try {
+      await writeIndexedDbState(preparedState);
+    } catch (error) {
+      console.error('Failed to migrate localStorage state to IndexedDB; keeping localStorage as the source', error);
+    }
+  }
+  return preparedState;
 }
 
 export async function savePersistedState<T>(state: T) {

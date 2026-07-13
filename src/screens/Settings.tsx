@@ -1,49 +1,61 @@
 import { useEffect, useMemo, useState, useRef, type ChangeEvent, type FormEvent } from 'react';
-import { Link } from 'react-router-dom';
-import { useLocation } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 
 import { Icons } from '../components/Icons';
 import { useSettings } from '../context/SettingsContext';
 import { clearPersistedState } from '../utils/persistence';
-import { formatLocalDateTime } from '../utils/date';
 import { EMBEDDED_PHOTO_WARNING_BYTES, formatBytes, getPhotoStorageSummary, shouldWarnAboutEmbeddedStorage } from '../utils/photoStorage';
 import { useAuth } from '../context/AuthContext';
-import { useAppContext, type PersistedAppState } from '../context/AppContext';
+import { useAppContext } from '../context/AppContext';
 import { useFeedback } from '../context/FeedbackContext';
 import { useNotebook } from '../context/NotebookContext';
-import { prepareImportedSnapshot } from '../utils/appState';
+import { createWorkspaceBackupV7, prepareWorkspaceBackup } from '../utils/workspaceBackup';
 import { motion, AnimatePresence } from 'motion/react';
+import { usePwaInstallPrompt } from '../features/settings/usePwaInstallPrompt';
+import { resizeImageFileToDataUrl } from '../utils/avatarImage';
 
-type SectionKey = 'account' | 'workspace' | 'appearance' | 'reminders' | 'shortcuts' | 'data';
+type SectionKey = 'account' | 'appearance' | 'reminders' | 'shortcuts' | 'data';
+
+const SECTION_ROUTES: Record<SectionKey, string> = {
+  account: 'profile',
+  appearance: 'preferences',
+  reminders: 'notifications',
+  data: 'data',
+  shortcuts: 'shortcuts',
+};
+
+const ROUTE_SECTIONS: Record<string, SectionKey> = Object.fromEntries(
+  Object.entries(SECTION_ROUTES).map(([section, route]) => [route, section]),
+) as Record<string, SectionKey>;
 
 const SECTIONS: Array<{ key: SectionKey; label: string; icon: keyof typeof Icons }> = [
   { key: 'account', label: 'Tài khoản', icon: 'Mail' },
-  { key: 'workspace', label: 'Quyền truy cập', icon: 'Users' },
-  { key: 'appearance', label: 'Giao diện', icon: 'LayoutDashboard' },
-  { key: 'reminders', label: 'Nhắc việc', icon: 'Calendar' },
+  { key: 'appearance', label: 'Tùy chỉnh', icon: 'LayoutDashboard' },
+  { key: 'reminders', label: 'Thông báo', icon: 'Calendar' },
   { key: 'shortcuts', label: 'Phím tắt', icon: 'Command' },
   { key: 'data', label: 'Dữ liệu', icon: 'FileText' },
 ];
 
 const SHORTCUTS = [
   ['Ctrl/Cmd + N', 'Tạo chuyến đi mới'],
-  ['Ctrl/Cmd + ,', 'Mở cài đặt'],
+  ['Ctrl/Cmd + ,', 'Mở Tài khoản'],
   ['Ctrl/Cmd + K', 'Mở command palette'],
   ['/', 'Focus ô tìm kiếm trong màn hình hiện tại'],
   ['G rồi S', 'Đi đến Lịch trình'],
-  ['G rồi O', 'Đi đến Tổng quan'],
+  ['G rồi O', 'Đi đến Trang chủ chuyến đi'],
   ['G rồi E', 'Đi đến Chi tiêu'],
   ['G rồi M', 'Đi đến Thành viên'],
   ['G rồi P', 'Đi đến Địa điểm'],
-  ['G rồi H', 'Đi đến Hành lý'],
-  ['G rồi I', 'Đi đến Ảnh'],
+  ['G rồi H', 'Đi đến Chuẩn bị'],
+  ['G rồi I', 'Đi đến Kỷ niệm'],
   ['Ctrl/Cmd + Shift + M', 'Mời thành viên bằng email'],
   ['Esc', 'Đóng modal đang mở'],
   ['?', 'Mở bảng trợ giúp phím tắt'],
 ];
 
 export function Settings() {
-  const location = useLocation();
+  const navigate = useNavigate();
+  const { section } = useParams();
   const {
     themeMode,
     setThemeMode,
@@ -52,48 +64,41 @@ export function Settings() {
     themePresets,
     uiDensity,
     setUiDensity,
-    language,
-    setLanguage,
     remindersEnabled,
     setRemindersEnabled,
     reminderLeadMinutes,
     setReminderLeadMinutes,
+    tripStartLeadMinutes,
+    setTripStartLeadMinutes,
+    setIsPrivacyMode,
     notificationPermission,
     requestNotificationPermission,
-    autoAcceptTripInvites,
-    setAutoAcceptTripInvites,
-    autoAcceptNotebookInvites,
-    setAutoAcceptNotebookInvites,
+    isPreferencesSyncing,
+    preferencesSyncError,
+    preferences,
+    tripNotificationPreferences,
+    replaceLocalTripNotificationPreferences,
   } = useSettings();
   const {
     session,
     isConfigured,
     authError,
     authNotice,
-    pendingInvitations,
     signOut,
     updateMyProfile,
     updatePassword,
-    acceptInvitation,
-    declineInvitation,
     clearAuthFeedback,
   } = useAuth();
   const {
-    trips,
     photos,
     snapshot,
     currentUserProfile,
-    currentTripId,
     replacePersistedState,
     isRemoteMode,
   } = useAppContext();
-  const {
-    pendingNotebookInvitations,
-    acceptNotebookInvitation,
-    declineNotebookInvitation,
-  } = useNotebook();
+  const { notebooks, notebookPlaces, replaceLocalNotebookState } = useNotebook();
   const { showToast, confirm } = useFeedback();
-  const [activeSection, setActiveSection] = useState<SectionKey>('account');
+  const activeSection = ROUTE_SECTIONS[section ?? 'profile'] ?? 'account';
   const [profileForm, setProfileForm] = useState({
     displayName: '',
     avatar: '',
@@ -110,44 +115,16 @@ export function Settings() {
   });
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
-  const [deferredPrompt, setDeferredPrompt] = useState<any>((window as any).deferredPrompt || null);
+  const { canInstall, install } = usePwaInstallPrompt();
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const avatarInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    const handler = (e: any) => {
-      e.preventDefault();
-      setDeferredPrompt(e);
-      (window as any).deferredPrompt = e;
-    };
-    window.addEventListener('beforeinstallprompt', handler);
-    return () => window.removeEventListener('beforeinstallprompt', handler);
-  }, []);
-
-  const handleInstallClick = async () => {
-    if (deferredPrompt) {
-      deferredPrompt.prompt();
-      const { outcome } = await deferredPrompt.userChoice;
-      if (outcome === 'accepted') {
-        setDeferredPrompt(null);
-        (window as any).deferredPrompt = null;
-      }
-    }
-  };
+  const handleInstallClick = () => { void install(); };
   const [dataDirectory, setDataDirectory] = useState<string | null>(null);
 
   const isDesktopApp = Boolean(window.desktopApi?.isDesktopApp);
   const photoStorageSummary = useMemo(() => getPhotoStorageSummary(photos), [photos]);
   const shouldWarnAboutLocalPhotoStorage = useMemo(() => shouldWarnAboutEmbeddedStorage(photos), [photos]);
-  const currentTrip = trips.find((trip) => trip.id === currentTripId) ?? trips[0] ?? null;
-
-  useEffect(() => {
-    const state = location.state as { section?: SectionKey } | null;
-    if (state?.section) {
-      setActiveSection(state.section);
-    }
-  }, [location.state]);
-
   useEffect(() => {
     setProfileForm({
       displayName: currentUserProfile?.displayName ?? '',
@@ -170,7 +147,16 @@ export function Settings() {
 
   const exportBackup = () => {
     const exportTimestamp = new Date().toISOString();
-    const backupBlob = new Blob([JSON.stringify(snapshot, null, 2)], { type: 'application/json' });
+    const backup = createWorkspaceBackupV7({
+      workspace: snapshot,
+      library: {
+        notebooks: notebooks.map(({ id, name, type, createdBy, createdAt, updatedAt }) => ({ id, name, type, createdBy, createdAt, updatedAt })),
+        places: notebookPlaces,
+      },
+      preferences,
+      tripNotificationPreferences: Object.values(tripNotificationPreferences),
+    });
+    const backupBlob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
     const downloadUrl = URL.createObjectURL(backupBlob);
     const anchor = document.createElement('a');
     anchor.href = downloadUrl;
@@ -187,8 +173,19 @@ export function Settings() {
 
     try {
       const rawContent = await file.text();
-      const parsedSnapshot = JSON.parse(rawContent) as Partial<PersistedAppState>;
-      replacePersistedState(prepareImportedSnapshot(parsedSnapshot));
+      const prepared = prepareWorkspaceBackup(JSON.parse(rawContent));
+      replacePersistedState(prepared.workspace);
+      if (prepared.library) replaceLocalNotebookState(prepared.library.notebooks, prepared.library.places);
+      if (prepared.preferences) {
+        setThemeMode(prepared.preferences.themeMode);
+        setThemePresetId(prepared.preferences.themePresetId);
+        setUiDensity(prepared.preferences.uiDensity);
+        setIsPrivacyMode(prepared.preferences.isPrivacyMode);
+        setRemindersEnabled(prepared.preferences.remindersEnabled);
+        setReminderLeadMinutes(prepared.preferences.activityLeadMinutes);
+        setTripStartLeadMinutes(prepared.preferences.tripStartLeadMinutes);
+      }
+      replaceLocalTripNotificationPreferences(prepared.tripNotificationPreferences);
       showToast({
         tone: 'success',
         title: 'Đã nhập backup',
@@ -277,42 +274,7 @@ export function Settings() {
     setProfileError(null);
 
     try {
-      // Very simple local bas64 encoding for avatar
-      const reader = new FileReader();
-      const base64Data = await new Promise<string>((resolve, reject) => {
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = () => reject(new Error('Không thể đọc file'));
-        reader.readAsDataURL(file);
-      });
-
-      // Quick resize logic using canvas to keep avatar size small
-      const img = new Image();
-      await new Promise<void>((resolve, reject) => {
-        img.onload = () => resolve();
-        img.onerror = () => reject(new Error('Không thể xử lý ảnh đại diện.'));
-        img.src = base64Data;
-      });
-
-      const canvas = document.createElement('canvas');
-      const MAX_SIZE = 400;
-      let width = img.width;
-      let height = img.height;
-
-      if (width > height && width > MAX_SIZE) {
-        height *= MAX_SIZE / width;
-        width = MAX_SIZE;
-      } else if (height > MAX_SIZE) {
-        width *= MAX_SIZE / height;
-        height = MAX_SIZE;
-      }
-
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext('2d');
-      ctx?.drawImage(img, 0, 0, width, height);
-
-      const optimizedBase64 = canvas.toDataURL('image/webp', 0.8);
-
+      const optimizedBase64 = await resizeImageFileToDataUrl(file);
       setProfileForm((current) => ({ ...current, avatar: optimizedBase64 }));
       showToast({
         tone: 'success',
@@ -334,40 +296,53 @@ export function Settings() {
     hidden: { opacity: 0, y: 15, scale: 0.98 },
     visible: { opacity: 1, y: 0, scale: 1, transition: { ease: 'easeOut', duration: 0.2 } },
     exit: { opacity: 0, y: -10, scale: 0.98, transition: { duration: 0.2 } },
-  };
+  } as const;
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="pb-10">
       <div className="mb-6 flex flex-col gap-3 md:mb-8">
-        <p className="font-label text-[11px] font-extrabold uppercase tracking-[0.18em] text-secondary dark:text-gray-300 md:text-xs md:tracking-[0.3em]">System Settings</p>
+        <p className="font-label text-[11px] font-extrabold uppercase tracking-[0.18em] text-secondary dark:text-gray-300 md:text-xs md:tracking-[0.3em]">Thiết lập hệ thống</p>
         <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
           <div className="max-w-3xl">
-            <h1 className="font-headline text-2xl font-black text-primary dark:text-white md:text-5xl md:tracking-[-0.05em]">Cài đặt hệ thống & tài khoản</h1>
+            <h1 className="text-balance font-headline text-2xl font-black text-primary dark:text-white md:text-5xl">Tài khoản và tùy chỉnh</h1>
             <p className="mt-3 hidden text-lg leading-8 text-secondary dark:text-gray-300 md:block">
-              Khu vực này gom toàn bộ tài khoản, hồ sơ cá nhân, quyền truy cập, giao diện, nhắc việc, dữ liệu và phím tắt vào một workspace gọn hơn thay vì kéo dọc quá dài.
+              Quản lý hồ sơ cá nhân, giao diện, nhắc việc, dữ liệu và phím tắt theo từng nhóm rõ ràng.
             </p>
           </div>
           <div className="rounded-2xl bg-slate-950 px-4 py-3 text-white md:rounded-[1.75rem] md:px-5 md:py-4">
-            <p className="font-label text-[10px] uppercase tracking-[0.18em] text-teal-200 md:text-[11px] md:tracking-[0.24em]">Current mode</p>
-            <p className="mt-1 font-headline text-lg font-bold md:mt-2 md:text-2xl">{session ? 'Tài khoản đang kết nối' : isConfigured ? 'Có thể đăng nhập' : 'Local workspace'}</p>
+            <p className="font-label text-[10px] uppercase tracking-[0.18em] text-teal-200 md:text-[11px] md:tracking-[0.24em]">Chế độ hiện tại</p>
+            <p className="mt-1 font-headline text-lg font-bold md:mt-2 md:text-2xl">{session ? 'Tài khoản đang kết nối' : isConfigured ? 'Có thể đăng nhập' : 'Dữ liệu trên thiết bị'}</p>
           </div>
         </div>
       </div>
 
-      <div className="grid gap-8 xl:grid-cols-[280px_minmax(0,1fr)]">
-        <aside className="min-w-0 xl:sticky xl:top-28 xl:self-start">
-          <div className="no-scrollbar flex gap-2 overflow-x-auto rounded-2xl border border-outline-variant/40 bg-surface-container-lowest/90 p-2 shadow-[0_12px_28px_rgba(0,0,0,0.05)] backdrop-blur xl:block xl:overflow-hidden xl:rounded-[2rem] xl:p-3 xl:shadow-[0_18px_40px_rgba(0,0,0,0.06)]">
+      {(isPreferencesSyncing || preferencesSyncError) && (
+        <div role={preferencesSyncError ? 'alert' : 'status'} className={`mb-6 rounded-xl border px-4 py-3 text-sm ${preferencesSyncError ? 'border-error/40 bg-error-container text-on-error-container' : 'border-outline-variant bg-surface-container-low text-secondary'}`}>
+          {preferencesSyncError ? `Không thể đồng bộ tùy chỉnh: ${preferencesSyncError}` : 'Đang đồng bộ tùy chỉnh tài khoản…'}
+        </div>
+      )}
+
+      <div className="grid gap-6 md:grid-cols-[220px_minmax(0,1fr)] xl:grid-cols-[260px_minmax(0,1fr)]">
+        <aside className="min-w-0 md:sticky md:top-8 md:self-start">
+          <label className="block md:hidden">
+            <span className="sr-only">Chọn khu vực tài khoản</span>
+            <select value={activeSection} onChange={(event) => navigate(`/account/${SECTION_ROUTES[event.target.value as SectionKey]}`)} className="min-h-11 w-full rounded-xl border border-outline-variant bg-surface-container-lowest px-3 font-semibold">
+              {SECTIONS.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}
+            </select>
+          </label>
+          <div className="hidden rounded-2xl border border-outline-variant/40 bg-surface-container-lowest p-2 md:block">
             {SECTIONS.map((section) => {
               const Icon = Icons[section.icon];
               return (
                 <button
                   key={section.key}
                   type="button"
-                  onClick={() => setActiveSection(section.key)}
-                  className={`flex shrink-0 items-center gap-2 rounded-xl px-3 py-2.5 text-left transition xl:w-full xl:gap-3 xl:rounded-2xl xl:px-4 xl:py-3 ${activeSection === section.key ? 'bg-slate-950 text-white' : 'text-on-surface hover:bg-surface-container-low'}`}
+                  onClick={() => navigate(`/account/${SECTION_ROUTES[section.key]}`)}
+                  aria-current={activeSection === section.key ? 'page' : undefined}
+                  className={`flex min-h-11 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-semibold transition-colors ${activeSection === section.key ? 'bg-primary text-on-primary' : 'text-on-surface hover:bg-surface-container-low'}`}
                 >
-                  <Icon className="h-4 w-4 xl:h-5 xl:w-5" />
-                  <span className="whitespace-nowrap font-headline text-xs font-bold xl:text-sm">{section.label}</span>
+                  <Icon className="size-5" />
+                  <span>{section.label}</span>
                 </button>
               );
             })}
@@ -403,16 +378,16 @@ export function Settings() {
                 {!session && isConfigured && (
                   <div className="mb-6 grid gap-4 md:mb-8 md:gap-6 lg:grid-cols-[1.1fr_0.9fr]">
                     <div className="rounded-2xl bg-slate-950 p-4 text-white md:rounded-[1.75rem] md:p-6">
-                      <p className="font-label text-[10px] uppercase tracking-[0.18em] text-teal-200 md:text-xs md:tracking-[0.24em]">Account onboarding</p>
+                      <p className="font-label text-[10px] uppercase tracking-[0.18em] text-teal-200 md:text-xs md:tracking-[0.24em]">Bắt đầu với tài khoản</p>
                       <h3 className="mt-2 font-headline text-xl font-black md:mt-3 md:text-3xl md:tracking-[-0.04em]">Tạo tài khoản mật khẩu hoặc đăng nhập nhanh</h3>
                       <p className="mt-3 max-w-md text-sm leading-6 text-slate-300 md:mt-4 md:leading-7">
-                        Luồng onboarding chính đã được chuyển sang email + mật khẩu để bạn không phải mở email mỗi lần. OTP email vẫn còn ở màn đăng nhập như một phương án phụ.
+                        Đăng nhập chính dùng email và mật khẩu để không phải mở email mỗi lần. Mã OTP qua email vẫn là phương án dự phòng.
                       </p>
                     </div>
 
                     <div className="space-y-3 rounded-2xl border border-outline-variant/30 bg-surface-container-low p-4 md:space-y-4 md:rounded-[1.75rem] md:p-6">
                       <p className="text-sm leading-6 text-secondary dark:text-gray-300 md:leading-7">
-                        Khi đăng nhập, cùng một tài khoản sẽ dùng được trên nhiều máy và các lời mời theo email sẽ tự nối vào đúng workspace.
+                        Khi đăng nhập, cùng một tài khoản dùng được trên nhiều máy và lời mời theo email sẽ xuất hiện trong Hộp thư.
                       </p>
                       <Link
                         to="/login"
@@ -455,7 +430,7 @@ export function Settings() {
                     </div>
                     <div className="mt-6 grid gap-3">
                       <div className="rounded-2xl bg-surface-container-lowest px-4 py-3 text-sm text-secondary dark:text-gray-300">
-                        {session ? 'Tài khoản này sẽ được dùng để truy cập cùng một workspace trên nhiều máy.' : 'Hiện bạn đang ở local mode. Khi đăng nhập, hồ sơ và quyền sẽ gắn với email.'}
+                        {session ? 'Tài khoản này được dùng để truy cập cùng một không gian trên nhiều máy.' : 'Hiện dữ liệu chỉ ở trên thiết bị. Khi đăng nhập, hồ sơ và quyền sẽ gắn với email.'}
                       </div>
                       {session && (
                         <button
@@ -613,188 +588,12 @@ export function Settings() {
               </motion.section>
             )}
 
-            {activeSection === 'workspace' && (
-              <motion.section key="workspace" variants={sectionVariants} initial="hidden" animate="visible" exit="exit" className="rounded-[2rem] bg-surface-container-lowest p-6 shadow-[0_18px_40px_rgba(0,0,0,0.06)] md:p-8">
-                <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-                  <div>
-                    <p className="font-label text-xs font-bold uppercase tracking-[0.24em] text-secondary dark:text-gray-300">Quyền truy cập</p>
-                    <h2 className="mt-2 font-headline text-3xl font-black tracking-[-0.04em] text-on-surface">Thành viên, lời mời, phân quyền theo email</h2>
-                  </div>
-                  {currentTrip && (
-                    <Link to={`/trips/${currentTrip.id}/members`} className="rounded-2xl bg-slate-950 px-4 py-3 font-semibold text-white transition hover:opacity-95">
-                      Mở quản lý thành viên của chuyến đi hiện tại
-                    </Link>
-                  )}
-                </div>
-
-                <div className="grid gap-6 xl:grid-cols-[1fr_1fr]">
-                  <div className="rounded-[1.75rem] bg-surface-container-low p-6">
-                    <p className="font-headline text-2xl font-black tracking-[-0.03em] text-on-surface">Workspace của bạn</p>
-                    <div className="mt-5 grid gap-3">
-                      {trips.map((trip) => (
-                        <div key={trip.id} className="rounded-2xl bg-surface-container-lowest px-4 py-4">
-                          <div className="flex items-start justify-between gap-4">
-                            <div>
-                              <p className="font-headline text-lg font-bold text-on-surface">{trip.title}</p>
-                              <p className="text-sm text-secondary dark:text-gray-300">{trip.location}</p>
-                            </div>
-                            <span className="rounded-full bg-slate-950 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.22em] text-white">
-                              {trip.membershipRole || 'guest'}
-                            </span>
-                          </div>
-                          <p className="mt-3 text-sm text-secondary dark:text-gray-300">
-                            {trip.members.length} thành viên, {trip.invitationCount} lời mời đang chờ.
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="rounded-[1.75rem] bg-surface-container-low p-6">
-                    <p className="font-headline text-2xl font-black tracking-[-0.03em] text-on-surface">Lời mời dành cho email này</p>
-                    <div className="mt-5 space-y-3">
-                      {pendingInvitations.length === 0 && (
-                        <div className="rounded-2xl bg-surface-container-lowest px-4 py-4 text-sm text-secondary dark:text-gray-300">
-                          Hiện chưa có lời mời chuyến đi nào chờ xử lý.
-                        </div>
-                      )}
-                      {pendingInvitations.map((invitation) => (
-                        <div key={invitation.id} className="rounded-2xl bg-surface-container-lowest px-4 py-4">
-                          <div className="flex items-start justify-between gap-4">
-                            <div>
-                              <p className="font-headline text-lg font-bold text-on-surface">{invitation.tripTitle}</p>
-                              <p className="text-sm text-secondary dark:text-gray-300">
-                                Vai trò đề xuất: <span className="font-semibold text-on-surface">{invitation.role}</span>
-                              </p>
-                              <p className="mt-1 text-xs uppercase tracking-[0.18em] text-secondary dark:text-gray-300">
-                                Nhận lúc {formatLocalDateTime(invitation.createdAt)}
-                              </p>
-                            </div>
-                            {invitation.status === 'pending' && (
-                              <div className="flex gap-2">
-                                <button onClick={async () => {
-                                  try {
-                                    await acceptInvitation(invitation.id);
-                                  } catch (error) {
-                                    showToast({
-                                      tone: 'error',
-                                      title: 'Không thể nhận quyền',
-                                      message: error instanceof Error ? error.message : 'Lời mời chưa được xác nhận.',
-                                    });
-                                  }
-                                }} className="rounded-xl bg-slate-950 px-3 py-2 text-xs font-bold uppercase tracking-[0.18em] text-white">
-                                  Nhận quyền
-                                </button>
-                                <button onClick={async () => {
-                                  try {
-                                    await declineInvitation(invitation.id);
-                                  } catch (error) {
-                                    showToast({
-                                      tone: 'error',
-                                      title: 'Không thể từ chối lời mời',
-                                      message: error instanceof Error ? error.message : 'Lời mời vẫn chưa được cập nhật.',
-                                    });
-                                  }
-                                }} className="rounded-xl border border-outline-variant px-3 py-2 text-xs font-bold uppercase tracking-[0.18em] text-secondary dark:text-gray-300">
-                                  Từ chối
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-
-                    <div className="mt-6 border-t border-outline-variant/40 pt-5">
-                      <p className="font-headline text-xl font-black tracking-[-0.03em] text-on-surface">Lời mời sổ tay</p>
-                      <div className="mt-4 space-y-3">
-                        {pendingNotebookInvitations.length === 0 && (
-                          <div className="rounded-2xl bg-surface-container-lowest px-4 py-4 text-sm text-secondary dark:text-gray-300">
-                            Hiện chưa có lời mời sổ tay nào chờ xử lý.
-                          </div>
-                        )}
-                        {pendingNotebookInvitations.map((invitation) => (
-                          <div key={invitation.id} className="rounded-2xl bg-surface-container-lowest px-4 py-4">
-                            <div className="flex items-start justify-between gap-4">
-                              <div>
-                                <p className="font-headline text-lg font-bold text-on-surface">{invitation.notebookName}</p>
-                                <p className="text-sm text-secondary dark:text-gray-300">
-                                  Vai trò đề xuất: <span className="font-semibold text-on-surface">{invitation.role}</span>
-                                </p>
-                                <p className="mt-1 text-xs uppercase tracking-[0.18em] text-secondary dark:text-gray-300">
-                                  Nhận lúc {formatLocalDateTime(invitation.createdAt)}
-                                </p>
-                              </div>
-                              {invitation.status === 'pending' && (
-                                <div className="flex gap-2">
-                                  <button onClick={async () => {
-                                    try {
-                                      await acceptNotebookInvitation(invitation.id);
-                                      showToast({ tone: 'success', title: 'Đã nhận quyền sổ tay' });
-                                    } catch (error) {
-                                      showToast({
-                                        tone: 'error',
-                                        title: 'Không thể nhận quyền sổ tay',
-                                        message: error instanceof Error ? error.message : 'Lời mời chưa được xác nhận.',
-                                      });
-                                    }
-                                  }} className="rounded-xl bg-slate-950 px-3 py-2 text-xs font-bold uppercase tracking-[0.18em] text-white">
-                                    Nhận quyền
-                                  </button>
-                                  <button onClick={async () => {
-                                    try {
-                                      await declineNotebookInvitation(invitation.id);
-                                    } catch (error) {
-                                      showToast({
-                                        tone: 'error',
-                                        title: 'Không thể từ chối lời mời sổ tay',
-                                        message: error instanceof Error ? error.message : 'Lời mời vẫn chưa được cập nhật.',
-                                      });
-                                    }
-                                  }} className="rounded-xl border border-outline-variant px-3 py-2 text-xs font-bold uppercase tracking-[0.18em] text-secondary dark:text-gray-300">
-                                    Từ chối
-                                  </button>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="mt-6 rounded-[1.75rem] bg-surface-container-low p-6">
-                  <p className="font-headline text-2xl font-black tracking-[-0.03em] text-on-surface">Tự động chấp thuận lời mời</p>
-                  <p className="mt-2 text-sm text-secondary dark:text-gray-300 leading-relaxed">
-                    Khi bật, mọi lời mời sẽ được tự động chấp thuận khi hệ thống phát hiện. Tắt nếu bạn muốn xem xét thủ công từng lời mời.
-                  </p>
-                  <div className="mt-4 grid gap-3 md:grid-cols-2">
-                    <button
-                      type="button"
-                      onClick={() => setAutoAcceptTripInvites(!autoAcceptTripInvites)}
-                      className={`rounded-2xl border px-4 py-4 text-left font-bold transition ${autoAcceptTripInvites ? 'border-primary bg-primary text-on-primary' : 'border-outline-variant/60 bg-surface-container-lowest text-secondary dark:text-gray-300'}`}
-                    >
-                      {autoAcceptTripInvites ? '✓ Tự động nhận lời mời chuyến đi' : 'Tắt — Duyệt thủ công chuyến đi'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setAutoAcceptNotebookInvites(!autoAcceptNotebookInvites)}
-                      className={`rounded-2xl border px-4 py-4 text-left font-bold transition ${autoAcceptNotebookInvites ? 'border-primary bg-primary text-on-primary' : 'border-outline-variant/60 bg-surface-container-lowest text-secondary dark:text-gray-300'}`}
-                    >
-                      {autoAcceptNotebookInvites ? '✓ Tự động nhận lời mời sổ tay' : 'Tắt — Duyệt thủ công sổ tay'}
-                    </button>
-                  </div>
-                </div>
-              </motion.section>
-            )}
-
             {activeSection === 'appearance' && (
               <motion.section key="appearance" variants={sectionVariants} initial="hidden" animate="visible" exit="exit" className="rounded-[2rem] bg-surface-container-lowest p-6 shadow-[0_18px_40px_rgba(0,0,0,0.06)] md:p-8">
                 <p className="font-label text-xs font-bold uppercase tracking-[0.24em] text-secondary dark:text-gray-300">Giao diện</p>
                 <h2 className="mt-2 mb-8 font-headline text-3xl font-black tracking-[-0.04em] text-on-surface">Bố cục dày thông tin hơn, ít khoảng trống lãng phí hơn</h2>
 
-                {deferredPrompt && (
+                {canInstall && (
                   <div className="mb-8 rounded-[1.75rem] bg-tertiary/10 p-6 border border-tertiary/20 flex flex-col md:flex-row gap-6 items-center justify-between shadow-sm">
                     <div>
                       <h3 className="font-headline font-black text-xl tracking-tight text-tertiary mb-2">Cài đặt Ứng dụng (App)</h3>
@@ -861,22 +660,7 @@ export function Settings() {
                   </div>
                 </div>
 
-                <div className="mt-8 grid gap-3 md:grid-cols-2">
-                  <button
-                    type="button"
-                    onClick={() => setLanguage('vi')}
-                    className={`rounded-2xl border px-4 py-4 font-bold transition ${language === 'vi' ? 'border-primary bg-primary text-on-primary' : 'border-outline-variant/60 bg-surface-container-low text-secondary dark:text-gray-300'}`}
-                  >
-                    Tiếng Việt
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setLanguage('en')}
-                    className={`rounded-2xl border px-4 py-4 font-bold transition ${language === 'en' ? 'border-primary bg-primary text-on-primary' : 'border-outline-variant/60 bg-surface-container-low text-secondary dark:text-gray-300'}`}
-                  >
-                    English
-                  </button>
-                </div>
+                <p className="mt-8 rounded-2xl bg-surface-container-low px-4 py-3 text-sm text-secondary">Ngôn ngữ hiện tại: Tiếng Việt. Tùy chọn tiếng Anh sẽ xuất hiện khi toàn bộ giao diện được dịch đầy đủ.</p>
               </motion.section>
             )}
 
@@ -918,7 +702,7 @@ export function Settings() {
                       Xin quyền gửi thông báo ngay bây giờ
                     </button>
                     <div>
-                      <label className="mb-2 block font-label text-xs font-bold uppercase tracking-[0.22em] text-secondary dark:text-gray-300">Nhắc trước bao lâu</label>
+                      <label className="mb-2 block text-xs font-bold text-secondary">Nhắc trước hoạt động</label>
                       <select
                         value={reminderLeadMinutes}
                         onChange={(event) => setReminderLeadMinutes(Number(event.target.value))}
@@ -929,6 +713,15 @@ export function Settings() {
                         <option value={120}>2 giờ</option>
                         <option value={360}>6 giờ</option>
                         <option value={1440}>1 ngày</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="mb-2 block text-xs font-bold text-secondary">Nhắc trước khi chuyến đi bắt đầu</label>
+                      <select value={tripStartLeadMinutes} onChange={(event) => setTripStartLeadMinutes(Number(event.target.value))} className="w-full rounded-2xl border border-outline-variant/60 bg-surface-container-low px-4 py-4 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20">
+                        <option value={360}>6 giờ</option>
+                        <option value={720}>12 giờ</option>
+                        <option value={1440}>1 ngày</option>
+                        <option value={2880}>2 ngày</option>
                       </select>
                     </div>
                   </div>

@@ -1,4 +1,9 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useAuth } from './AuthContext';
+import { isSupabaseConfigured, supabase } from '../lib/supabase';
+import type { TripNotificationPreferences, UserPreferences } from '../domain/models';
+import { resolveTripReminders } from '../domain/notificationPreferences';
+import { mapRemoteTripPreferences, mapRemoteUserPreferences, readStoredTripPreferences, toRemoteTripPreferences, toRemoteUserPreferences } from '../data/preferencesService';
 
 type ThemeMode = 'light' | 'dark' | 'system';
 type Language = 'vi' | 'en';
@@ -35,20 +40,26 @@ interface SettingsContextType {
   setRemindersEnabled: (enabled: boolean) => void;
   reminderLeadMinutes: number;
   setReminderLeadMinutes: (minutes: number) => void;
+  tripStartLeadMinutes: number;
+  setTripStartLeadMinutes: (minutes: number) => void;
   notificationPermission: NotificationPermission | 'unsupported';
   requestNotificationPermission: () => Promise<NotificationPermission | 'unsupported'>;
   isPrivacyMode: boolean;
   setIsPrivacyMode: (enabled: boolean) => void;
-  autoAcceptTripInvites: boolean;
-  setAutoAcceptTripInvites: (enabled: boolean) => void;
-  autoAcceptNotebookInvites: boolean;
-  setAutoAcceptNotebookInvites: (enabled: boolean) => void;
+  tripNotificationPreferences: Record<string, TripNotificationPreferences>;
+  getEffectiveTripReminders: (tripId: string) => { enabled: boolean; activityLeadMinutes: number; tripStartLeadMinutes: number; usesDefaults: boolean };
+  setTripNotificationPreferences: (tripId: string, preferences: Omit<TripNotificationPreferences, 'tripId' | 'userId' | 'updatedAt'>) => Promise<void>;
+  resetTripNotificationPreferences: (tripId: string) => Promise<void>;
+  replaceLocalTripNotificationPreferences: (preferences: TripNotificationPreferences[]) => void;
+  isPreferencesSyncing: boolean;
+  preferencesSyncError: string | null;
+  preferences: UserPreferences;
 }
 
 const THEME_PRESETS: ThemePreset[] = [
   {
     id: 'teal-editorial',
-    name: 'Teal Editorial',
+    name: 'Xanh biển trầm',
     primary: '#00515f',
     primaryContainer: '#006b7d',
     onPrimary: '#ffffff',
@@ -171,21 +182,35 @@ function getNotificationPermission(): NotificationPermission | 'unsupported' {
 }
 
 export function SettingsProvider({ children }: { children: ReactNode }) {
+  const { session } = useAuth();
   const [themeMode, setThemeMode] = useState<ThemeMode>(() => localStorage.getItem('themeMode') as ThemeMode || 'system');
   const [themePresetId, setThemePresetId] = useState(() => localStorage.getItem('themePresetId') || THEME_PRESETS[0].id);
-  const [language, setLanguage] = useState<Language>(() => localStorage.getItem('language') as Language || 'vi');
+  const [language, setLanguage] = useState<Language>('vi');
   const [uiDensity, setUiDensity] = useState<UiDensity>(() => localStorage.getItem('uiDensity') as UiDensity || 'cozy');
   const [remindersEnabled, setRemindersEnabled] = useState(() => localStorage.getItem('remindersEnabled') !== 'false');
   const [reminderLeadMinutes, setReminderLeadMinutes] = useState(() => Number(localStorage.getItem('reminderLeadMinutes') || '120'));
+  const [tripStartLeadMinutes, setTripStartLeadMinutes] = useState(() => Number(localStorage.getItem('tripStartLeadMinutes') || '1440'));
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | 'unsupported'>(() => getNotificationPermission());
   const [isPrivacyMode, setIsPrivacyMode] = useState(() => localStorage.getItem('isPrivacyMode') === 'true');
-  const [autoAcceptTripInvites, setAutoAcceptTripInvites] = useState(() => localStorage.getItem('autoAcceptTripInvites') !== 'false');
-  const [autoAcceptNotebookInvites, setAutoAcceptNotebookInvites] = useState(() => localStorage.getItem('autoAcceptNotebookInvites') !== 'false');
+  const [tripNotificationPreferences, setTripNotificationPreferencesState] = useState<Record<string, TripNotificationPreferences>>(() => readStoredTripPreferences('bunbietbay-trip-notification-preferences:local'));
+  const [isPreferencesSyncing, setIsPreferencesSyncing] = useState(false);
+  const [preferencesSyncError, setPreferencesSyncError] = useState<string | null>(null);
+  const didLoadRemotePreferences = useRef(false);
+  const lastSyncedPreferencesRef = useRef<UserPreferences | null>(null);
 
   const selectedThemePreset = useMemo(
     () => THEME_PRESETS.find((preset) => preset.id === themePresetId) ?? THEME_PRESETS[0],
     [themePresetId],
   );
+  const preferences = useMemo<UserPreferences>(() => ({
+    themeMode,
+    themePresetId: selectedThemePreset.id,
+    uiDensity,
+    isPrivacyMode,
+    remindersEnabled,
+    activityLeadMinutes: reminderLeadMinutes,
+    tripStartLeadMinutes,
+  }), [isPrivacyMode, reminderLeadMinutes, remindersEnabled, selectedThemePreset.id, themeMode, tripStartLeadMinutes, uiDensity]);
 
   useEffect(() => {
     localStorage.setItem('themeMode', themeMode);
@@ -218,10 +243,6 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   }, [uiDensity]);
 
   useEffect(() => {
-    localStorage.setItem('language', language);
-  }, [language]);
-
-  useEffect(() => {
     localStorage.setItem('remindersEnabled', String(remindersEnabled));
   }, [remindersEnabled]);
 
@@ -230,16 +251,130 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   }, [reminderLeadMinutes]);
 
   useEffect(() => {
+    localStorage.setItem('tripStartLeadMinutes', String(tripStartLeadMinutes));
+  }, [tripStartLeadMinutes]);
+
+  useEffect(() => {
     localStorage.setItem('isPrivacyMode', String(isPrivacyMode));
   }, [isPrivacyMode]);
 
   useEffect(() => {
-    localStorage.setItem('autoAcceptTripInvites', String(autoAcceptTripInvites));
-  }, [autoAcceptTripInvites]);
+    if (!session || !supabase || !isSupabaseConfigured) {
+      didLoadRemotePreferences.current = false;
+      lastSyncedPreferencesRef.current = null;
+      return;
+    }
+
+    const client = supabase;
+    let cancelled = false;
+    didLoadRemotePreferences.current = false;
+    lastSyncedPreferencesRef.current = null;
+    setTripNotificationPreferencesState(readStoredTripPreferences(`bunbietbay-trip-notification-preferences:${session.user.id}`));
+    setIsPreferencesSyncing(true);
+    setPreferencesSyncError(null);
+    void Promise.all([
+      client.from('user_preferences').select('*').eq('user_id', session.user.id).maybeSingle(),
+      client.from('trip_notification_preferences').select('*').eq('user_id', session.user.id),
+    ]).then(([userResponse, tripResponse]) => {
+      if (cancelled) return;
+      if (userResponse.error || tripResponse.error) {
+        const error = userResponse.error ?? tripResponse.error;
+        const isSchemaError = Boolean(error && (error.message.includes('schema cache') || error.message.includes('does not exist') || error.message.includes('relation')));
+        setPreferencesSyncError(isSchemaError ? 'Phiên bản cơ sở dữ liệu chưa hỗ trợ đồng bộ tùy chỉnh.' : error?.message ?? 'Không thể tải tùy chỉnh cloud.');
+        return;
+      }
+      if (userResponse.data) {
+        const remotePreferences = mapRemoteUserPreferences(userResponse.data, THEME_PRESETS[0].id);
+        lastSyncedPreferencesRef.current = remotePreferences;
+        setThemeMode(remotePreferences.themeMode);
+        setThemePresetId(remotePreferences.themePresetId);
+        setUiDensity(remotePreferences.uiDensity);
+        setIsPrivacyMode(remotePreferences.isPrivacyMode);
+        setRemindersEnabled(remotePreferences.remindersEnabled);
+        setReminderLeadMinutes(remotePreferences.activityLeadMinutes);
+        setTripStartLeadMinutes(remotePreferences.tripStartLeadMinutes);
+      } else {
+        void client.from('user_preferences').insert(toRemoteUserPreferences(session.user.id, preferences))
+          .then(({ error }) => { if (!error) lastSyncedPreferencesRef.current = preferences; });
+      }
+      setTripNotificationPreferencesState(mapRemoteTripPreferences(tripResponse.data ?? []));
+      didLoadRemotePreferences.current = true;
+    }).finally(() => {
+      if (!cancelled) setIsPreferencesSyncing(false);
+    });
+    return () => { cancelled = true; };
+  }, [session]);
 
   useEffect(() => {
-    localStorage.setItem('autoAcceptNotebookInvites', String(autoAcceptNotebookInvites));
-  }, [autoAcceptNotebookInvites]);
+    const storageKey = session?.user.id
+      ? `bunbietbay-trip-notification-preferences:${session.user.id}`
+      : 'bunbietbay-trip-notification-preferences:local';
+    localStorage.setItem(storageKey, JSON.stringify(tripNotificationPreferences));
+  }, [session?.user.id, tripNotificationPreferences]);
+
+  useEffect(() => {
+    if (!session || !supabase || !didLoadRemotePreferences.current) return;
+    const client = supabase;
+    const payload = toRemoteUserPreferences(session.user.id, { ...preferences, updatedAt: new Date().toISOString() });
+    const timeout = window.setTimeout(() => {
+      setIsPreferencesSyncing(true);
+      void (async () => {
+        try {
+          const { error } = await client.from('user_preferences').upsert(payload, { onConflict: 'user_id' });
+          if (error) {
+            setPreferencesSyncError(error.message);
+            const previous = lastSyncedPreferencesRef.current;
+            if (previous) {
+              setThemeMode(previous.themeMode);
+              setThemePresetId(previous.themePresetId);
+              setUiDensity(previous.uiDensity);
+              setIsPrivacyMode(previous.isPrivacyMode);
+              setRemindersEnabled(previous.remindersEnabled);
+              setReminderLeadMinutes(previous.activityLeadMinutes);
+              setTripStartLeadMinutes(previous.tripStartLeadMinutes);
+            }
+          } else {
+            lastSyncedPreferencesRef.current = preferences;
+            setPreferencesSyncError(null);
+          }
+        } finally {
+          setIsPreferencesSyncing(false);
+        }
+      })();
+    }, 250);
+    return () => window.clearTimeout(timeout);
+  }, [isPrivacyMode, preferences, reminderLeadMinutes, remindersEnabled, selectedThemePreset.id, session, themeMode, tripStartLeadMinutes, uiDensity]);
+
+  const getEffectiveTripReminders = useCallback((tripId: string) => {
+    return resolveTripReminders({ enabled: remindersEnabled, activityLeadMinutes: reminderLeadMinutes, tripStartLeadMinutes }, tripNotificationPreferences[tripId]);
+  }, [reminderLeadMinutes, remindersEnabled, tripNotificationPreferences, tripStartLeadMinutes]);
+
+  const setTripNotificationPreferences = useCallback(async (tripId: string, preferences: Omit<TripNotificationPreferences, 'tripId' | 'userId' | 'updatedAt'>) => {
+    const userId = session?.user.id ?? 'local';
+    const previous = tripNotificationPreferences[tripId];
+    const next: TripNotificationPreferences = { tripId, userId, ...preferences, updatedAt: new Date().toISOString() };
+    setTripNotificationPreferencesState((current) => ({ ...current, [tripId]: next }));
+    if (!session || !supabase) return;
+    const { error } = await supabase.from('trip_notification_preferences').upsert(toRemoteTripPreferences(next), { onConflict: 'trip_id,user_id' });
+    if (error) {
+      setTripNotificationPreferencesState((current) => {
+        const restored = { ...current };
+        if (previous) restored[tripId] = previous;
+        else delete restored[tripId];
+        return restored;
+      });
+      throw error;
+    }
+  }, [session, tripNotificationPreferences]);
+
+  const resetTripNotificationPreferences = useCallback(async (tripId: string) => {
+    await setTripNotificationPreferences(tripId, { useDefaults: true });
+  }, [setTripNotificationPreferences]);
+
+  const replaceLocalTripNotificationPreferences = useCallback((nextPreferences: TripNotificationPreferences[]) => {
+    if (session) throw new Error('Chỉ có thể thay toàn bộ tùy chỉnh thông báo trong workspace local.');
+    setTripNotificationPreferencesState(Object.fromEntries(nextPreferences.map((item) => [item.tripId, item])));
+  }, [session]);
 
   const requestNotificationPermission = useCallback(async () => {
     if (typeof Notification === 'undefined') {
@@ -273,15 +408,21 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     setRemindersEnabled,
     reminderLeadMinutes,
     setReminderLeadMinutes,
+    tripStartLeadMinutes,
+    setTripStartLeadMinutes,
     notificationPermission,
     requestNotificationPermission,
     isPrivacyMode,
     setIsPrivacyMode,
-    autoAcceptTripInvites,
-    setAutoAcceptTripInvites,
-    autoAcceptNotebookInvites,
-    setAutoAcceptNotebookInvites,
-  }), [language, notificationPermission, reminderLeadMinutes, remindersEnabled, requestNotificationPermission, selectedThemePreset.id, selectedThemePreset.primary, themeMode, uiDensity, isPrivacyMode, autoAcceptTripInvites, autoAcceptNotebookInvites]);
+    tripNotificationPreferences,
+    getEffectiveTripReminders,
+    setTripNotificationPreferences,
+    resetTripNotificationPreferences,
+    replaceLocalTripNotificationPreferences,
+    isPreferencesSyncing,
+    preferencesSyncError,
+    preferences,
+  }), [getEffectiveTripReminders, isPreferencesSyncing, isPrivacyMode, language, notificationPermission, preferences, preferencesSyncError, reminderLeadMinutes, remindersEnabled, replaceLocalTripNotificationPreferences, requestNotificationPermission, resetTripNotificationPreferences, selectedThemePreset.id, selectedThemePreset.primary, setTripNotificationPreferences, themeMode, tripNotificationPreferences, tripStartLeadMinutes, uiDensity]);
 
   return (
     <SettingsContext.Provider value={value}>

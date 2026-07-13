@@ -2,11 +2,30 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
 import { deleteImageFromCloudinary } from '../lib/cloudinary';
 import { loadPersistedState, savePersistedState } from '../utils/persistence';
-import { buildDuplicatedMembershipRoles, normalizePersistedState } from '../utils/appState';
+import { buildDuplicatedMembershipRoles, EMPTY_PERSISTED_STATE, normalizePersistedState, validateImportedSnapshot } from '../utils/appState';
+import { classifyRemoteWorkspaceError, type RemoteWorkspaceErrorCode } from '../utils/cloudSyncDecisions';
 import { useAuth } from './AuthContext';
 import { INITIAL_PERSISTED_STATE } from '../constants/mockData';
 import { getTripPermissions } from '../domain/tripLogic';
-import { fetchRemoteWorkspace, getRemoteErrorMessage } from '../data/remoteWorkspace';
+import { calculateTrips } from '../domain/calculateTrips';
+import { fetchRemoteWorkspace } from '../data/remoteWorkspace';
+import { readRemotePinnedTripIds, writeRemotePinnedTripIds } from '../data/remoteTripPreferences';
+import { runSupabaseMutation } from '../data/supabaseMutation';
+import { getTripDateValidationError } from '../utils/tripValidation';
+import {
+  toRemoteActivity,
+  toRemoteActivityUpdate,
+  toRemoteExpense,
+  toRemoteExpenseUpdate,
+  toRemotePackingItem,
+  toRemotePackingItemUpdate,
+  toRemotePhoto,
+  toRemotePhotoUpdate,
+  toRemoteSavedPlace,
+  toRemoteSavedPlaceUpdate,
+  toRemoteTrip,
+  toRemoteTripUpdate,
+} from '../data/remotePayloads';
 import {
   type Activity,
   type ActivityLogEntry,
@@ -18,7 +37,6 @@ import {
   type SavedPlace,
   type TripAccessRole,
   type TripInvitation,
-  type TripMembership,
   type TripRecord,
   type TripReview,
   type UserProfile,
@@ -46,52 +64,33 @@ export type {
   TripReview,
 } from '../domain/models';
 
-const REMOTE_PINNED_TRIPS_KEY = 'bunbietbay-remote-pinned-trip-ids';
-
-function readRemotePinnedTripIds(userId: string) {
-  if (typeof window === 'undefined') {
-    return [];
-  }
-
-  try {
-    const rawValue = window.localStorage.getItem(REMOTE_PINNED_TRIPS_KEY);
-    if (!rawValue) {
-      return [];
-    }
-
-    const storedValue = JSON.parse(rawValue) as Record<string, unknown>;
-    const pinnedTripIds = storedValue[userId];
-    return Array.isArray(pinnedTripIds) ? pinnedTripIds.filter((id): id is string => typeof id === 'string') : [];
-  } catch (error) {
-    console.warn('Failed to read remote pinned trips preference', error);
-    return [];
-  }
-}
-
-function writeRemotePinnedTripIds(userId: string, pinnedTripIds: string[]) {
-  if (typeof window === 'undefined') {
-    return;
-  }
-
-  try {
-    const rawValue = window.localStorage.getItem(REMOTE_PINNED_TRIPS_KEY);
-    const storedValue = rawValue ? JSON.parse(rawValue) as Record<string, unknown> : {};
-    storedValue[userId] = pinnedTripIds;
-    window.localStorage.setItem(REMOTE_PINNED_TRIPS_KEY, JSON.stringify(storedValue));
-  } catch (error) {
-    console.warn('Failed to save remote pinned trips preference', error);
-  }
-}
-
 type InviteTripMemberInput = {
   email: string;
   role: Exclude<TripAccessRole, 'owner'>;
+};
+
+export type LibraryPlaceTripInput = {
+  tripId: string;
+  notebookPlaceId: string;
+  place: Pick<SavedPlace, 'name' | 'type' | 'phone' | 'address' | 'rating' | 'note'>;
+  createActivity?: boolean;
+  date?: string;
+  time?: string;
+};
+
+export type WorkspaceStatus = 'hydrating' | 'loading-remote' | 'ready-local' | 'ready-remote' | 'remote-unavailable' | 'schema-incompatible';
+
+export type WorkspaceError = {
+  code: RemoteWorkspaceErrorCode;
+  message: string;
 };
 
 type AppContextType = {
   isHydrated: boolean;
   isRemoteMode: boolean;
   isSyncing: boolean;
+  workspaceStatus: WorkspaceStatus;
+  workspaceError: WorkspaceError | null;
   snapshot: PersistedAppState;
   trips: CalculatedTrip[];
   activities: Activity[];
@@ -106,6 +105,7 @@ type AppContextType = {
   setCurrentTripId: (id: string | null) => void;
   replacePersistedState: (state: PersistedAppState) => void;
   refreshWorkspace: () => Promise<void>;
+  retryWorkspaceSync: () => Promise<void>;
   batchRemote: (callback: () => Promise<void>) => Promise<void>;
   inviteTripMember: (tripId: string, input: InviteTripMemberInput) => Promise<void>;
   revokeTripInvitation: (invitationId: string) => Promise<void>;
@@ -124,6 +124,8 @@ type AppContextType = {
   toggleTripPin: (id: string) => Promise<void>;
   updateTripReview: (tripId: string, review: TripReview) => Promise<void>;
   addSavedPlace: (place: Omit<SavedPlace, 'id'>) => Promise<void>;
+  addLibraryPlaceToTrip: (input: LibraryPlaceTripInput) => Promise<void>;
+  getLinkedTripsForLibraryPlace: (notebookPlaceId: string) => CalculatedTrip[];
   editSavedPlace: (id: string, place: Partial<SavedPlace>) => Promise<void>;
   deleteSavedPlace: (id: string) => Promise<void>;
   addPackingItem: (item: Omit<PackingItem, 'id'>) => Promise<void>;
@@ -139,13 +141,6 @@ type AppContextType = {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 
-async function runSupabaseMutation(run: () => PromiseLike<{ error: unknown }>) {
-  const response = await Promise.resolve(run());
-  if ('error' in response && response.error) {
-    throw response.error;
-  }
-}
-
 function toFinitePositiveNumber(value: unknown, fieldLabel: string) {
   const nextValue = Number(value);
   if (!Number.isFinite(nextValue) || nextValue <= 0) {
@@ -154,12 +149,34 @@ function toFinitePositiveNumber(value: unknown, fieldLabel: string) {
   return nextValue;
 }
 
+const DEFAULT_LOCAL_WORKSPACE = import.meta.env.DEV ? INITIAL_PERSISTED_STATE : EMPTY_PERSISTED_STATE;
+
+function prepareStoredWorkspace(state: unknown) {
+  const normalizedState = normalizePersistedState(state as Partial<PersistedAppState>, EMPTY_PERSISTED_STATE);
+  validateImportedSnapshot(normalizedState);
+  return normalizedState;
+}
+
+function toWorkspaceError(error: unknown): WorkspaceError {
+  const code = classifyRemoteWorkspaceError(error);
+  const messages: Record<RemoteWorkspaceErrorCode, string> = {
+    'schema-incompatible': 'Phiên bản cơ sở dữ liệu chưa tương thích. Hãy chạy migration Supabase mới nhất rồi thử lại.',
+    auth: 'Phiên đăng nhập không còn hợp lệ. Hãy đăng nhập lại rồi thử lại.',
+    permission: 'Tài khoản không có quyền đọc workspace này.',
+    network: 'Không thể kết nối Supabase. Dữ liệu cloud gần nhất được giữ nguyên.',
+    unknown: 'Không thể tải workspace từ Supabase. Hãy thử lại sau.',
+  };
+  return { code, message: messages[code] };
+}
+
 export function AppProvider({ children }: { children: ReactNode }) {
   const { session, userEmail, profile } = useAuth();
-  const [workspaceState, setWorkspaceState] = useState<PersistedAppState>(INITIAL_PERSISTED_STATE);
+  const [workspaceState, setWorkspaceState] = useState<PersistedAppState>(DEFAULT_LOCAL_WORKSPACE);
   const [isHydrated, setIsHydrated] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
-  const guestWorkspaceRef = useRef<PersistedAppState>(INITIAL_PERSISTED_STATE);
+  const [workspaceStatus, setWorkspaceStatus] = useState<WorkspaceStatus>('hydrating');
+  const [workspaceError, setWorkspaceError] = useState<WorkspaceError | null>(null);
+  const guestWorkspaceRef = useRef<PersistedAppState>(DEFAULT_LOCAL_WORKSPACE);
   const undoStackRef = useRef<Array<() => Promise<void>>>([]);
   const batchDepthRef = useRef(0);
 
@@ -167,6 +184,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const remoteUnavailableRef = useRef(false);
   const hasLoadedRemoteRef = useRef(false);
+  const loadedRemoteUserIdRef = useRef<string | null>(null);
 
   const refreshWorkspace = useCallback(async () => {
     if (!session || !supabase) {
@@ -174,6 +192,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
 
     setIsSyncing(true);
+    if (!hasLoadedRemoteRef.current) {
+      setWorkspaceStatus('loading-remote');
+    }
     try {
       const nextState = await fetchRemoteWorkspace(session.user.id, userEmail);
       const storedPinnedTripIds = readRemotePinnedTripIds(session.user.id);
@@ -184,6 +205,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
       remoteUnavailableRef.current = false;
       hasLoadedRemoteRef.current = true;
+      loadedRemoteUserIdRef.current = session.user.id;
+      setWorkspaceError(null);
+      setWorkspaceStatus('ready-remote');
       setWorkspaceState((currentState) => ({
         ...currentState,
         ...nextState,
@@ -193,15 +217,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
           : nextState.currentTripId,
       }));
     } catch (error) {
-      console.warn('Remote workspace fetch failed, falling back to local data', error);
-      const errorMessage = getRemoteErrorMessage(error);
-      remoteUnavailableRef.current = errorMessage.includes('schema cache') || errorMessage.includes('does not exist') || errorMessage.includes('relation');
-      setWorkspaceState((currentState) => {
-        if (!hasLoadedRemoteRef.current) {
-          return guestWorkspaceRef.current;
-        }
-        return currentState;
-      });
+      console.warn('Remote workspace fetch failed', error);
+      const nextError = toWorkspaceError(error);
+      remoteUnavailableRef.current = true;
+      setWorkspaceError(nextError);
+      setWorkspaceStatus(nextError.code === 'schema-incompatible' ? 'schema-incompatible' : 'remote-unavailable');
+      if (!hasLoadedRemoteRef.current) {
+        setWorkspaceState(EMPTY_PERSISTED_STATE);
+      }
     } finally {
       setIsSyncing(false);
     }
@@ -210,20 +233,26 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let isMounted = true;
 
-    void loadPersistedState<PersistedAppState>()
+    void loadPersistedState<PersistedAppState>(prepareStoredWorkspace)
       .then((persistedState) => {
         if (!isMounted) {
           return;
         }
 
-        const normalizedState = normalizePersistedState(persistedState, INITIAL_PERSISTED_STATE);
+        const normalizedState = persistedState ?? DEFAULT_LOCAL_WORKSPACE;
         guestWorkspaceRef.current = normalizedState;
         if (!isRemoteMode) {
           setWorkspaceState(normalizedState);
+          setWorkspaceStatus('ready-local');
         }
       })
       .catch((error) => {
         console.error('Failed to hydrate workspace state', error);
+        guestWorkspaceRef.current = EMPTY_PERSISTED_STATE;
+        if (!isRemoteMode) {
+          setWorkspaceState(EMPTY_PERSISTED_STATE);
+          setWorkspaceStatus('ready-local');
+        }
       })
       .finally(() => {
         if (isMounted) {
@@ -242,23 +271,35 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
 
     if (isRemoteMode) {
+      if (loadedRemoteUserIdRef.current !== session?.user.id) {
+        hasLoadedRemoteRef.current = false;
+        remoteUnavailableRef.current = false;
+        setWorkspaceError(null);
+        setWorkspaceState(EMPTY_PERSISTED_STATE);
+      }
       void refreshWorkspace().catch((error) => {
         console.error('Failed to refresh remote workspace', error);
       });
       return;
     }
 
+    loadedRemoteUserIdRef.current = null;
+    hasLoadedRemoteRef.current = false;
+    remoteUnavailableRef.current = false;
+    setWorkspaceError(null);
+    setWorkspaceStatus('ready-local');
     setWorkspaceState(guestWorkspaceRef.current);
-  }, [isHydrated, isRemoteMode, refreshWorkspace]);
+  }, [isHydrated, isRemoteMode, refreshWorkspace, session?.user.id]);
 
   useEffect(() => {
     if (!isHydrated || !isRemoteMode || !supabase || !session) {
       return;
     }
 
+    const client = supabase;
     let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
-    const channel = supabase
+    const channel = client
       .channel('app_public_changes')
       .on(
         'postgres_changes',
@@ -276,7 +317,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     return () => {
       if (debounceTimer) clearTimeout(debounceTimer);
-      void supabase.removeChannel(channel);
+      void client.removeChannel(channel);
     };
   }, [isHydrated, isRemoteMode, refreshWorkspace, session]);
 
@@ -300,7 +341,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    if (isRemoteMode && !remoteUnavailableRef.current) {
+    if (isRemoteMode) {
       return;
     }
 
@@ -318,82 +359,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return workspaceState.profiles.find((item) => item.id === workspaceState.viewerProfileId) ?? workspaceState.profiles[0] ?? null;
   }, [isRemoteMode, profile, session?.user.id, workspaceState.profiles, workspaceState.viewerProfileId]);
 
-  const trips = useMemo<CalculatedTrip[]>(() => {
-    const profileMap = new Map<string, UserProfile>(workspaceState.profiles.map((item) => [item.id, item] as const));
-    const membershipsByTrip = new Map<string, TripMembership[]>();
-    const invitationsByTrip = new Map<string, TripInvitation[]>();
-    const expensesByTrip = new Map<string, Expense[]>();
-
-    workspaceState.memberships.forEach((membership) => {
-      const nextMemberships = membershipsByTrip.get(membership.tripId) ?? [];
-      nextMemberships.push(membership);
-      membershipsByTrip.set(membership.tripId, nextMemberships);
-    });
-
-    workspaceState.invitations.forEach((invitation) => {
-      const nextInvitations = invitationsByTrip.get(invitation.tripId) ?? [];
-      nextInvitations.push(invitation);
-      invitationsByTrip.set(invitation.tripId, nextInvitations);
-    });
-
-    workspaceState.expenses.forEach((expense) => {
-      const nextExpenses = expensesByTrip.get(expense.tripId) ?? [];
-      nextExpenses.push(expense);
-      expensesByTrip.set(expense.tripId, nextExpenses);
-    });
-
-    return workspaceState.trips.map((trip) => {
-      const tripMemberships = membershipsByTrip.get(trip.id) ?? [];
-      const tripExpenses = expensesByTrip.get(trip.id) ?? [];
-      const membershipRole = tripMemberships.find((membership) => !membership.revokedAt && membership.userId === currentUserProfile?.id)?.role ?? null;
-
-      const allMembers = tripMemberships.flatMap((membership) => {
-        const memberProfile = profileMap.get(membership.userId);
-        if (!memberProfile) {
-          return [];
-        }
-
-        const amountPaid = tripExpenses
-          .filter((expense) => expense.paidBy === membership.userId)
-          .reduce((sum, expense) => sum + expense.amount, 0);
-
-        const amountOwed = tripExpenses
-          .filter((expense) => expense.participants.includes(membership.userId))
-          .reduce((sum, expense) => sum + (expense.amount / Math.max(1, expense.participants.length)), 0);
-
-        return [{
-          id: memberProfile.id,
-          email: memberProfile.email,
-          displayName: memberProfile.displayName,
-          avatar: memberProfile.avatar,
-          phone: memberProfile.phone,
-          birthdate: memberProfile.birthdate,
-          bio: memberProfile.bio,
-          membershipId: membership.id,
-          role: membership.role,
-          spent: amountPaid,
-          balance: amountPaid - amountOwed,
-          createdAt: membership.createdAt,
-          isArchived: Boolean(membership.revokedAt),
-        }];
-      });
-
-      const spent = tripExpenses
-        .filter((expense) => !expense.isSettlement)
-        .reduce((sum, expense) => sum + expense.amount, 0);
-
-      return {
-        ...trip,
-        spent,
-        members: allMembers.filter((member) => !member.isArchived),
-        historicalMembers: allMembers.filter((member) => member.isArchived),
-        membershipRole,
-        permissions: getTripPermissions(membershipRole),
-        invitationCount: (invitationsByTrip.get(trip.id) ?? []).filter((invitation) => invitation.status === 'pending').length,
-        isPinned: workspaceState.pinnedTripIds?.includes(trip.id) ?? false,
-      };
-    });
-  }, [currentUserProfile?.id, workspaceState.expenses, workspaceState.invitations, workspaceState.memberships, workspaceState.pinnedTripIds, workspaceState.profiles, workspaceState.trips]);
+  const trips = useMemo<CalculatedTrip[]>(
+    () => calculateTrips(workspaceState, currentUserProfile?.id),
+    [currentUserProfile?.id, workspaceState.expenses, workspaceState.invitations, workspaceState.memberships, workspaceState.pinnedTripIds, workspaceState.profiles, workspaceState.trips],
+  );
 
   const setCurrentTripId = useCallback((id: string | null) => {
     setWorkspaceState((currentState) => ({
@@ -407,8 +376,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const withLocalUpdate = useCallback((updater: (state: PersistedAppState) => PersistedAppState) => {
+    if (isRemoteMode && remoteUnavailableRef.current) {
+      throw new Error(workspaceError?.message ?? 'Workspace cloud đang không khả dụng.');
+    }
     setWorkspaceState((currentState) => updater(currentState));
-  }, []);
+  }, [isRemoteMode, workspaceError?.message]);
 
   const getTripPermission = useCallback((tripId: string) => {
     const trip = trips.find((item) => item.id === tripId);
@@ -433,19 +405,32 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, [getTripPermission]);
 
+  const assertTripEntityLinks = useCallback((tripId: string, activityId?: string, placeId?: string) => {
+    if (activityId && workspaceState.activities.find((item) => item.id === activityId)?.tripId !== tripId) {
+      throw new Error('Hoạt động liên kết phải thuộc cùng chuyến đi.');
+    }
+    if (placeId && workspaceState.savedPlaces.find((item) => item.id === placeId)?.tripId !== tripId) {
+      throw new Error('Địa điểm liên kết phải thuộc cùng chuyến đi.');
+    }
+  }, [workspaceState.activities, workspaceState.savedPlaces]);
+
   const mutateRemote = useCallback(async (run: () => Promise<void>) => {
-    if (!isRemoteMode || remoteUnavailableRef.current) {
+    if (!isRemoteMode) {
       return false;
+    }
+    if (remoteUnavailableRef.current) {
+      throw new Error(workspaceError?.message ?? 'Workspace cloud đang không khả dụng.');
     }
 
     try {
       await run();
     } catch (error) {
-      const errorMessage = getRemoteErrorMessage(error);
-      if (errorMessage.includes('schema cache') || errorMessage.includes('does not exist') || errorMessage.includes('relation')) {
-        console.warn('Supabase tables chưa sẵn sàng, lưu local thay thế.', error);
+      const nextError = toWorkspaceError(error);
+      if (nextError.code === 'schema-incompatible' || nextError.code === 'network' || nextError.code === 'auth') {
         remoteUnavailableRef.current = true;
-        return false;
+        setWorkspaceError(nextError);
+        setWorkspaceStatus(nextError.code === 'schema-incompatible' ? 'schema-incompatible' : 'remote-unavailable');
+        throw new Error(nextError.message);
       }
       throw error;
     }
@@ -457,7 +442,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
     }
     return true;
-  }, [isRemoteMode, refreshWorkspace]);
+  }, [isRemoteMode, refreshWorkspace, workspaceError?.message]);
 
   const batchRemote = useCallback(async (callback: () => Promise<void>) => {
     batchDepthRef.current++;
@@ -476,6 +461,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [isRemoteMode, refreshWorkspace]);
 
   const logTripEvent = useCallback((entry: Omit<ActivityLogEntry, 'id' | 'createdAt' | 'actorId' | 'actorName'>) => {
+    if (isRemoteMode && remoteUnavailableRef.current) {
+      return;
+    }
     const createdAt = new Date().toISOString();
     const nextEntry: ActivityLogEntry = {
       ...entry,
@@ -515,6 +503,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     isHydrated,
     isRemoteMode,
     isSyncing,
+    workspaceStatus,
+    workspaceError,
     snapshot: workspaceState,
     trips,
     activities: workspaceState.activities,
@@ -529,6 +519,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setCurrentTripId,
     replacePersistedState,
     refreshWorkspace,
+    retryWorkspaceSync: refreshWorkspace,
     batchRemote,
     inviteTripMember: async (tripId, input) => {
       assertCanManageMembers(tripId);
@@ -595,6 +586,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         throw new Error('Không tìm thấy thành viên cần cập nhật.');
       }
       assertCanManageMembers(membership.tripId);
+      if (membership.role === 'owner' || role === 'owner') {
+        throw new Error('Không thể thay đổi vai trò owner của chuyến đi.');
+      }
       const didRemoteMutate = await mutateRemote(async () => {
         await runSupabaseMutation(() => supabase!.from('trip_memberships').update({ role }).eq('id', membershipId));
       });
@@ -614,6 +608,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         throw new Error('Không tìm thấy thành viên cần xóa.');
       }
       assertCanManageMembers(membership.tripId);
+      if (membership.role === 'owner') {
+        throw new Error('Không thể thu hồi owner khỏi chuyến đi.');
+      }
       const revokedAt = new Date().toISOString();
       const didRemoteMutate = await mutateRemote(async () => {
         await runSupabaseMutation(() => supabase!.from('trip_memberships').update({ revoked_at: revokedAt }).eq('id', membershipId));
@@ -631,28 +628,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
     addExpense: async (expense) => {
       if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(50);
       assertCanEditTripContent(expense.tripId);
+      assertTripEntityLinks(expense.tripId, expense.activityId, expense.placeId);
       const normalizedAmount = toFinitePositiveNumber(expense.amount, 'Số tiền');
       const normalizedOriginalAmount = expense.originalAmount == null
         ? normalizedAmount
         : toFinitePositiveNumber(expense.originalAmount, 'Số tiền gốc');
       const normalizedRate = expense.exchangeRate == null ? 1 : toFinitePositiveNumber(expense.exchangeRate, 'Tỉ giá');
       const didRemoteMutate = await mutateRemote(async () => {
-        await runSupabaseMutation(() => supabase!.from('expenses').insert({
-          trip_id: expense.tripId,
-          date: expense.date,
-          time: expense.time,
-          title: expense.title,
-          category: expense.category,
+        await runSupabaseMutation(() => supabase!.from('expenses').insert(toRemoteExpense(expense, {
           amount: normalizedAmount,
-          original_amount: normalizedOriginalAmount,
-          currency: expense.currency,
-          exchange_rate: normalizedRate,
-          paid_by: expense.paidBy,
-          participants: expense.participants,
-          note: expense.note,
-          receipt_image: expense.receiptImage,
-          is_settlement: expense.isSettlement ?? false,
-        }));
+          originalAmount: normalizedOriginalAmount,
+          exchangeRate: normalizedRate,
+        })));
       });
 
       if (didRemoteMutate) {
@@ -673,27 +660,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
         throw new Error('Không tìm thấy khoản chi cần cập nhật.');
       }
       assertCanEditTripContent(currentExpense.tripId);
+      assertTripEntityLinks(currentExpense.tripId, expense.activityId ?? currentExpense.activityId, expense.placeId ?? currentExpense.placeId);
       const normalizedAmount = expense.amount == null ? currentExpense.amount : toFinitePositiveNumber(expense.amount, 'Số tiền');
       const normalizedOriginalAmount = expense.originalAmount == null
         ? (currentExpense.originalAmount ?? normalizedAmount)
         : toFinitePositiveNumber(expense.originalAmount, 'Số tiền gốc');
       const normalizedRate = expense.exchangeRate == null ? (currentExpense.exchangeRate ?? 1) : toFinitePositiveNumber(expense.exchangeRate, 'Tỉ giá');
       const didRemoteMutate = await mutateRemote(async () => {
-        await runSupabaseMutation(() => supabase!.from('expenses').update({
-          date: expense.date,
-          time: expense.time,
-          title: expense.title,
-          category: expense.category,
+        await runSupabaseMutation(() => supabase!.from('expenses').update(toRemoteExpenseUpdate({
+          ...expense,
           amount: normalizedAmount,
-          original_amount: normalizedOriginalAmount,
-          currency: expense.currency,
-          exchange_rate: normalizedRate,
-          paid_by: expense.paidBy,
-          participants: expense.participants,
-          note: expense.note,
-          receipt_image: expense.receiptImage,
-          is_settlement: expense.isSettlement,
-        }).eq('id', id));
+          originalAmount: normalizedOriginalAmount,
+          exchangeRate: normalizedRate,
+        })).eq('id', id));
       });
 
       if (didRemoteMutate) {
@@ -720,23 +699,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
         logTripEvent({ tripId: currentExpense.tripId, action: 'deleted', entityType: 'expense', entityId: id, summary: `Xóa chi tiêu: ${currentExpense.title}` });
         undoStackRef.current.push(async () => {
           await mutateRemote(async () => {
-            await runSupabaseMutation(() => supabase!.from('expenses').insert({
-              id: currentExpense.id,
-              trip_id: currentExpense.tripId,
-              date: currentExpense.date,
-              time: currentExpense.time,
-              title: currentExpense.title,
-              category: currentExpense.category,
-              amount: currentExpense.amount,
-              original_amount: currentExpense.originalAmount,
+            await runSupabaseMutation(() => supabase!.from('expenses').insert(toRemoteExpense(currentExpense, {
               currency: currentExpense.currency || 'VND',
-              exchange_rate: currentExpense.exchangeRate || 1,
-              paid_by: currentExpense.paidBy,
-              participants: currentExpense.participants,
-              note: currentExpense.note,
-              receipt_image: currentExpense.receiptImage,
-              is_settlement: currentExpense.isSettlement ?? false,
-            }));
+              exchangeRate: currentExpense.exchangeRate || 1,
+            })));
           });
         });
         return;
@@ -758,20 +724,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     addActivity: async (activity) => {
       if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(50);
       assertCanEditTripContent(activity.tripId);
+      assertTripEntityLinks(activity.tripId, undefined, activity.placeId);
       const didRemoteMutate = await mutateRemote(async () => {
-        await runSupabaseMutation(() => supabase!.from('activities').insert({
-          trip_id: activity.tripId,
-          date: activity.date,
-          time: activity.time,
-          title: activity.title,
-          location: activity.location,
-          note: activity.note,
-          type: activity.type,
-          image: activity.image,
-          map_url: activity.mapUrl,
-          booking_code: activity.bookingCode,
-          is_completed: activity.isCompleted ?? false,
-        }));
+        await runSupabaseMutation(() => supabase!.from('activities').insert(toRemoteActivity(activity)));
       });
 
       if (didRemoteMutate) {
@@ -792,41 +747,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
         throw new Error('Không tìm thấy hoạt động cần sửa.');
       }
       assertCanEditTripContent(currentActivity.tripId);
+      assertTripEntityLinks(currentActivity.tripId, undefined, activity.placeId ?? currentActivity.placeId);
 
-      // Optimistic local update — UI cập nhật ngay lập tức
+      const didRemoteMutate = await mutateRemote(async () => {
+        await runSupabaseMutation(() => supabase!.from('activities').update(toRemoteActivityUpdate(activity)).eq('id', id));
+      });
+
+      if (didRemoteMutate) {
+        logTripEvent({ tripId: currentActivity.tripId, action: 'updated', entityType: 'activity', entityId: id, summary: `Cập nhật hoạt động: ${activity.title ?? currentActivity.title}` });
+        return;
+      }
+
       withLocalUpdate((currentState) => ({
         ...currentState,
         activities: currentState.activities.map((item) => item.id === id ? { ...item, ...activity, updatedAt: new Date().toISOString() } : item),
       }));
-
-      try {
-        const didRemoteMutate = await mutateRemote(async () => {
-          await runSupabaseMutation(() => supabase!.from('activities').update({
-            date: activity.date,
-            time: activity.time,
-            title: activity.title,
-            location: activity.location,
-            note: activity.note,
-            type: activity.type,
-            image: activity.image,
-            map_url: activity.mapUrl,
-            booking_code: activity.bookingCode,
-            is_completed: activity.isCompleted,
-          }).eq('id', id));
-        });
-
-        if (didRemoteMutate) {
-          logTripEvent({ tripId: currentActivity.tripId, action: 'updated', entityType: 'activity', entityId: id, summary: `Cập nhật hoạt động: ${activity.title ?? currentActivity.title}` });
-          return;
-        }
-      } catch (error) {
-        // Rollback optimistic update on remote failure
-        withLocalUpdate((currentState) => ({
-          ...currentState,
-          activities: currentState.activities.map((item) => item.id === id ? currentActivity : item),
-        }));
-        throw error;
-      }
     },
     deleteActivity: async (id) => {
       if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(50);
@@ -843,20 +778,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         logTripEvent({ tripId: currentActivity.tripId, action: 'deleted', entityType: 'activity', entityId: id, summary: `Xóa hoạt động: ${currentActivity.title}` });
         undoStackRef.current.push(async () => {
           await mutateRemote(async () => {
-            await runSupabaseMutation(() => supabase!.from('activities').insert({
-              id: currentActivity.id,
-              trip_id: currentActivity.tripId,
-              date: currentActivity.date,
-              time: currentActivity.time,
-              title: currentActivity.title,
-              location: currentActivity.location,
-              note: currentActivity.note,
-              type: currentActivity.type,
-              image: currentActivity.image,
-              map_url: currentActivity.mapUrl,
-              booking_code: currentActivity.bookingCode,
-              is_completed: currentActivity.isCompleted ?? false,
-            }));
+            await runSupabaseMutation(() => supabase!.from('activities').insert(toRemoteActivity(currentActivity)));
           });
         });
         return;
@@ -865,6 +787,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       withLocalUpdate((currentState) => ({
         ...currentState,
         activities: currentState.activities.filter((item) => item.id !== id),
+        expenses: currentState.expenses.map((item) => item.activityId === id ? { ...item, activityId: undefined } : item),
+        photos: currentState.photos.map((item) => item.activityId === id ? { ...item, activityId: undefined } : item),
       }));
       logTripEvent({ tripId: currentActivity.tripId, action: 'deleted', entityType: 'activity', entityId: id, summary: `Xóa hoạt động: ${currentActivity.title}` });
 
@@ -876,31 +800,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
       });
     },
     addTrip: async (trip) => {
+      const dateError = getTripDateValidationError(trip.startDate, trip.endDate);
+      if (dateError) throw new Error(dateError);
       const normalizedBudget = toFinitePositiveNumber(trip.budget, 'Ngân sách');
       const didRemoteMutate = await mutateRemote(async () => {
-        const { data, error } = await supabase!.from('trips').insert({
-          title: trip.title,
-          location: trip.location,
-          start_date: trip.startDate,
-          end_date: trip.endDate,
-          budget: normalizedBudget,
-          base_currency: trip.baseCurrency ?? 'VND',
-          status: trip.status,
-          image: trip.image,
-          review: trip.review ?? null,
-          created_by: session!.user.id,
-          theme_color: trip.themeColor ?? null,
-        }).select('id').single();
+        const { data, error } = await supabase!.from('trips').insert(
+          toRemoteTrip(trip, session!.user.id, normalizedBudget),
+        ).select('id').single();
 
         if (error) {
           throw error;
         }
 
-        await runSupabaseMutation(() => supabase!.from('trip_memberships').insert({
-          trip_id: data.id,
-          user_id: session!.user.id,
-          role: 'owner',
-        }));
+        try {
+          await runSupabaseMutation(() => supabase!.from('trip_memberships').insert({
+            trip_id: data.id,
+            user_id: session!.user.id,
+            role: 'owner',
+          }));
+        } catch (membershipError) {
+          await supabase!.from('trips').delete().eq('id', data.id);
+          throw membershipError;
+        }
       });
 
       if (didRemoteMutate) {
@@ -913,7 +834,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const nextId = `t${Date.now()}`;
         return {
           ...currentState,
-          trips: [{ ...trip, budget: normalizedBudget, id: nextId, createdAt, updatedAt: createdAt }, ...currentState.trips],
+          trips: [{ ...trip, budget: normalizedBudget, id: nextId, createdBy: currentUserId, createdAt, updatedAt: createdAt }, ...currentState.trips],
           memberships: [
             { id: `tm-${Date.now()}`, tripId: nextId, userId: currentUserId, role: 'owner' },
             ...currentState.memberships,
@@ -958,67 +879,69 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const newEndDate = shiftDate(trip.endDate, startOffsetDays);
 
       const didRemoteMutate = await mutateRemote(async () => {
-        const { data: newTrip, error: tripError } = await supabase!.from('trips').insert({
+        const { data: newTrip, error: tripError } = await supabase!.from('trips').insert(toRemoteTrip({
+          ...trip,
           title: cloneTitle,
-          location: trip.location,
-          start_date: newStartDate,
-          end_date: newEndDate,
-          budget: normalizedBudget,
-          base_currency: trip.baseCurrency ?? 'VND',
+          startDate: newStartDate,
+          endDate: newEndDate,
           status: 'draft',
-          image: trip.image,
-          review: null,
-          created_by: session!.user.id,
-          theme_color: trip.themeColor ?? null,
-        }).select('id').single();
+          review: undefined,
+        }, session!.user.id, normalizedBudget)).select('id').single();
 
         if (tripError) throw tripError;
 
-        const memberships = buildDuplicatedMembershipRoles(workspaceState.memberships, id, session!.user.id);
-        const duplicatedUserIds = new Set(memberships.map((membership) => membership.userId));
-        if (memberships.length > 0) {
-          const memData = memberships.map(m => ({
-            trip_id: newTrip.id,
-            user_id: m.userId,
-            role: m.role,
-          }));
-          await runSupabaseMutation(() => supabase!.from('trip_memberships').insert(memData));
-        } else {
-          await runSupabaseMutation(() => supabase!.from('trip_memberships').insert({
-            trip_id: newTrip.id,
-            user_id: session!.user.id,
-            role: 'owner',
-          }));
-        }
+        try {
+          const memberships = buildDuplicatedMembershipRoles(workspaceState.memberships, id, session!.user.id);
+          const duplicatedUserIds = new Set(memberships.map((membership) => membership.userId));
+          if (memberships.length > 0) {
+            const memData = memberships.map(m => ({
+              trip_id: newTrip.id,
+              user_id: m.userId,
+              role: m.role,
+            }));
+            await runSupabaseMutation(() => supabase!.from('trip_memberships').insert(memData));
+          } else {
+            await runSupabaseMutation(() => supabase!.from('trip_memberships').insert({
+              trip_id: newTrip.id,
+              user_id: session!.user.id,
+              role: 'owner',
+            }));
+          }
 
-        const activities = workspaceState.activities.filter(a => a.tripId === id);
-        if (activities.length > 0) {
-          const actData = activities.map(a => ({
-            trip_id: newTrip.id,
-            date: shiftDate(a.date, startOffsetDays),
-            time: a.time,
-            title: a.title,
-            location: a.location,
-            type: a.type,
-            note: a.note,
-            map_url: a.mapUrl,
-            image: a.image,
-            booking_code: a.bookingCode,
-            is_completed: a.isCompleted ?? false,
-          }));
-          await runSupabaseMutation(() => supabase!.from('activities').insert(actData));
-        }
+          const activities = workspaceState.activities.filter(a => a.tripId === id);
+          if (activities.length > 0) {
+            const actData = activities.map(a => ({
+              trip_id: newTrip.id,
+              date: shiftDate(a.date, startOffsetDays),
+              time: a.time,
+              title: a.title,
+              location: a.location,
+              type: a.type,
+              note: a.note,
+              map_url: a.mapUrl,
+              image: a.image,
+              booking_code: a.bookingCode,
+              place_id: null,
+              is_completed: a.isCompleted ?? false,
+            }));
+            await runSupabaseMutation(() => supabase!.from('activities').insert(actData));
+          }
 
-        const packings = workspaceState.packingItems.filter(p => p.tripId === id);
-        if (packings.length > 0) {
-          const packData = packings.map(p => ({
-            trip_id: newTrip.id,
-            name: p.name,
-            category: p.category,
-            is_packed: false,
-            assignee_id: p.assigneeId && duplicatedUserIds.has(p.assigneeId) ? p.assigneeId : null,
-          }));
-          await runSupabaseMutation(() => supabase!.from('packing_items').insert(packData));
+          const packings = workspaceState.packingItems.filter(p => p.tripId === id);
+          if (packings.length > 0) {
+            const packData = packings.map(p => ({
+              trip_id: newTrip.id,
+              name: p.name,
+              category: p.category,
+              is_packed: false,
+              assignee_id: p.assigneeId && duplicatedUserIds.has(p.assigneeId) ? p.assigneeId : null,
+            }));
+            await runSupabaseMutation(() => supabase!.from('packing_items').insert(packData));
+          }
+        } catch (duplicationError) {
+          const { error: cleanupError } = await supabase!.from('trips').delete().eq('id', newTrip.id);
+          if (cleanupError) console.error('Failed to clean up incomplete duplicated trip', cleanupError);
+          throw duplicationError;
         }
       });
 
@@ -1029,13 +952,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const currentUserId = currentUserProfile?.id ?? workspaceState.viewerProfileId ?? 'm1';
       withLocalUpdate((currentState) => {
         const nextId = `t${Date.now()}`;
+        const createdAt = new Date().toISOString();
         const duplicatedMemberships = buildDuplicatedMembershipRoles(currentState.memberships, id, currentUserId);
         const duplicatedUserIds = new Set(duplicatedMemberships.map((membership) => membership.userId));
         const activitiesCopy = currentState.activities.filter(a => a.tripId === id).map((a, i) => ({
           ...a,
           tripId: nextId,
           date: shiftDate(a.date, startOffsetDays),
-          id: `a${Date.now()}-${i}`
+          id: `a${Date.now()}-${i}`,
+          placeId: undefined,
         }));
         const packingsCopy = currentState.packingItems.filter(p => p.tripId === id).map((p, i) => ({
           ...p,
@@ -1056,7 +981,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
             startDate: newStartDate,
             endDate: newEndDate,
             status: 'draft',
-            review: undefined
+            review: undefined,
+            createdBy: currentUserId,
+            createdAt,
+            updatedAt: createdAt,
           }, ...currentState.trips],
           memberships: [...membershipsCopy, ...currentState.memberships],
           activities: [...activitiesCopy, ...currentState.activities],
@@ -1087,6 +1015,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
           photos: currentState.photos.filter(p => p.tripId !== id),
           savedPlaces: currentState.savedPlaces.filter(sp => sp.tripId !== id),
           invitations: currentState.invitations.filter(inv => inv.tripId !== id),
+          activityLogs: currentState.activityLogs.filter((entry) => entry.tripId !== id),
+          pinnedTripIds: (currentState.pinnedTripIds ?? []).filter((tripId) => tripId !== id),
+          currentTripId: currentState.currentTripId === id ? null : currentState.currentTripId,
         }));
       }
 
@@ -1101,18 +1032,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     },
     editTrip: async (id, trip) => {
       assertCanManageTrip(id);
+      const currentTrip = workspaceState.trips.find((item) => item.id === id);
+      if (!currentTrip) throw new Error('Không tìm thấy chuyến đi cần sửa.');
+      const dateError = getTripDateValidationError(trip.startDate ?? currentTrip.startDate, trip.endDate ?? currentTrip.endDate);
+      if (dateError) throw new Error(dateError);
       const normalizedBudget = trip.budget == null ? undefined : toFinitePositiveNumber(trip.budget, 'Ngân sách');
-      const remotePayload: Record<string, unknown> = {};
-      if (trip.title !== undefined) remotePayload.title = trip.title;
-      if (trip.location !== undefined) remotePayload.location = trip.location;
-      if (trip.startDate !== undefined) remotePayload.start_date = trip.startDate;
-      if (trip.endDate !== undefined) remotePayload.end_date = trip.endDate;
-      if (normalizedBudget !== undefined) remotePayload.budget = normalizedBudget;
-      if (trip.baseCurrency !== undefined) remotePayload.base_currency = trip.baseCurrency;
-      if (trip.status !== undefined) remotePayload.status = trip.status;
-      if (trip.image !== undefined) remotePayload.image = trip.image;
-      if (trip.review !== undefined) remotePayload.review = trip.review;
-      if ('themeColor' in trip) remotePayload.theme_color = trip.themeColor ?? null;
+      const remotePayload = toRemoteTripUpdate(trip, normalizedBudget);
       const didRemoteMutate = await mutateRemote(async () => {
         if (Object.keys(remotePayload).length > 0) {
           await runSupabaseMutation(() => supabase!.from('trips').update(remotePayload).eq('id', id));
@@ -1162,15 +1087,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     addSavedPlace: async (place) => {
       assertCanEditTripContent(place.tripId);
       const didRemoteMutate = await mutateRemote(async () => {
-        await runSupabaseMutation(() => supabase!.from('saved_places').insert({
-          trip_id: place.tripId,
-          name: place.name,
-          type: place.type,
-          phone: place.phone,
-          address: place.address,
-          rating: place.rating,
-          note: place.note,
-        }));
+        await runSupabaseMutation(() => supabase!.from('saved_places').insert(toRemoteSavedPlace(place)));
       });
 
       if (didRemoteMutate) {
@@ -1192,14 +1109,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
       assertCanEditTripContent(currentPlace.tripId);
       const didRemoteMutate = await mutateRemote(async () => {
-        await runSupabaseMutation(() => supabase!.from('saved_places').update({
-          name: place.name,
-          type: place.type,
-          phone: place.phone,
-          address: place.address,
-          rating: place.rating,
-          note: place.note,
-        }).eq('id', id));
+        await runSupabaseMutation(() => supabase!.from('saved_places').update(toRemoteSavedPlaceUpdate(place)).eq('id', id));
       });
 
       if (didRemoteMutate) {
@@ -1224,16 +1134,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (didRemoteMutate) {
         undoStackRef.current.push(async () => {
           await mutateRemote(async () => {
-            await runSupabaseMutation(() => supabase!.from('saved_places').insert({
-              id: currentPlace.id,
-              trip_id: currentPlace.tripId,
-              name: currentPlace.name,
-              type: currentPlace.type,
-              phone: currentPlace.phone,
-              address: currentPlace.address,
-              rating: currentPlace.rating,
-              note: currentPlace.note,
-            }));
+            await runSupabaseMutation(() => supabase!.from('saved_places').insert(toRemoteSavedPlace(currentPlace)));
           });
         });
         return;
@@ -1242,6 +1143,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       withLocalUpdate((currentState) => ({
         ...currentState,
         savedPlaces: currentState.savedPlaces.filter((item) => item.id !== id),
+        activities: currentState.activities.map((item) => item.placeId === id ? { ...item, placeId: undefined } : item),
+        expenses: currentState.expenses.map((item) => item.placeId === id ? { ...item, placeId: undefined } : item),
+        photos: currentState.photos.map((item) => item.placeId === id ? { ...item, placeId: undefined } : item),
       }));
 
       undoStackRef.current.push(async () => {
@@ -1251,16 +1155,59 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }));
       });
     },
+    addLibraryPlaceToTrip: async ({ tripId, notebookPlaceId, place, createActivity = false, date, time = '09:00' }) => {
+      assertCanEditTripContent(tripId);
+      if (createActivity && !date) {
+        throw new Error('Cần chọn ngày khi thêm địa điểm vào lịch trình.');
+      }
+
+      const didRemoteMutate = await mutateRemote(async () => {
+        const { error } = await supabase!.rpc('add_library_place_to_trip', {
+          p_notebook_place_id: notebookPlaceId,
+          p_trip_id: tripId,
+          p_create_activity: createActivity,
+          p_date: date ?? null,
+          p_time: time,
+        });
+        if (error) throw error;
+      });
+      if (didRemoteMutate) return;
+
+      const timestamp = Date.now();
+      const savedPlaceId = `p${timestamp}`;
+      const createdAt = new Date(timestamp).toISOString();
+      const tripPlaceType = place.type === 'hotel' ? 'hotel' : place.type === 'restaurant' || place.type === 'cafe' ? 'restaurant' : 'other';
+      withLocalUpdate((currentState) => ({
+        ...currentState,
+        savedPlaces: [...currentState.savedPlaces, {
+          ...place,
+          type: tripPlaceType,
+          id: savedPlaceId,
+          tripId,
+          sourceNotebookPlaceId: notebookPlaceId,
+          createdAt,
+          updatedAt: createdAt,
+        }],
+        activities: createActivity ? [...currentState.activities, {
+          id: `a${timestamp}`,
+          tripId,
+          date: date!,
+          time,
+          title: place.name,
+          location: place.address || place.name,
+          note: place.note || '',
+          type: tripPlaceType,
+          placeId: savedPlaceId,
+          createdAt,
+          updatedAt: createdAt,
+        }] : currentState.activities,
+      }));
+      logTripEvent({ tripId, action: 'imported', entityType: 'place', entityId: savedPlaceId, summary: `Thêm từ Thư viện: ${place.name}` });
+    },
     addPackingItem: async (item) => {
       assertCanEditTripContent(item.tripId);
       const didRemoteMutate = await mutateRemote(async () => {
-        await runSupabaseMutation(() => supabase!.from('packing_items').insert({
-          trip_id: item.tripId,
-          name: item.name,
-          is_packed: item.isPacked,
-          assignee_id: item.assigneeId,
-          category: item.category,
-        }));
+        await runSupabaseMutation(() => supabase!.from('packing_items').insert(toRemotePackingItem(item)));
       });
 
       if (didRemoteMutate) {
@@ -1282,12 +1229,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
       assertCanEditTripContent(currentItem.tripId);
       const didRemoteMutate = await mutateRemote(async () => {
-        await runSupabaseMutation(() => supabase!.from('packing_items').update({
-          name: item.name,
-          is_packed: item.isPacked,
-          assignee_id: item.assigneeId,
-          category: item.category,
-        }).eq('id', id));
+        await runSupabaseMutation(() => supabase!.from('packing_items').update(toRemotePackingItemUpdate(item)).eq('id', id));
       });
 
       if (didRemoteMutate) {
@@ -1299,6 +1241,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
         packingItems: currentState.packingItems.map((existingItem) => existingItem.id === id ? { ...existingItem, ...item, updatedAt: new Date().toISOString() } : existingItem),
       }));
     },
+    getLinkedTripsForLibraryPlace: (notebookPlaceId) => {
+      const linkedTripIds = new Set(workspaceState.savedPlaces.filter((place) => place.sourceNotebookPlaceId === notebookPlaceId).map((place) => place.tripId));
+      return trips.filter((trip) => linkedTripIds.has(trip.id));
+    },
     togglePackingItem: async (id) => {
       if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(50);
       const currentItem = workspaceState.packingItems.find((item) => item.id === id);
@@ -1306,27 +1252,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
         return;
       }
       assertCanEditTripContent(currentItem.tripId);
-
-      // Đọc giá trị thực tế bên trong updater để tránh stale closure khi tích nhanh
-      let newIsPacked = !currentItem.isPacked;
-      withLocalUpdate((currentState) => {
-        const liveItem = currentState.packingItems.find((item) => item.id === id);
-        newIsPacked = liveItem ? !liveItem.isPacked : !currentItem.isPacked;
-        return {
-          ...currentState,
-          packingItems: currentState.packingItems.map((item) => item.id === id ? { ...item, isPacked: newIsPacked, updatedAt: new Date().toISOString() } : item),
-        };
-      });
+      const newIsPacked = !currentItem.isPacked;
 
       const didRemoteMutate = await mutateRemote(async () => {
-        await runSupabaseMutation(() => supabase!.from('packing_items').update({
-          is_packed: newIsPacked,
-        }).eq('id', id));
+        await runSupabaseMutation(() => supabase!.from('packing_items').update(toRemotePackingItemUpdate({ isPacked: newIsPacked })).eq('id', id));
       });
 
       if (didRemoteMutate) {
         return;
       }
+
+      withLocalUpdate((currentState) => ({
+        ...currentState,
+        packingItems: currentState.packingItems.map((item) => item.id === id ? { ...item, isPacked: newIsPacked, updatedAt: new Date().toISOString() } : item),
+      }));
     },
     deletePackingItem: async (id) => {
       const currentItem = workspaceState.packingItems.find((item) => item.id === id);
@@ -1341,14 +1280,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (didRemoteMutate) {
         undoStackRef.current.push(async () => {
           await mutateRemote(async () => {
-            await runSupabaseMutation(() => supabase!.from('packing_items').insert({
-              id: currentItem.id,
-              trip_id: currentItem.tripId,
-              name: currentItem.name,
-              is_packed: currentItem.isPacked,
-              assignee_id: currentItem.assigneeId,
-              category: currentItem.category,
-            }));
+            await runSupabaseMutation(() => supabase!.from('packing_items').insert(toRemotePackingItem(currentItem)));
           });
         });
         return;
@@ -1367,22 +1299,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       });
     },
     addPhotos: async (photos) => {
-      photos.forEach((photo) => assertCanEditTripContent(photo.tripId));
+      photos.forEach((photo) => {
+        assertCanEditTripContent(photo.tripId);
+        assertTripEntityLinks(photo.tripId, photo.activityId, photo.placeId);
+      });
       const didRemoteMutate = await mutateRemote(async () => {
-        await runSupabaseMutation(() => supabase!.from('photos').insert(photos.map((photo) => ({
-          trip_id: photo.tripId,
-          url: photo.url,
-          album: photo.album,
-          storage: photo.storage,
-          provider: photo.provider,
-          provider_public_id: photo.providerPublicId,
-          taken_on: photo.takenOn,
-          place: photo.place,
-          people: photo.people ?? [],
-          tags: photo.tags ?? [],
-          item_type: photo.itemType ?? 'photo',
-          content: photo.content,
-        }))));
+        await runSupabaseMutation(() => supabase!.from('photos').insert(photos.map(toRemotePhoto)));
       });
 
       if (didRemoteMutate) {
@@ -1410,16 +1332,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
         throw new Error('Không tìm thấy ảnh cần cập nhật.');
       }
       assertCanEditTripContent(currentPhoto.tripId);
+      assertTripEntityLinks(currentPhoto.tripId, photo.activityId ?? currentPhoto.activityId, photo.placeId ?? currentPhoto.placeId);
       const nextPhoto = { ...currentPhoto, ...photo, updatedAt: new Date().toISOString() };
       const didRemoteMutate = await mutateRemote(async () => {
-        const payload: Record<string, unknown> = {};
-        if (photo.album !== undefined) payload.album = photo.album;
-        if (photo.takenOn !== undefined) payload.taken_on = photo.takenOn || null;
-        if (photo.place !== undefined) payload.place = photo.place || null;
-        if (photo.people !== undefined) payload.people = photo.people ?? [];
-        if (photo.tags !== undefined) payload.tags = photo.tags ?? [];
-        if (photo.itemType !== undefined) payload.item_type = photo.itemType;
-        if (photo.content !== undefined) payload.content = photo.content || null;
+        const payload = toRemotePhotoUpdate(photo);
         if (Object.keys(payload).length === 0) return;
         await runSupabaseMutation(() => supabase!.from('photos').update(payload).eq('id', id));
       });
@@ -1453,26 +1369,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
       });
 
       if (didRemoteMutate) {
-        undoStackRef.current.push(async () => {
-          await mutateRemote(async () => {
-            await runSupabaseMutation(() => supabase!.from('photos').insert({
-              id: currentPhoto.id,
-              trip_id: currentPhoto.tripId,
-              url: currentPhoto.url,
-              album: currentPhoto.album,
-              storage: currentPhoto.storage,
-              provider: currentPhoto.provider,
-              provider_public_id: currentPhoto.providerPublicId,
-              taken_on: currentPhoto.takenOn,
-              place: currentPhoto.place,
-              people: currentPhoto.people ?? [],
-              tags: currentPhoto.tags ?? [],
-              item_type: currentPhoto.itemType ?? 'photo',
-              content: currentPhoto.content,
-              created_at: currentPhoto.createdAt,
-            }));
+        if (currentPhoto.provider !== 'cloudinary') {
+          undoStackRef.current.push(async () => {
+            await mutateRemote(async () => {
+              await runSupabaseMutation(() => supabase!.from('photos').insert(toRemotePhoto(currentPhoto)));
+            });
           });
-        });
+        }
         return;
       }
 
@@ -1481,12 +1384,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
         photos: currentState.photos.filter((item) => item.id !== id),
       }));
 
-      undoStackRef.current.push(async () => {
-        withLocalUpdate((currentState) => ({
-          ...currentState,
-          photos: [...currentState.photos, currentPhoto],
-        }));
-      });
+      if (currentPhoto.provider !== 'cloudinary') {
+        undoStackRef.current.push(async () => {
+          withLocalUpdate((currentState) => ({
+            ...currentState,
+            photos: [...currentState.photos, currentPhoto],
+          }));
+        });
+      }
     },
     undoLastAction: async () => {
       const action = undoStackRef.current.pop();
@@ -1494,7 +1399,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         await action();
       }
     },
-  }), [assertCanEditTripContent, assertCanManageMembers, assertCanManageTrip, batchRemote, currentUserProfile, isHydrated, isRemoteMode, isSyncing, logTripEvent, mutateRemote, refreshWorkspace, replacePersistedState, setCurrentTripId, trips, withLocalUpdate, workspaceState, session]);
+  }), [assertCanEditTripContent, assertCanManageMembers, assertCanManageTrip, assertTripEntityLinks, batchRemote, currentUserProfile, isHydrated, isRemoteMode, isSyncing, logTripEvent, mutateRemote, refreshWorkspace, replacePersistedState, setCurrentTripId, trips, withLocalUpdate, workspaceError, workspaceState, workspaceStatus, session]);
 
   return (
     <AppContext.Provider value={contextValue}>

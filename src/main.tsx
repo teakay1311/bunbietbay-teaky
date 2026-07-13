@@ -1,11 +1,12 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
+import { MotionConfig } from 'motion/react';
 import App from './App.tsx';
 import './index.css';
 
-window.addEventListener('beforeinstallprompt', (e) => {
-  e.preventDefault();
-  (window as any).deferredPrompt = e;
+window.addEventListener('beforeinstallprompt', (event) => {
+  event.preventDefault();
+  window.deferredPrompt = event as BeforeInstallPromptEvent;
 });
 
 const rootElement = document.getElementById('root');
@@ -17,7 +18,9 @@ if (!rootElement) {
 try {
   createRoot(rootElement).render(
     <StrictMode>
-      <App />
+      <MotionConfig reducedMotion="user">
+        <App />
+      </MotionConfig>
     </StrictMode>,
   );
 } catch (error) {

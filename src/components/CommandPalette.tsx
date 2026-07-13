@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Icons } from './Icons';
 import { useAppContext } from '../context/AppContext';
 
@@ -12,11 +12,15 @@ type CommandItem = {
 
 export function CommandPalette() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { trips, currentTripId } = useAppContext();
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
-  const activeTrip = trips.find((trip) => trip.id === currentTripId) ?? trips[0] ?? null;
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
+  const routeTripId = location.pathname.match(/^\/trips\/([^/]+)/)?.[1];
+  const activeTrip = trips.find((trip) => trip.id === routeTripId) ?? trips.find((trip) => trip.id === currentTripId) ?? null;
 
   useEffect(() => {
     const open = () => setIsOpen(true);
@@ -37,40 +41,58 @@ export function CommandPalette() {
 
   useEffect(() => {
     if (!isOpen) return;
+    previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
     const timerId = window.setTimeout(() => inputRef.current?.focus(), 0);
-    return () => window.clearTimeout(timerId);
-  }, [isOpen]);
-
-  useEffect(() => {
-    if (!isOpen) return;
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         setIsOpen(false);
+        return;
+      }
+      if (event.key === 'Tab' && dialogRef.current) {
+        const focusable = [...dialogRef.current.querySelectorAll<HTMLElement>('input, button, [href], [tabindex]:not([tabindex="-1"])')].filter((element) => !element.hasAttribute('disabled'));
+        if (focusable.length === 0) return;
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first.focus();
+        }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    return () => {
+      window.clearTimeout(timerId);
+      window.removeEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = previousOverflow;
+      previousFocusRef.current?.focus();
+    };
   }, [isOpen]);
 
   const commands = useMemo<CommandItem[]>(() => {
     const tripCommands = trips.map((trip) => ({
       id: `trip-${trip.id}`,
       label: trip.title,
-      hint: `Mở lịch trình · ${trip.location}`,
-      run: () => navigate(`/trips/${trip.id}/schedule`),
+      hint: `Mở trang chủ · ${trip.location}`,
+      run: () => navigate(`/trips/${trip.id}`),
     }));
     const activeTripCommands = activeTrip ? [
-      { id: 'schedule', label: 'Lịch trình', hint: activeTrip.title, run: () => navigate(`/trips/${activeTrip.id}/schedule`) },
-      { id: 'overview', label: 'Tổng quan', hint: activeTrip.title, run: () => navigate(`/trips/${activeTrip.id}/overview`) },
-      { id: 'expenses', label: 'Chi tiêu', hint: activeTrip.title, run: () => navigate(`/trips/${activeTrip.id}/expenses`) },
-      { id: 'places', label: 'Địa điểm', hint: activeTrip.title, run: () => navigate(`/trips/${activeTrip.id}/places`) },
-      { id: 'packing', label: 'Hành lý', hint: activeTrip.title, run: () => navigate(`/trips/${activeTrip.id}/packing`) },
-      { id: 'photos', label: 'Thư viện ảnh', hint: activeTrip.title, run: () => navigate(`/trips/${activeTrip.id}/photos`) },
+      { id: 'schedule', label: 'Lịch trình', hint: activeTrip.title, run: () => navigate(`/trips/${activeTrip.id}/plan?tab=itinerary`) },
+      { id: 'overview', label: 'Trang chủ chuyến đi', hint: activeTrip.title, run: () => navigate(`/trips/${activeTrip.id}`) },
+      { id: 'expenses', label: 'Chi tiêu', hint: activeTrip.title, run: () => navigate(`/trips/${activeTrip.id}/money`) },
+      { id: 'places', label: 'Địa điểm', hint: activeTrip.title, run: () => navigate(`/trips/${activeTrip.id}/plan?tab=places`) },
+      { id: 'packing', label: 'Chuẩn bị', hint: activeTrip.title, run: () => navigate(`/trips/${activeTrip.id}/prepare?tab=packing`) },
+      { id: 'photos', label: 'Kỷ niệm', hint: activeTrip.title, run: () => navigate(`/trips/${activeTrip.id}/memories`) },
     ] : [];
     return [
       { id: 'new-trip', label: 'Tạo chuyến đi mới', hint: 'Mở form tạo trip', run: () => navigate('/trips', { state: { openAddTripModal: true } }) },
-      { id: 'notebook', label: 'Cẩm nang địa điểm', hint: 'Mở sổ tay địa điểm', run: () => navigate('/notebook') },
-      { id: 'settings', label: 'Cài đặt', hint: 'Giao diện, dữ liệu, phím tắt', run: () => navigate('/settings') },
+      { id: 'notebook', label: 'Thư viện địa điểm', hint: 'Mở bộ sưu tập địa điểm', run: () => navigate('/library') },
+      { id: 'inbox', label: 'Hộp thư', hint: 'Lời mời cần phản hồi', run: () => navigate('/inbox') },
+      { id: 'settings', label: 'Tài khoản', hint: 'Hồ sơ, tùy chỉnh và dữ liệu', run: () => navigate('/account/profile') },
       ...activeTripCommands,
       ...tripCommands,
     ];
@@ -92,7 +114,8 @@ export function CommandPalette() {
 
   return (
     <div className="fixed inset-0 z-[140] bg-slate-950/50 p-4 backdrop-blur-sm" onMouseDown={() => setIsOpen(false)}>
-      <div className="mx-auto mt-20 max-w-2xl overflow-hidden rounded-[1.5rem] bg-surface-container-lowest shadow-2xl ring-1 ring-outline-variant/40" onMouseDown={(event) => event.stopPropagation()}>
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="command-palette-title" className="mx-auto mt-20 max-w-2xl overflow-hidden rounded-[1.5rem] bg-surface-container-lowest shadow-2xl ring-1 ring-outline-variant/40" onMouseDown={(event) => event.stopPropagation()}>
+        <h2 id="command-palette-title" className="sr-only">Tìm nhanh và chuyển màn hình</h2>
         <div className="flex items-center gap-3 border-b border-outline-variant/30 px-5 py-4">
           <Icons.Command className="h-5 w-5 text-secondary dark:text-gray-300" />
           <input

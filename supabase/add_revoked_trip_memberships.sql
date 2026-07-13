@@ -88,3 +88,5 @@ begin
   where id = target_invitation_id;
 end;
 $$;
+
+notify pgrst, 'reload schema';

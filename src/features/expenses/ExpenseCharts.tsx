@@ -24,10 +24,10 @@ export function ExpenseCharts({ pieData, barData, memberData, currencySymbol, fo
             {pieData.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
-                  <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={60} outerRadius={90} paddingAngle={5} label={({ percent }) => `${(percent * 100).toFixed(0)}%`} labelLine={false}>
+                  <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={60} outerRadius={90} paddingAngle={5} label={({ percent }) => `${((percent ?? 0) * 100).toFixed(0)}%`} labelLine={false}>
                     {pieData.map((_, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
                   </Pie>
-                  <Tooltip formatter={(value: number) => formatMoney(value, currencySymbol)} />
+                  <Tooltip formatter={(value) => formatMoney(Number(value ?? 0), currencySymbol)} />
                 </PieChart>
               </ResponsiveContainer>
             ) : <EmptyChart />}
@@ -51,7 +51,7 @@ export function ExpenseCharts({ pieData, barData, memberData, currencySymbol, fo
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
                   <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#6B7280' }} />
                   <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#6B7280' }} tickFormatter={formatAxisValue} />
-                  <Tooltip cursor={{ fill: '#F3F4F6' }} formatter={(value: number) => [formatMoney(value, currencySymbol), 'Tổng chi']} labelFormatter={(label) => `Ngày ${label}`} />
+                  <Tooltip cursor={{ fill: '#F3F4F6' }} formatter={(value) => [formatMoney(Number(value ?? 0), currencySymbol), 'Tổng chi']} labelFormatter={(label) => `Ngày ${label}`} />
                   <Bar dataKey="value" fill="#33B1FF" radius={[4, 4, 0, 0]} maxBarSize={50} />
                 </BarChart>
               </ResponsiveContainer>
@@ -69,7 +69,7 @@ export function ExpenseCharts({ pieData, barData, memberData, currencySymbol, fo
                 <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#E5E7EB" />
                 <XAxis type="number" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#6B7280' }} tickFormatter={formatAxisValue} />
                 <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#6B7280' }} width={100} />
-                <Tooltip cursor={{ fill: '#F3F4F6' }} formatter={(value: number) => [formatMoney(value, currencySymbol), 'Đã chi']} />
+                <Tooltip cursor={{ fill: '#F3F4F6' }} formatter={(value) => [formatMoney(Number(value ?? 0), currencySymbol), 'Đã chi']} />
                 <Bar dataKey="value" radius={[0, 4, 4, 0]} barSize={24}>
                   {memberData.map((_, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
                 </Bar>
