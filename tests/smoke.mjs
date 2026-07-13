@@ -80,8 +80,13 @@ async function runSmoke() {
 
   await page.goto(`${baseUrl}/trips`, { waitUntil: 'networkidle' });
   await page.waitForSelector('text=Chuyến đi của tôi');
+  if (await page.locator('html').getAttribute('lang') !== 'vi') throw new Error('Trang chưa khai báo đúng ngôn ngữ tiếng Việt.');
+  const viewportContent = await page.locator('meta[name="viewport"]').getAttribute('content') ?? '';
+  if (/user-scalable\s*=\s*no|maximum-scale\s*=\s*1(?:\.0)?/i.test(viewportContent)) throw new Error('Viewport vẫn đang khóa thao tác phóng to.');
+  if (await page.locator('a button, button a').count() > 0) throw new Error('Thẻ chuyến đi còn lồng control tương tác bên trong liên kết.');
+  await page.getByRole('combobox', { name: 'Lọc chuyến đi theo trạng thái' }).waitFor();
 
-  await page.click('text=Mùa Thu Tại Đà Lạt');
+  await page.getByRole('link', { name: 'Mở chuyến đi Mùa Thu Tại Đà Lạt' }).click();
   await page.waitForURL('**/trips/t3');
   await page.waitForSelector('text=Đà Lạt');
 
@@ -104,8 +109,12 @@ async function runSmoke() {
   await page.getByRole('link', { name: 'Tài khoản', exact: true }).click();
   await page.waitForURL('**/account/profile');
   await page.waitForSelector('text=Tài khoản');
+  for (const fieldName of ['Tên hiển thị', 'Đường dẫn ảnh đại diện', 'Số điện thoại', 'Ngày sinh', 'Giới thiệu ngắn']) {
+    await page.getByLabel(fieldName, { exact: true }).waitFor();
+  }
 
   await page.goto(`${baseUrl}/trips/t3/members`, { waitUntil: 'networkidle' });
+  if (await page.getByRole('combobox', { name: /^Vai trò của / }).count() === 0) throw new Error('Control đổi vai trò thành viên chưa có accessible name.');
   const archivedMemberRow = page.getByText('tu@example.com', { exact: true })
     .locator('xpath=ancestor::div[contains(@class, "rounded-[1.25rem]")]');
   const revokeButton = archivedMemberRow.getByRole('button', { name: 'Thu hồi' });
@@ -121,6 +130,9 @@ async function runSmoke() {
   await page.getByText('tu@example.com', { exact: true }).waitFor({ state: 'detached' });
 
   await page.goto(`${baseUrl}/trips/t3/expenses`, { waitUntil: 'networkidle' });
+  for (const filterName of ['Lọc chi tiêu theo danh mục', 'Lọc chi tiêu theo người chi', 'Lọc chi tiêu theo người nợ']) {
+    await page.getByRole('combobox', { name: filterName }).waitFor();
+  }
   await page.getByText('Tú', { exact: true }).first().waitFor();
   await page.getByRole('button', { name: 'Sửa khoản chi Vé tham quan Thác Datanla' }).click();
   if (await page.locator('select[name="paidBy"]').inputValue() !== 'm4') throw new Error('Sửa khoản chi lịch sử đã làm mất người trả tiền bị thu hồi.');
@@ -130,6 +142,13 @@ async function runSmoke() {
   await page.getByText('Đã thu hồi quyền', { exact: true }).waitFor();
   await page.getByRole('button', { name: 'Biểu đồ Chi tiêu' }).click();
   await page.getByText('Phân bổ Danh mục', { exact: true }).waitFor();
+
+  await page.goto(`${baseUrl}/library`, { waitUntil: 'networkidle' });
+  await page.getByRole('button', { name: 'Tạo bộ sưu tập' }).click();
+  await page.getByPlaceholder('Ví dụ: Hội yêu trà sữa...').fill('   ');
+  await page.getByRole('dialog').getByRole('button', { name: 'Tạo bộ sưu tập' }).click();
+  await page.getByText('Tên bộ sưu tập không được chỉ gồm khoảng trắng.', { exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Đóng hộp thoại' }).click();
 
   await page.goto(`${baseUrl}/trips/t3/settings`, { waitUntil: 'networkidle' });
   await page.locator('input[name="startDate"]').fill('2024-10-20');

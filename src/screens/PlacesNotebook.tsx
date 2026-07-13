@@ -138,8 +138,12 @@ export function PlacesNotebook() {
 
     const handleCreateNotebook = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
-        if (createNbName.trim()) {
-            const result = await addNotebook(createNbName, 'shared');
+        const nextName = createNbName.trim();
+        if (!nextName) {
+            showToast({ tone: 'error', title: 'Chưa có tên bộ sưu tập', message: 'Tên bộ sưu tập không được chỉ gồm khoảng trắng.' });
+            return;
+        }
+        const result = await addNotebook(nextName, 'shared');
             if (result.success && result.id) {
                 // Auto-select the newly created notebook
                 setActiveNotebookId(result.id);
@@ -149,18 +153,17 @@ export function PlacesNotebook() {
                     showToast({
                         tone: 'success',
                         title: 'Đã tạo bộ sưu tập',
-                        message: `Sổ "${createNbName}" đã sẵn sàng. ${inviteResult.success ? 'Đã gửi lời mời.' : inviteResult.error || ''}`
+                        message: `Sổ "${nextName}" đã sẵn sàng. ${inviteResult.success ? 'Đã gửi lời mời.' : inviteResult.error || ''}`
                     });
                 } else {
-                    showToast({ tone: 'success', title: 'Đã tạo bộ sưu tập', message: `Bộ sưu tập "${createNbName}" đã sẵn sàng.` });
+                    showToast({ tone: 'success', title: 'Đã tạo bộ sưu tập', message: `Bộ sưu tập "${nextName}" đã sẵn sàng.` });
                 }
             } else {
                 showToast({ tone: 'error', title: 'Không thể tạo', message: result.error || 'Lỗi không xác định.' });
             }
             setIsCreateNbOpen(false);
             setCreateNbName('');
-            setCreateNbInvite('');
-        }
+        setCreateNbInvite('');
     };
 
     const handleSavePlace = async (e: React.FormEvent<HTMLFormElement>) => {

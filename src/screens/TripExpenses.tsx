@@ -534,6 +534,7 @@ export function TripExpenses() {
                     />
                   </div>
                   <select
+                    aria-label="Lọc chi tiêu theo danh mục"
                     value={categoryFilter}
                     onChange={(event) => setCategoryFilter(event.target.value)}
                     className="min-w-0 flex-1 rounded-lg border border-outline-variant/50 bg-surface-container-low px-3 py-2 text-sm text-on-surface lg:flex-none"
@@ -544,6 +545,7 @@ export function TripExpenses() {
                     ))}
                   </select>
                   <select
+                    aria-label="Lọc chi tiêu theo người chi"
                     value={payerFilter}
                     onChange={(event) => setPayerFilter(event.target.value)}
                     className="min-w-0 flex-1 rounded-lg border border-outline-variant/50 bg-surface-container-low px-3 py-2 text-sm text-on-surface lg:flex-none"
@@ -554,6 +556,7 @@ export function TripExpenses() {
                     ))}
                   </select>
                   <select
+                    aria-label="Lọc chi tiêu theo người nợ"
                     value={participantFilter}
                     onChange={(event) => setParticipantFilter(event.target.value)}
                     className="min-w-0 flex-1 rounded-lg border border-outline-variant/50 bg-surface-container-low px-3 py-2 text-sm text-on-surface lg:flex-none"

@@ -303,6 +303,7 @@ export function MyTrips() {
             <div className="flex min-w-0 items-center gap-2 rounded-xl bg-surface-container-high px-3 py-2">
               <Icons.Filter className="w-5 h-5 text-on-surface" />
               <select
+                aria-label="Lọc chuyến đi theo trạng thái"
                 value={statusFilter}
                 onChange={(event) => setStatusFilter(event.target.value as 'all' | 'upcoming' | 'completed' | 'draft')}
                 className="min-w-0 flex-1 cursor-pointer truncate bg-transparent text-sm font-semibold text-on-surface outline-none"
@@ -336,7 +337,14 @@ export function MyTrips() {
 
             if (trip.status === 'draft') {
               return (
-                <motion.div variants={itemVariants} key={trip.id} onClick={() => { setEditingTripId(trip.id); setIsAddOpen(true); }} className="relative bg-surface-container-low rounded-[1.5rem] p-6 border-2 border-dashed border-outline-variant flex flex-col items-center justify-center text-center opacity-70 group hover:opacity-100 transition-opacity cursor-pointer ring-1 ring-transparent hover:ring-outline/20">
+                <motion.div variants={itemVariants} key={trip.id} className="group relative flex flex-col items-center justify-center rounded-[1.5rem] border-2 border-dashed border-outline-variant bg-surface-container-low p-6 text-center opacity-70 ring-1 ring-transparent transition-opacity hover:opacity-100 hover:ring-outline/20">
+                  <button
+                    type="button"
+                    aria-label={`Tiếp tục chỉnh sửa bản nháp ${trip.title}`}
+                    onClick={() => { setEditingTripId(trip.id); setIsAddOpen(true); }}
+                    className="absolute inset-0 rounded-[1.5rem] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                  />
+                  <div className="pointer-events-none flex flex-col items-center justify-center">
                   {trip.permissions?.canDeleteTrip && (
                     <button
                       onClick={async (e) => {
@@ -347,7 +355,7 @@ export function MyTrips() {
                           catch (error: any) { showToast({ tone: 'error', title: 'Lỗi', message: error.message }); }
                         }
                       }}
-                      className="absolute top-3 right-3 text-secondary dark:text-gray-300 hover:text-error transition-colors bg-surface hover:bg-error/10 p-2 rounded-full opacity-0 group-hover:opacity-100 shadow-sm"
+                      className="pointer-events-auto absolute right-3 top-3 z-10 rounded-full bg-surface p-2 text-secondary opacity-0 shadow-sm transition-colors hover:bg-error/10 hover:text-error focus:opacity-100 group-hover:opacity-100 dark:text-gray-300"
                       title="Xóa bản nháp"
                     >
                       <Icons.Trash2 className="w-4 h-4" />
@@ -356,7 +364,8 @@ export function MyTrips() {
                   <Icons.FileEdit className="w-10 h-10 text-outline mb-4" />
                   <h3 className="text-lg font-bold font-headline mb-2">Bản nháp: {trip.title}</h3>
                   <p className="font-label text-xs text-outline mb-6">Chưa hoàn thiện thông tin điểm đến và ngân sách</p>
-                  <button className="font-label text-[10px] font-extrabold uppercase tracking-widest text-primary dark:text-white border-b-2 border-primary pb-1">Tiếp tục chỉnh sửa</button>
+                  <span className="border-b-2 border-primary pb-1 font-label text-[10px] font-extrabold uppercase tracking-widest text-primary dark:text-white">Tiếp tục chỉnh sửa</span>
+                  </div>
                 </motion.div>
               );
             }
@@ -364,7 +373,9 @@ export function MyTrips() {
             if (viewMode === 'list') {
               return (
                 <motion.div variants={itemVariants} key={trip.id}>
-                  <Link to={`/trips/${trip.id}`} className={cn("bg-surface-container-lowest rounded-2xl shadow-[0_8px_20px_rgba(0,0,0,0.05)] ring-1 ring-outline/10 hover:shadow-[0_16px_36px_-14px_rgba(0,0,0,0.16)] hover:-translate-y-0.5 transition-all duration-300 group flex items-center gap-4 density-card active:scale-[0.98]", uiDensity === 'compact' ? 'p-2.5' : 'p-3')}>
+                  <div className={cn("group relative rounded-2xl bg-surface-container-lowest shadow-[0_8px_20px_rgba(0,0,0,0.05)] ring-1 ring-outline/10 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_16px_36px_-14px_rgba(0,0,0,0.16)] active:scale-[0.98]", uiDensity === 'compact' ? 'p-2.5' : 'p-3')}>
+                    <Link to={`/trips/${trip.id}`} aria-label={`Mở chuyến đi ${trip.title}`} className="absolute inset-0 rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
+                    <div className="pointer-events-none relative flex items-center gap-4">
                     <div className="h-14 w-14 shrink-0 rounded-lg bg-secondary-container flex items-center justify-center text-primary dark:text-white overflow-hidden">
                       <img alt={trip.title} className="h-full w-full object-cover" src={trip.image} loading="lazy" decoding="async" />
                     </div>
@@ -416,7 +427,7 @@ export function MyTrips() {
                         )}
                       </div>
                     </div>
-                    <div className="flex flex-col items-center justify-center shrink-0 ml-2 md:ml-4 border-l border-outline-variant/30 pl-2 md:pl-4">
+                    <div className="pointer-events-auto relative z-10 ml-2 flex shrink-0 flex-col items-center justify-center border-l border-outline-variant/30 pl-2 md:ml-4 md:pl-4">
                       <div className="flex items-center gap-1 md:gap-2">
                         <button
                           onClick={async (e) => {
@@ -460,19 +471,22 @@ export function MyTrips() {
                         )}
                       </div>
                     </div>
-                  </Link>
+                    </div>
+                  </div>
                 </motion.div>
               );
             }
 
             return (
               <motion.div variants={itemVariants} key={trip.id}>
-                  <Link to={`/trips/${trip.id}`} className={cn("group block rounded-[1.25rem] bg-surface-container-lowest shadow-[0_12px_24px_rgba(0,0,0,0.06)] ring-1 ring-outline/10 transition-all duration-300 hover:-translate-y-2 hover:shadow-[0_24px_48px_-12px_rgba(0,0,0,0.12)] active:scale-[0.98] md:rounded-[1.5rem]", uiDensity === 'compact' ? 'p-4' : 'p-4 md:p-6')}>
+                  <div className={cn("group relative rounded-[1.25rem] bg-surface-container-lowest shadow-[0_12px_24px_rgba(0,0,0,0.06)] ring-1 ring-outline/10 transition-all duration-300 hover:-translate-y-2 hover:shadow-[0_24px_48px_-12px_rgba(0,0,0,0.12)] active:scale-[0.98] md:rounded-[1.5rem]", uiDensity === 'compact' ? 'p-4' : 'p-4 md:p-6')}>
+                  <Link to={`/trips/${trip.id}`} aria-label={`Mở chuyến đi ${trip.title}`} className="absolute inset-0 rounded-[1.25rem] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary md:rounded-[1.5rem]" />
+                  <div className="pointer-events-none relative">
                   <div className="mb-5 flex items-start justify-between gap-3 md:mb-6">
                     <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-secondary-container text-primary dark:text-white md:h-16 md:w-16">
                       <img alt={trip.title} className="h-full w-full object-cover" src={trip.image} loading="lazy" decoding="async" />
                     </div>
-                    <div className="flex min-w-0 flex-wrap items-center justify-end gap-1">
+                    <div className="pointer-events-auto relative z-10 flex min-w-0 flex-wrap items-center justify-end gap-1">
                       <button
                         onClick={async (e) => {
                           e.preventDefault();
@@ -589,7 +603,8 @@ export function MyTrips() {
                       </div>
                     </div>
                   </div>
-                </Link>
+                  </div>
+                </div>
               </motion.div>
             );
           })}

@@ -457,6 +457,7 @@ export function Settings() {
                       <div className="md:col-span-2 min-w-0">
                         <label className="mb-2 block font-label text-xs font-bold uppercase tracking-[0.22em] text-secondary dark:text-gray-300">Tên hiển thị</label>
                         <input
+                          aria-label="Tên hiển thị"
                           value={profileForm.displayName}
                           onChange={(event) => setProfileForm((current) => ({ ...current, displayName: event.target.value }))}
                           className="density-control w-full min-w-0 max-w-full rounded-2xl border border-outline-variant/60 bg-surface-container-lowest outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
@@ -475,6 +476,7 @@ export function Settings() {
                             </div>
                             <button
                               type="button"
+                              aria-label="Tải ảnh đại diện lên"
                               onClick={() => avatarInputRef.current?.click()}
                               disabled={isUploadingAvatar}
                               className="density-button flex shrink-0 items-center justify-center gap-2 rounded-2xl bg-surface-container-high px-4 py-3 font-semibold text-on-surface transition hover:bg-surface-container-highest disabled:opacity-50"
@@ -493,6 +495,7 @@ export function Settings() {
                         ) : (
                           <div className="flex gap-2">
                             <input
+                              aria-label="Đường dẫn ảnh đại diện"
                               value={profileForm.avatar}
                               onChange={(event) => setProfileForm((current) => ({ ...current, avatar: event.target.value }))}
                               placeholder="https://..."
@@ -500,6 +503,7 @@ export function Settings() {
                             />
                             <button
                               type="button"
+                              aria-label="Tải ảnh đại diện lên"
                               onClick={() => avatarInputRef.current?.click()}
                               disabled={isUploadingAvatar}
                               className="density-button flex shrink-0 items-center gap-2 rounded-2xl bg-surface-container-high px-4 py-3 font-semibold text-on-surface transition hover:bg-surface-container-highest disabled:opacity-50"
@@ -510,6 +514,7 @@ export function Settings() {
                           </div>
                         )}
                         <input
+                          aria-label="Tệp ảnh đại diện"
                           type="file"
                           accept="image/*"
                           ref={avatarInputRef}
@@ -520,6 +525,7 @@ export function Settings() {
                       <div className="min-w-0">
                         <label className="mb-2 block font-label text-xs font-bold uppercase tracking-[0.18em] text-secondary dark:text-gray-300 md:tracking-[0.22em]">Số điện thoại</label>
                         <input
+                          aria-label="Số điện thoại"
                           value={profileForm.phone}
                           onChange={(event) => setProfileForm((current) => ({ ...current, phone: event.target.value }))}
                           className="density-control w-full min-w-0 max-w-full rounded-2xl border border-outline-variant/60 bg-surface-container-lowest outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
@@ -528,6 +534,7 @@ export function Settings() {
                       <div className="min-w-0">
                         <label className="mb-2 block font-label text-xs font-bold uppercase tracking-[0.18em] text-secondary dark:text-gray-300 md:tracking-[0.22em]">Ngày sinh</label>
                         <input
+                          aria-label="Ngày sinh"
                           type="date"
                           value={profileForm.birthdate}
                           onChange={(event) => setProfileForm((current) => ({ ...current, birthdate: event.target.value }))}
@@ -537,6 +544,7 @@ export function Settings() {
                       <div className="md:col-span-2 min-w-0">
                         <label className="mb-2 block font-label text-xs font-bold uppercase tracking-[0.18em] text-secondary dark:text-gray-300 md:tracking-[0.22em]">Giới thiệu ngắn</label>
                         <textarea
+                          aria-label="Giới thiệu ngắn"
                           rows={4}
                           value={profileForm.bio}
                           onChange={(event) => setProfileForm((current) => ({ ...current, bio: event.target.value }))}

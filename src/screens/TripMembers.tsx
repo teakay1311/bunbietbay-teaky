@@ -194,6 +194,7 @@ export function TripMembers() {
                     {canManageMembers && member.role !== 'owner' && member.id !== currentUserProfile?.id && (
                       <>
                         <select
+                          aria-label={`Vai trò của ${member.displayName}`}
                           value={member.role}
                           disabled={busyMembershipId === member.membershipId}
                           onChange={async (event) => {

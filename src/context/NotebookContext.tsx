@@ -294,13 +294,15 @@ export function NotebookProvider({ children }: { children: React.ReactNode }) {
 
     const addNotebook = async (name: string, type: 'personal' | 'shared'): Promise<{ success: boolean; id?: string; error?: string }> => {
         try {
+            const nextName = name.trim();
+            if (!nextName) return { success: false, error: 'Tên bộ sưu tập không được để trống.' };
             if (isRemoteMode && libraryStatus !== 'ready-remote') throw new Error('Thư viện cloud đang không khả dụng. Hãy thử đồng bộ lại trước khi chỉnh sửa.');
             let id = 'nb_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 5);
 
             let ownerMembership: NotebookMember | null = null;
             if (isRemoteMode && supabase) {
                 const { data, error } = await supabase.from('notebooks').insert({
-                    name, type, created_by: session!.user.id
+                    name: nextName, type, created_by: session!.user.id
                 }).select('id').single();
 
                 if (error) {
@@ -329,7 +331,7 @@ export function NotebookProvider({ children }: { children: React.ReactNode }) {
             };
             if (ownerMembership) setNotebookMembers(prev => [...prev, ownerMembership]);
             setNotebooks(prev => [...prev, calculateNotebook(
-                { id, name, type, createdBy: session?.user?.id },
+                { id, name: nextName, type, createdBy: session?.user?.id },
                 session?.user?.id ?? 'local-user',
                 [localMembership],
             )]);
