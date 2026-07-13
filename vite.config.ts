@@ -61,6 +61,11 @@ export default defineConfig(({ mode }) => {
           clientsClaim: true,
           // Remove old precache entries when a new SW version is deployed
           cleanupOutdatedCaches: true,
+          runtimeCaching: [{
+            urlPattern: /^https:\/\/res\.cloudinary\.com\//,
+            handler: 'CacheFirst',
+            options: { cacheName: 'bunbietbay-offline-photos', expiration: { maxEntries: 300, maxAgeSeconds: 60 * 60 * 24 * 90 }, cacheableResponse: { statuses: [0, 200] } },
+          }],
         }
       })
     ],

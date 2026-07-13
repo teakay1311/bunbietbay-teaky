@@ -22,6 +22,8 @@ import { type SortOption } from '../utils/listSort';
 import { EXPENSE_CATEGORY_OPTIONS, mergeCategoryOptions } from '../utils/tripCategories';
 import { fadeUpVariants, pageStaggerVariants } from '../ui/motion';
 import { buildCategoryBudgetRows, calculateCurrencyBalances, filterAndSortExpenses, getExpenseFormMembers, type ExpenseSortKey } from '../features/expenses/selectors';
+import { useStoredOption } from '../hooks/useStoredOption';
+import { CommentThread } from '../components/CommentThread';
 
 const EXPENSE_PRESETS = [
   { icon: '☕', label: 'Cafe', category: 'Ăn uống', title: 'Cafe' },
@@ -43,6 +45,8 @@ const EXPENSE_SORT_OPTIONS: Array<SortOption<ExpenseSortKey>> = [
   { value: 'payerAsc', label: 'Người trả A-Z' },
   { value: 'titleAsc', label: 'Tên A-Z' },
 ];
+const EXPENSE_SORT_KEYS = EXPENSE_SORT_OPTIONS.map((option) => option.value);
+const EXPENSE_TABS = ['list', 'balances', 'charts'] as const;
 
 export function TripExpenses() {
   const { id } = useParams();
@@ -57,8 +61,8 @@ export function TripExpenses() {
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [payerFilter, setPayerFilter] = useState<string>('all');
   const [participantFilter, setParticipantFilter] = useState<string>('all');
-  const [sortBy, setSortBy] = useState<ExpenseSortKey>('dateDesc');
-  const [activeTab, setActiveTab] = useState<'list' | 'balances' | 'charts'>('list');
+  const [sortBy, setSortBy] = useStoredOption('bunbietbay-expenses-sort', EXPENSE_SORT_KEYS, 'dateDesc');
+  const [activeTab, setActiveTab] = useStoredOption('bunbietbay-expenses-tab', EXPENSE_TABS, 'list');
   const [settlementMemberId, setSettlementMemberId] = useState<string | null>(null);
   const [isBudgetSettingsOpen, setIsBudgetSettingsOpen] = useState(false);
 
@@ -500,15 +504,15 @@ export function TripExpenses() {
       )}
 
       <motion.div variants={itemVariants} className="no-scrollbar relative z-10 mb-5 flex w-full gap-2 overflow-x-auto md:mb-6 md:gap-4">
-        <button onClick={() => setActiveTab('list')} className={`whitespace-nowrap rounded-xl px-4 py-2 text-sm font-bold transition-all md:rounded-2xl md:px-6 md:py-2.5 md:text-base ${activeTab === 'list' ? 'bg-primary text-on-primary shadow-lg shadow-primary/20' : 'bg-surface-container-high text-secondary dark:text-gray-300 hover:text-on-surface'}`}>
+        <button type="button" onClick={() => setActiveTab('list')} aria-pressed={activeTab === 'list'} className={`whitespace-nowrap rounded-xl px-4 py-2 text-sm font-bold transition-all md:rounded-2xl md:px-6 md:py-2.5 md:text-base ${activeTab === 'list' ? 'bg-primary text-on-primary shadow-lg shadow-primary/20' : 'bg-surface-container-high text-secondary dark:text-gray-300 hover:text-on-surface'}`}>
           Danh sách Chi tiêu
         </button>
-        <button onClick={() => setActiveTab('balances')} className={`whitespace-nowrap rounded-xl px-4 py-2 text-sm font-bold transition-all md:rounded-2xl md:px-6 md:py-2.5 md:text-base ${activeTab === 'balances' ? 'bg-primary text-on-primary shadow-lg shadow-primary/20' : 'bg-surface-container-high text-secondary dark:text-gray-300 hover:text-on-surface'}`}>
+        <button type="button" onClick={() => setActiveTab('balances')} aria-pressed={activeTab === 'balances'} className={`whitespace-nowrap rounded-xl px-4 py-2 text-sm font-bold transition-all md:rounded-2xl md:px-6 md:py-2.5 md:text-base ${activeTab === 'balances' ? 'bg-primary text-on-primary shadow-lg shadow-primary/20' : 'bg-surface-container-high text-secondary dark:text-gray-300 hover:text-on-surface'}`}>
           <div className="flex items-center gap-2">
             <Icons.ArrowRightLeft className="w-4 h-4" /> Tra soát Công nợ
           </div>
         </button>
-        <button onClick={() => setActiveTab('charts')} className={`whitespace-nowrap rounded-xl px-4 py-2 text-sm font-bold transition-all md:rounded-2xl md:px-6 md:py-2.5 md:text-base ${activeTab === 'charts' ? 'bg-primary text-on-primary shadow-lg shadow-primary/20' : 'bg-surface-container-high text-secondary dark:text-gray-300 hover:text-on-surface'}`}>
+        <button type="button" onClick={() => setActiveTab('charts')} aria-pressed={activeTab === 'charts'} className={`whitespace-nowrap rounded-xl px-4 py-2 text-sm font-bold transition-all md:rounded-2xl md:px-6 md:py-2.5 md:text-base ${activeTab === 'charts' ? 'bg-primary text-on-primary shadow-lg shadow-primary/20' : 'bg-surface-container-high text-secondary dark:text-gray-300 hover:text-on-surface'}`}>
           <div className="flex items-center gap-2">
             <Icons.PieChart className="w-4 h-4" /> Biểu đồ Chi tiêu
           </div>
@@ -632,6 +636,7 @@ export function TripExpenses() {
                         <span className="rounded-full bg-surface-container-high px-3 py-1 font-bold text-secondary">{expense.participants.length} người tham gia</span>
                       </div>
                       {expense.note && <p className="mt-3 line-clamp-2 text-sm text-secondary dark:text-gray-300"><LinkifyText text={expense.note} /></p>}
+                      <CommentThread tripId={expense.tripId} targetType="expense" targetId={expense.id} />
                       {canEdit && (
                         <div className="mt-4 flex justify-end gap-2">
                           <button aria-label={`Sửa khoản chi ${expense.title}`} title="Sửa khoản chi" onClick={() => { setEditingExpense(expense); setIsAddOpen(true); }} className="rounded-lg p-2 text-secondary transition-colors hover:bg-surface-container-high hover:text-primary">
@@ -712,6 +717,7 @@ export function TripExpenses() {
                             <div className="font-headline font-bold text-on-surface mb-1">{expense.title}</div>
                             {(expense.activityId || expense.placeId) && <div className="mb-1 text-xs text-secondary">{expense.activityId ? `Hoạt động: ${activityNameById.get(expense.activityId) ?? 'Đã xóa'}` : `Địa điểm: ${placeNameById.get(expense.placeId!) ?? 'Đã xóa'}`}</div>}
                             <div className="text-xs text-secondary dark:text-gray-300 italic"><LinkifyText text={expense.note} /></div>
+                            <CommentThread tripId={expense.tripId} targetType="expense" targetId={expense.id} />
                           </td>
                           <td className="px-6 py-5 align-middle text-right">
                             <p className="font-headline font-bold text-lg text-primary dark:text-white">

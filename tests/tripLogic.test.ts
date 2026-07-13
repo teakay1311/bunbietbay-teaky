@@ -62,7 +62,7 @@ test('derives active and historical trip members without changing persisted data
       { id: 'm1', tripId: 't1', userId: 'active', role: 'owner' },
       { id: 'm2', tripId: 't1', userId: 'archived', role: 'editor', revokedAt: '2026-01-03T00:00:00.000Z' },
     ],
-    invitations: [], activities: [], savedPlaces: [], packingItems: [], photos: [], activityLogs: [],
+    invitations: [], activities: [], savedPlaces: [], packingItems: [], photos: [], activityLogs: [], collaborationSettings: [], tasks: [], polls: [], pollOptions: [], pollVotes: [], comments: [], notifications: [], offlineMutations: [],
     expenses: [{ id: 'e1', tripId: 't1', date: '2026-01-01', time: '09:00', title: 'Lunch', category: 'Food', amount: 200, paidBy: 'archived', participants: ['active', 'archived'] }],
     currentTripId: 't1', viewerProfileId: 'active', pinnedTripIds: ['t1'],
   };

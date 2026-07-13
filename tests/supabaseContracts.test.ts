@@ -47,3 +47,43 @@ test('owner membership migration restores creators and blocks owner mutation', (
   assert.match(schema, /role = 'owner' and user_id = auth\.uid\(\)/);
   assert.match(schema, /role <> 'owner' and \(public\.is_notebook_manager/);
 });
+
+test('collaboration migration enforces same-trip links and role-dependent viewer actions', () => {
+  const sql = readSql('add_collaboration_offline_sharing.sql');
+  const schema = readSql('schema.sql');
+  for (const table of ['trip_tasks', 'trip_polls', 'trip_poll_options', 'trip_poll_votes', 'trip_comments', 'trip_notifications', 'trip_public_shares']) {
+    assert.match(sql, new RegExp(`create table if not exists public\\.${table}`));
+    assert.match(schema, new RegExp(`create table if not exists public\\.${table}`));
+  }
+  assert.match(sql, /task activity must belong to the same trip/);
+  assert.match(sql, /poll option must belong to the same trip/);
+  assert.match(sql, /comment target must belong to the same trip/);
+  assert.match(sql, /mentioned user must be an active trip member/);
+  assert.match(sql, /viewer_can_update_assigned_tasks/);
+  assert.match(sql, /s\.trip_id = trip_poll_votes\.trip_id/);
+  assert.match(sql, /s\.trip_id = trip_comments\.trip_id/);
+  assert.match(sql, /only trip managers can reopen a poll/);
+  assert.match(sql, /only trip managers can delete a poll that has votes/);
+});
+
+test('public sharing only exposes an allowlisted security-definer RPC', () => {
+  const sql = readSql('add_collaboration_offline_sharing.sql');
+  assert.match(sql, /token_hash text not null unique/);
+  assert.match(sql, /encode\(digest\(p_token, 'sha256'\), 'hex'\)/);
+  assert.match(sql, /returns jsonb language plpgsql security definer/);
+  assert.match(sql, /revoke all on function public\.get_public_trip_share\(text\) from public/);
+  assert.match(sql, /grant execute on function public\.get_public_trip_share\(text\) to anon, authenticated/);
+  assert.doesNotMatch(sql, /create policy[^;]+on public\.trip_public_shares[^;]+to anon/);
+  for (const forbidden of ['expenses', 'memberships', 'trip_tasks', 'trip_comments', 'trip_notifications']) {
+    const rpc = sql.slice(sql.indexOf('create or replace function public.get_public_trip_share'));
+    assert.doesNotMatch(rpc, new RegExp(`from public\\.${forbidden}\\b`));
+  }
+});
+
+test('target deletion removes only the matching comment thread', () => {
+  const sql = readSql('add_collaboration_offline_sharing.sql');
+  assert.match(sql, /delete from public\.trip_comments\s+where target_type = tg_argv\[0\] and target_id = old\.id/);
+  for (const target of ['activities', 'expenses', 'saved_places', 'photos', 'trip_tasks', 'trip_polls']) {
+    assert.match(sql, new RegExp(`create trigger ${target}_delete_comments`));
+  }
+});

@@ -9,7 +9,7 @@ import { useAuth } from '../context/AuthContext';
 import { useAppContext } from '../context/AppContext';
 import { useFeedback } from '../context/FeedbackContext';
 import { useNotebook } from '../context/NotebookContext';
-import { createWorkspaceBackupV7, prepareWorkspaceBackup } from '../utils/workspaceBackup';
+import { createWorkspaceBackupV8, prepareWorkspaceBackup } from '../utils/workspaceBackup';
 import { motion, AnimatePresence } from 'motion/react';
 import { usePwaInstallPrompt } from '../features/settings/usePwaInstallPrompt';
 import { resizeImageFileToDataUrl } from '../utils/avatarImage';
@@ -147,7 +147,7 @@ export function Settings() {
 
   const exportBackup = () => {
     const exportTimestamp = new Date().toISOString();
-    const backup = createWorkspaceBackupV7({
+    const backup = createWorkspaceBackupV8({
       workspace: snapshot,
       library: {
         notebooks: notebooks.map(({ id, name, type, createdBy, createdAt, updatedAt }) => ({ id, name, type, createdBy, createdAt, updatedAt })),

@@ -4,15 +4,23 @@ import { useAppContext } from '../context/AppContext';
 import { useFeedback } from '../context/FeedbackContext';
 import { formatLocalDateTime } from '../utils/date';
 import { useSettings } from '../context/SettingsContext';
+import { useCollaboration } from '../context/CollaborationContext';
+import type { PublicTripShareScope } from '../domain/models';
 
 export function TripSettings() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { trips, activityLogs, editTrip, deleteTrip } = useAppContext();
+  const { trips, activityLogs, editTrip, deleteTrip, isRemoteMode } = useAppContext();
+  const collaboration = useCollaboration();
   const { confirm, showToast } = useFeedback();
   const { tripNotificationPreferences, getEffectiveTripReminders, setTripNotificationPreferences, resetTripNotificationPreferences } = useSettings();
   const [isSaving, setIsSaving] = useState(false);
   const [notificationDraft, setNotificationDraft] = useState({ useDefaults: true, enabled: true, activityLeadMinutes: 120, tripStartLeadMinutes: 1440 });
+  const [collaborationDraft, setCollaborationDraft] = useState({ viewerCanVote: true, viewerCanComment: true, viewerCanUpdateAssignedTasks: true });
+  const [shareScopes, setShareScopes] = useState<PublicTripShareScope[]>(['overview', 'itinerary', 'places']);
+  const [shareExpiryChoice, setShareExpiryChoice] = useState('30');
+  const [customShareExpiry, setCustomShareExpiry] = useState('');
+  const [createdShareUrl, setCreatedShareUrl] = useState('');
   const trip = trips.find((item) => item.id === id);
   useEffect(() => {
     if (!trip) return;
@@ -25,6 +33,12 @@ export function TripSettings() {
       tripStartLeadMinutes: effective.tripStartLeadMinutes,
     });
   }, [getEffectiveTripReminders, trip, tripNotificationPreferences]);
+  useEffect(() => {
+    if (!trip) return;
+    const settings = collaboration.getSettings(trip.id);
+    setCollaborationDraft({ viewerCanVote: settings.viewerCanVote, viewerCanComment: settings.viewerCanComment, viewerCanUpdateAssignedTasks: settings.viewerCanUpdateAssignedTasks });
+    void collaboration.refreshPublicShares(trip.id).catch(() => undefined);
+  }, [collaboration.getSettings, collaboration.refreshPublicShares, trip]);
   if (!trip) return <p>Không tìm thấy chuyến đi.</p>;
 
   const logs = activityLogs.filter((log) => log.tripId === trip.id).slice(0, 8);
@@ -80,6 +94,20 @@ export function TripSettings() {
             <p className="mt-2 text-sm text-secondary">{trip.members.length} thành viên đang hoạt động · Vai trò của bạn: {trip.membershipRole ?? 'khách'}</p>
             <Link to={`/trips/${trip.id}/prepare?tab=team`} className="mt-4 inline-flex min-h-11 items-center rounded-xl border border-outline-variant px-4 text-sm font-semibold">Quản lý nhóm</Link>
           </section>
+          <section className="rounded-2xl border border-outline-variant/50 bg-surface-container-lowest p-5">
+            <h2 className="font-headline text-xl font-bold">Quyền cộng tác của Viewer</h2>
+            <p className="mt-2 text-sm text-secondary">Editor trở lên luôn có các quyền này.</p>
+            <div className="mt-3 space-y-2">{([['viewerCanVote','Bỏ phiếu'],['viewerCanComment','Bình luận và nhắc tên'],['viewerCanUpdateAssignedTasks','Cập nhật việc được giao']] as const).map(([key,label]) => <label key={key} className="flex min-h-11 items-center gap-3 text-sm font-semibold"><input type="checkbox" checked={collaborationDraft[key]} onChange={(event) => setCollaborationDraft((current) => ({ ...current, [key]: event.target.checked }))} />{label}</label>)}</div>
+            <button type="button" disabled={!collaboration.getPermissions(trip.id).canManageSettings} onClick={async () => { try { await collaboration.updateSettings(trip.id, collaborationDraft); showToast({ tone: 'success', title: 'Đã lưu quyền cộng tác' }); } catch (error) { showToast({ tone: 'error', title: 'Không thể lưu quyền', message: error instanceof Error ? error.message : 'Hãy thử lại.' }); } }} className="mt-3 min-h-11 rounded-xl bg-primary px-4 text-sm font-bold text-on-primary disabled:opacity-50">Lưu quyền cộng tác</button>
+          </section>
+          {collaboration.getPermissions(trip.id).canManageShares && <section className="rounded-2xl border border-outline-variant/50 bg-surface-container-lowest p-5">
+            <h2 className="font-headline text-xl font-bold">Link chia sẻ chỉ đọc</h2><p className="mt-2 text-sm text-secondary">Mặc định hết hạn sau 30 ngày. Chi tiêu, thành viên và nội dung cộng tác không bao giờ được công khai.</p>
+            <div className="mt-3 grid grid-cols-2 gap-2">{([['overview','Tổng quan'],['itinerary','Lịch trình'],['places','Địa điểm'],['photos','Ảnh']] as Array<[PublicTripShareScope,string]>).map(([scope,label]) => <label key={scope} className="flex min-h-11 items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={shareScopes.includes(scope)} onChange={(event) => setShareScopes((current) => event.target.checked ? [...current, scope] : current.filter((item) => item !== scope))} />{label}</label>)}</div>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2"><label className="text-sm font-semibold">Thời hạn<select value={shareExpiryChoice} onChange={(event) => setShareExpiryChoice(event.target.value)} className="mt-1 min-h-11 w-full rounded-xl border border-outline-variant bg-surface px-3"><option value="1">1 ngày</option><option value="7">7 ngày</option><option value="30">30 ngày</option><option value="90">90 ngày</option><option value="custom">Ngày tùy chỉnh</option></select></label>{shareExpiryChoice === 'custom' && <label className="text-sm font-semibold">Hết hạn vào<input type="date" min={new Date().toISOString().slice(0, 10)} value={customShareExpiry} onChange={(event) => setCustomShareExpiry(event.target.value)} className="mt-1 min-h-11 w-full rounded-xl border border-outline-variant bg-surface px-3" /></label>}</div>
+            <button type="button" disabled={!isRemoteMode || !navigator.onLine || !shareScopes.length || shareExpiryChoice === 'custom' && !customShareExpiry} onClick={async () => { try { const expiresAt = shareExpiryChoice === 'custom' ? new Date(`${customShareExpiry}T23:59:59`).toISOString() : new Date(Date.now() + Number(shareExpiryChoice) * 86_400_000).toISOString(); const url = await collaboration.createPublicShare(trip.id, shareScopes, expiresAt); setCreatedShareUrl(url); await navigator.clipboard?.writeText(url); showToast({ tone: 'success', title: 'Đã tạo và sao chép link' }); } catch (error) { showToast({ tone: 'error', title: 'Không thể tạo link', message: error instanceof Error ? error.message : 'Hãy thử lại.' }); } }} className="mt-3 min-h-11 rounded-xl bg-primary px-4 text-sm font-bold text-on-primary disabled:opacity-50">Tạo link</button>
+            {createdShareUrl && <input readOnly value={createdShareUrl} aria-label="Link chia sẻ vừa tạo" className="mt-3 min-h-11 w-full rounded-xl border border-outline-variant bg-surface px-3 text-xs" />}
+            <div className="mt-4 space-y-2">{collaboration.publicShares.map((share) => <div key={share.id} className="flex items-center justify-between gap-3 rounded-xl bg-surface-container-low p-3"><div><p className="text-sm font-bold">{share.scopes.join(', ')}</p><p className="text-xs text-secondary">Hết hạn {formatLocalDateTime(share.expiresAt)}{share.revokedAt ? ' · Đã thu hồi' : ''}</p></div>{!share.revokedAt && <button type="button" onClick={async () => { try { await collaboration.revokePublicShare(share.id); showToast({ tone: 'success', title: 'Đã thu hồi link' }); } catch (error) { showToast({ tone: 'error', title: 'Không thể thu hồi link', message: error instanceof Error ? error.message : 'Hãy thử lại.' }); } }} className="min-h-10 rounded-xl border border-error px-3 text-sm font-semibold text-error">Thu hồi</button>}</div>)}</div>
+          </section>}
           <section className="rounded-2xl border border-outline-variant/50 bg-surface-container-lowest p-5">
             <h2 className="font-headline text-xl font-bold">Nhắc việc của tôi</h2>
             <label className="mt-4 flex min-h-11 items-center gap-3 text-sm font-semibold">

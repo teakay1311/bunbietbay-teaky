@@ -3,6 +3,7 @@ import { Icons } from '../components/Icons';
 
 const items = [
   { path: 'memories', label: 'Kỷ niệm', description: 'Ảnh, album và nhật ký', icon: Icons.Image },
+  { path: 'collaborate', label: 'Cộng tác', description: 'Nhiệm vụ, bình chọn và thông báo', icon: Icons.MessageCircle },
   { path: 'prepare?tab=team', label: 'Thành viên', description: 'Nhóm và quyền truy cập', icon: Icons.Users },
   { path: 'settings', label: 'Thiết lập chuyến đi', description: 'Thông tin, lịch sử và thao tác quản lý', icon: Icons.Settings },
 ];

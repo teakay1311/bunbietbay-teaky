@@ -59,6 +59,8 @@ export function toRemoteActivity(activity: Omit<Activity, 'id'> | Activity, over
     booking_code: value.bookingCode,
     place_id: value.placeId,
     is_completed: value.isCompleted ?? false,
+    duration_minutes: value.durationMinutes ?? 60,
+    travel_minutes_after: value.travelMinutesAfter ?? 0,
   };
 }
 
@@ -75,6 +77,8 @@ export function toRemoteActivityUpdate(activity: Partial<Activity>) {
     ...('bookingCode' in activity ? { booking_code: activity.bookingCode || null } : {}),
     ...('placeId' in activity ? { place_id: activity.placeId ?? null } : {}),
     is_completed: activity.isCompleted,
+    duration_minutes: activity.durationMinutes,
+    travel_minutes_after: activity.travelMinutesAfter,
   });
 }
 
@@ -172,6 +176,9 @@ export function toRemotePhoto(photo: Omit<Photo, 'id' | 'createdAt'> | Photo) {
     content: photo.content,
     activity_id: photo.activityId,
     place_id: photo.placeId,
+    content_hash: photo.contentHash,
+    perceptual_hash: photo.perceptualHash,
+    hash_version: photo.hashVersion,
     ...('createdAt' in photo ? { created_at: photo.createdAt } : {}),
   };
 }
@@ -187,6 +194,9 @@ export function toRemotePhotoUpdate(photo: Partial<Photo>) {
     content: photo.content === '' ? null : photo.content,
     ...('activityId' in photo ? { activity_id: photo.activityId || null } : {}),
     ...('placeId' in photo ? { place_id: photo.placeId || null } : {}),
+    content_hash: photo.contentHash,
+    perceptual_hash: photo.perceptualHash,
+    hash_version: photo.hashVersion,
   });
 }
 

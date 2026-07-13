@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useLocation, useSearchParams } from 'react-router-dom';
+import { readStoredOption } from '../hooks/useStoredOption';
 
 export function TripSectionTabs({ tabs, fallback, children }: {
   tabs: Array<{ value: string; label: string }>;
@@ -7,8 +8,13 @@ export function TripSectionTabs({ tabs, fallback, children }: {
   children: (activeTab: string) => ReactNode;
 }) {
   const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
   const requestedTab = searchParams.get('tab');
-  const activeTab = tabs.some((tab) => tab.value === requestedTab) ? requestedTab! : fallback;
+  const tabValues = tabs.map((tab) => tab.value);
+  const storageKey = `bunbietbay-section-tab:${location.pathname}`;
+  const activeTab = tabs.some((tab) => tab.value === requestedTab)
+    ? requestedTab!
+    : readStoredOption(storageKey, tabValues, fallback);
 
   return (
     <div>
@@ -19,6 +25,11 @@ export function TripSectionTabs({ tabs, fallback, children }: {
             type="button"
             aria-current={activeTab === tab.value ? 'page' : undefined}
             onClick={() => {
+              try {
+                localStorage.setItem(storageKey, tab.value);
+              } catch {
+                // URL state still works when persistent browser storage is unavailable.
+              }
               const nextSearchParams = new URLSearchParams(searchParams);
               nextSearchParams.set('tab', tab.value);
               setSearchParams(nextSearchParams, { replace: true });

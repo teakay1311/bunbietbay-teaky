@@ -1,7 +1,7 @@
 import type { ActivityLogEntry, PersistedAppState, Photo, TripMembership, TripRecord, TripInvitation } from '../context/AppContext';
 import type { UserProfile } from '../context/AuthContext';
 
-export const APP_STATE_VERSION = 6;
+export const APP_STATE_VERSION = 7;
 
 type LegacyState = {
   version?: number;
@@ -20,6 +20,14 @@ type LegacyState = {
   savedPlaces?: PersistedAppState['savedPlaces'];
   packingItems?: PersistedAppState['packingItems'];
   photos?: PersistedAppState['photos'];
+  collaborationSettings?: PersistedAppState['collaborationSettings'];
+  tasks?: PersistedAppState['tasks'];
+  polls?: PersistedAppState['polls'];
+  pollOptions?: PersistedAppState['pollOptions'];
+  pollVotes?: PersistedAppState['pollVotes'];
+  comments?: PersistedAppState['comments'];
+  notifications?: PersistedAppState['notifications'];
+  offlineMutations?: PersistedAppState['offlineMutations'];
   activityLogs?: PersistedAppState['activityLogs'];
   currentTripId?: string | null;
   profiles?: UserProfile[];
@@ -157,6 +165,14 @@ export function migratePersistedState(
     savedPlaces: withTimestamps(legacyState.savedPlaces),
     packingItems: withTimestamps(legacyState.packingItems),
     photos: migratePhotos(legacyState.photos),
+    collaborationSettings: legacyState.collaborationSettings ?? [],
+    tasks: withTimestamps(legacyState.tasks),
+    polls: withTimestamps(legacyState.polls),
+    pollOptions: legacyState.pollOptions ?? [],
+    pollVotes: legacyState.pollVotes ?? [],
+    comments: withTimestamps(legacyState.comments),
+    notifications: legacyState.notifications ?? [],
+    offlineMutations: legacyState.offlineMutations ?? [],
     activityLogs: withTimestamps(legacyState.activityLogs),
     currentTripId: legacyState.currentTripId ?? null,
     viewerProfileId: legacyState.viewerProfileId ?? legacyState.members?.[0]?.id ?? legacyState.profiles?.[0]?.id ?? null,
@@ -186,6 +202,14 @@ export function normalizePersistedState(
     savedPlaces: hasOwnField(sourceState, 'savedPlaces') ? ensureArray(migratedState?.savedPlaces, fallback.savedPlaces) : fallback.savedPlaces,
     packingItems: hasOwnField(sourceState, 'packingItems') ? ensureArray(migratedState?.packingItems, fallback.packingItems) : fallback.packingItems,
     photos: hasOwnField(sourceState, 'photos') ? ensureArray(migratedState?.photos, fallback.photos) : fallback.photos,
+    collaborationSettings: hasOwnField(sourceState, 'collaborationSettings') ? ensureArray(migratedState?.collaborationSettings, fallback.collaborationSettings) : fallback.collaborationSettings,
+    tasks: hasOwnField(sourceState, 'tasks') ? ensureArray(migratedState?.tasks, fallback.tasks) : fallback.tasks,
+    polls: hasOwnField(sourceState, 'polls') ? ensureArray(migratedState?.polls, fallback.polls) : fallback.polls,
+    pollOptions: hasOwnField(sourceState, 'pollOptions') ? ensureArray(migratedState?.pollOptions, fallback.pollOptions) : fallback.pollOptions,
+    pollVotes: hasOwnField(sourceState, 'pollVotes') ? ensureArray(migratedState?.pollVotes, fallback.pollVotes) : fallback.pollVotes,
+    comments: hasOwnField(sourceState, 'comments') ? ensureArray(migratedState?.comments, fallback.comments) : fallback.comments,
+    notifications: hasOwnField(sourceState, 'notifications') ? ensureArray(migratedState?.notifications, fallback.notifications) : fallback.notifications,
+    offlineMutations: hasOwnField(sourceState, 'offlineMutations') ? ensureArray(migratedState?.offlineMutations, fallback.offlineMutations) : fallback.offlineMutations,
     activityLogs: hasOwnField(sourceState, 'activityLogs') ? ensureArray(migratedState?.activityLogs, fallback.activityLogs) : fallback.activityLogs,
     currentTripId: hasOwnField(sourceState, 'currentTripId') && (typeof migratedState?.currentTripId === 'string' || migratedState?.currentTripId === null)
       ? migratedState.currentTripId
@@ -324,6 +348,69 @@ function isValidPhoto(value: unknown) {
     && (value.placeId === undefined || typeof value.placeId === 'string');
 }
 
+function isValidCollaborationSettings(value: unknown) {
+  return isRecord(value)
+    && typeof value.tripId === 'string'
+    && typeof value.viewerCanVote === 'boolean'
+    && typeof value.viewerCanComment === 'boolean'
+    && typeof value.viewerCanUpdateAssignedTasks === 'boolean';
+}
+
+function isValidTask(value: unknown) {
+  return isRecord(value)
+    && typeof value.id === 'string'
+    && typeof value.tripId === 'string'
+    && typeof value.title === 'string'
+    && ['todo', 'in_progress', 'done'].includes(String(value.status))
+    && ['low', 'normal', 'high'].includes(String(value.priority))
+    && typeof value.createdBy === 'string'
+    && typeof value.createdAt === 'string'
+    && typeof value.updatedAt === 'string';
+}
+
+function isValidPoll(value: unknown) {
+  return isRecord(value)
+    && typeof value.id === 'string'
+    && typeof value.tripId === 'string'
+    && typeof value.question === 'string'
+    && ['place', 'hotel', 'restaurant', 'time', 'custom'].includes(String(value.kind))
+    && ['single', 'multiple'].includes(String(value.selectionMode))
+    && ['open', 'closed'].includes(String(value.status))
+    && typeof value.createdBy === 'string';
+}
+
+function isValidPollOption(value: unknown) {
+  return isRecord(value) && typeof value.id === 'string' && typeof value.pollId === 'string'
+    && typeof value.tripId === 'string' && typeof value.label === 'string' && typeof value.createdAt === 'string';
+}
+
+function isValidPollVote(value: unknown) {
+  return isRecord(value) && typeof value.id === 'string' && typeof value.pollId === 'string'
+    && typeof value.optionId === 'string' && typeof value.tripId === 'string'
+    && typeof value.userId === 'string' && typeof value.createdAt === 'string';
+}
+
+function isValidComment(value: unknown) {
+  return isRecord(value) && typeof value.id === 'string' && typeof value.tripId === 'string'
+    && ['activity', 'expense', 'place', 'photo', 'task', 'poll'].includes(String(value.targetType))
+    && typeof value.targetId === 'string' && typeof value.authorId === 'string'
+    && typeof value.body === 'string' && isStringArray(value.mentionedUserIds)
+    && typeof value.createdAt === 'string' && typeof value.updatedAt === 'string';
+}
+
+function isValidNotification(value: unknown) {
+  return isRecord(value) && typeof value.id === 'string' && typeof value.tripId === 'string'
+    && typeof value.recipientId === 'string' && typeof value.eventKey === 'string'
+    && typeof value.title === 'string' && typeof value.createdAt === 'string';
+}
+
+function isValidOfflineMutation(value: unknown) {
+  return isRecord(value) && typeof value.id === 'string' && typeof value.entityId === 'string'
+    && typeof value.tripId === 'string' && ['create', 'update', 'delete'].includes(String(value.action))
+    && ['pending', 'failed', 'conflict'].includes(String(value.status)) && isRecord(value.payload)
+    && typeof value.createdAt === 'string';
+}
+
 function isValidActivityLog(value: unknown): value is ActivityLogEntry {
   if (!isRecord(value)) {
     return false;
@@ -345,7 +432,8 @@ function assertUniqueIds(field: string, items: Array<{ id: string }>) {
 export function validateImportedSnapshot(state: Partial<PersistedAppState>): asserts state is PersistedAppState {
   const requiredFields: Array<keyof PersistedAppState> = [
     'version', 'trips', 'profiles', 'memberships', 'invitations', 'activities', 'expenses',
-    'savedPlaces', 'packingItems', 'photos', 'activityLogs', 'currentTripId', 'viewerProfileId',
+    'savedPlaces', 'packingItems', 'photos', 'collaborationSettings', 'tasks', 'polls', 'pollOptions',
+    'pollVotes', 'comments', 'notifications', 'offlineMutations', 'activityLogs', 'currentTripId', 'viewerProfileId',
   ];
   for (const field of requiredFields) {
     if (!Object.prototype.hasOwnProperty.call(state, field)) {
@@ -366,6 +454,14 @@ export function validateImportedSnapshot(state: Partial<PersistedAppState>): ass
     ['savedPlaces', isValidSavedPlace],
     ['packingItems', isValidPackingItem],
     ['photos', isValidPhoto],
+    ['collaborationSettings', isValidCollaborationSettings],
+    ['tasks', isValidTask],
+    ['polls', isValidPoll],
+    ['pollOptions', isValidPollOption],
+    ['pollVotes', isValidPollVote],
+    ['comments', isValidComment],
+    ['notifications', isValidNotification],
+    ['offlineMutations', isValidOfflineMutation],
     ['activityLogs', isValidActivityLog],
   ];
 
@@ -464,6 +560,38 @@ export function validateImportedSnapshot(state: Partial<PersistedAppState>): ass
       throw new Error('Backup chứa hành lý không liên kết với thành viên hợp lệ.');
     }
   });
+  const taskMap = new Map(snapshot.tasks.map((task) => [task.id, task]));
+  const pollMap = new Map(snapshot.polls.map((poll) => [poll.id, poll]));
+  const optionMap = new Map(snapshot.pollOptions.map((option) => [option.id, option]));
+  snapshot.collaborationSettings.forEach((settings) => assertTripLink(settings.tripId, 'cài đặt cộng tác'));
+  snapshot.tasks.forEach((task) => {
+    assertTripLink(task.tripId, 'nhiệm vụ');
+    if (!membershipKeys.has(`${task.tripId}:${task.createdBy}`) || (task.assigneeId && !membershipKeys.has(`${task.tripId}:${task.assigneeId}`))) throw new Error('Backup chứa nhiệm vụ không liên kết với thành viên hợp lệ.');
+    if (task.activityId && activityMap.get(task.activityId)?.tripId !== task.tripId) throw new Error('Backup chứa nhiệm vụ liên kết hoạt động khác chuyến.');
+    if (task.placeId && placeMap.get(task.placeId)?.tripId !== task.tripId) throw new Error('Backup chứa nhiệm vụ liên kết địa điểm khác chuyến.');
+  });
+  snapshot.polls.forEach((poll) => {
+    assertTripLink(poll.tripId, 'bình chọn');
+    if (!membershipKeys.has(`${poll.tripId}:${poll.createdBy}`)) throw new Error('Backup chứa bình chọn không liên kết với thành viên hợp lệ.');
+  });
+  snapshot.pollOptions.forEach((option) => {
+    if (pollMap.get(option.pollId)?.tripId !== option.tripId) throw new Error('Backup chứa lựa chọn bình chọn không hợp lệ.');
+    if (option.activityId && activityMap.get(option.activityId)?.tripId !== option.tripId) throw new Error('Backup chứa lựa chọn liên kết hoạt động khác chuyến.');
+    if (option.placeId && placeMap.get(option.placeId)?.tripId !== option.tripId) throw new Error('Backup chứa lựa chọn liên kết địa điểm khác chuyến.');
+  });
+  snapshot.pollVotes.forEach((vote) => {
+    if (pollMap.get(vote.pollId)?.tripId !== vote.tripId || optionMap.get(vote.optionId)?.pollId !== vote.pollId || !membershipKeys.has(`${vote.tripId}:${vote.userId}`)) throw new Error('Backup chứa phiếu bầu không hợp lệ.');
+  });
+  const targetMaps = { activity: activityMap, expense: new Map(snapshot.expenses.map((item) => [item.id, item])), place: placeMap, photo: new Map(snapshot.photos.map((item) => [item.id, item])), task: taskMap, poll: pollMap };
+  snapshot.comments.forEach((comment) => {
+    const target = targetMaps[comment.targetType].get(comment.targetId);
+    if (!target || target.tripId !== comment.tripId || !membershipKeys.has(`${comment.tripId}:${comment.authorId}`) || comment.mentionedUserIds.some((userId) => !membershipKeys.has(`${comment.tripId}:${userId}`))) throw new Error('Backup chứa bình luận không hợp lệ.');
+  });
+  snapshot.notifications.forEach((notification) => {
+    assertTripLink(notification.tripId, 'thông báo');
+    if (!profileIds.has(notification.recipientId)) throw new Error('Backup chứa thông báo không liên kết với hồ sơ hợp lệ.');
+  });
+  snapshot.offlineMutations.forEach((mutation) => assertTripLink(mutation.tripId, 'thao tác offline'));
   if (snapshot.currentTripId && !tripIds.has(snapshot.currentTripId)) throw new Error('Backup chứa currentTripId không hợp lệ.');
   if (snapshot.viewerProfileId && !profileIds.has(snapshot.viewerProfileId)) throw new Error('Backup chứa viewerProfileId không hợp lệ.');
   if ((snapshot.pinnedTripIds ?? []).some((tripId) => !tripIds.has(tripId))) throw new Error('Backup chứa chuyến đi đã ghim không hợp lệ.');
@@ -472,7 +600,8 @@ export function validateImportedSnapshot(state: Partial<PersistedAppState>): ass
 export const EMPTY_PERSISTED_STATE: PersistedAppState = {
   version: APP_STATE_VERSION,
   trips: [], profiles: [], memberships: [], invitations: [], activities: [], expenses: [],
-  savedPlaces: [], packingItems: [], photos: [], activityLogs: [], currentTripId: null, viewerProfileId: null, pinnedTripIds: [],
+  savedPlaces: [], packingItems: [], photos: [], collaborationSettings: [], tasks: [], polls: [], pollOptions: [], pollVotes: [],
+  comments: [], notifications: [], offlineMutations: [], activityLogs: [], currentTripId: null, viewerProfileId: null, pinnedTripIds: [],
 };
 
 export function prepareImportedSnapshot(state: Partial<PersistedAppState> | LegacyState) {

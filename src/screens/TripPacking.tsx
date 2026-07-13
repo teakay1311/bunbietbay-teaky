@@ -15,6 +15,7 @@ import { Check } from 'lucide-react';
 import { SortSelect } from '../components/SortSelect';
 import { chainComparators, compareDate, compareNumber, compareText, stableSort, type SortOption } from '../utils/listSort';
 import { mergeCategoryOptions, PACKING_CATEGORY_OPTIONS } from '../utils/tripCategories';
+import { useStoredOption } from '../hooks/useStoredOption';
 
 const PACKING_PRESETS = [
   {
@@ -84,6 +85,8 @@ const PACKING_SORT_OPTIONS: Array<SortOption<PackingSortKey>> = [
   { value: 'createdDesc', label: 'Mới nhất' },
   { value: 'createdAsc', label: 'Cũ nhất' },
 ];
+const PACKING_SORT_KEYS = PACKING_SORT_OPTIONS.map((option) => option.value);
+const PACKING_ASSIGNEE_FILTERS = ['all', 'me'] as const;
 
 export function TripPacking() {
   const { id } = useParams();
@@ -91,14 +94,14 @@ export function TripPacking() {
   const { showToast, confirm } = useFeedback();
   const { session } = useAuth();
   const [isAddOpen, setIsAddOpen] = useState(false);
-  const [filterAssignee, setFilterAssignee] = useState<'all' | 'me'>('all');
+  const [filterAssignee, setFilterAssignee] = useStoredOption('bunbietbay-packing-assignee', PACKING_ASSIGNEE_FILTERS, 'all');
   const [editingItem, setEditingItem] = useState<PackingItem | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isBatchMode, setIsBatchMode] = useState(false);
   const [isPresetMode, setIsPresetMode] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [sortBy, setSortBy] = useState<PackingSortKey>('unpackedFirst');
+  const [sortBy, setSortBy] = useStoredOption('bunbietbay-packing-sort', PACKING_SORT_KEYS, 'unpackedFirst');
 
   useEffect(() => {
     if (id) setCurrentTripId(id);

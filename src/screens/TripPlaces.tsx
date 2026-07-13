@@ -17,6 +17,8 @@ import { SortSelect } from '../components/SortSelect';
 import { CategorySelectWithCreate } from '../components/CategorySelectWithCreate';
 import { chainComparators, compareDate, compareNumber, compareText, stableSort, type SortOption } from '../utils/listSort';
 import { getCategoryLabel, mergeCategoryOptions, PLACE_TYPE_OPTIONS } from '../utils/tripCategories';
+import { useStoredOption } from '../hooks/useStoredOption';
+import { CommentThread } from '../components/CommentThread';
 
 type PlaceSortKey = 'ratingDesc' | 'ratingAsc' | 'nameAsc' | 'nameDesc' | 'typeAsc' | 'createdDesc' | 'createdAsc';
 
@@ -29,6 +31,7 @@ const PLACE_SORT_OPTIONS: Array<SortOption<PlaceSortKey>> = [
   { value: 'createdDesc', label: 'Mới nhất' },
   { value: 'createdAsc', label: 'Cũ nhất' },
 ];
+const PLACE_SORT_KEYS = PLACE_SORT_OPTIONS.map((option) => option.value);
 
 export function TripPlaces() {
   const { id } = useParams();
@@ -42,7 +45,7 @@ export function TripPlaces() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [activeTab, setActiveTab] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [sortBy, setSortBy] = useState<PlaceSortKey>('ratingDesc');
+  const [sortBy, setSortBy] = useStoredOption('bunbietbay-trip-places-sort', PLACE_SORT_KEYS, 'ratingDesc');
   const [viewingPlace, setViewingPlace] = useState<SavedPlace | null>(null);
   const [isNotebookImportOpen, setIsNotebookImportOpen] = useState(false);
   const [placeToLibrary, setPlaceToLibrary] = useState<SavedPlace | null>(null);
@@ -378,6 +381,7 @@ export function TripPlaces() {
                 </div>
               )}
             </div>
+            <div onClick={(event) => event.stopPropagation()}><CommentThread tripId={place.tripId} targetType="place" targetId={place.id} /></div>
           </motion.div>
         ))}
         {places.length === 0 && (

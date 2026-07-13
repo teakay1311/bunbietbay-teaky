@@ -4,11 +4,17 @@ import { useAuth } from '../context/AuthContext';
 import { useFeedback } from '../context/FeedbackContext';
 import { useNotebook } from '../context/NotebookContext';
 import { formatLocalDateTime } from '../utils/date';
+import { useCollaboration } from '../context/CollaborationContext';
+import { useStoredOption } from '../hooks/useStoredOption';
+
+const INBOX_TABS = ['invitations', 'updates'] as const;
 
 export function Inbox() {
   const { pendingInvitations, acceptInvitation, declineInvitation } = useAuth();
   const { pendingNotebookInvitations, acceptNotebookInvitation, declineNotebookInvitation } = useNotebook();
   const { showToast } = useFeedback();
+  const { notifications, markNotificationRead } = useCollaboration();
+  const [tab, setTab] = useStoredOption('bunbietbay-inbox-tab', INBOX_TABS, 'invitations');
   const total = pendingInvitations.length + pendingNotebookInvitations.length;
 
   const run = async (action: () => Promise<void>, success: string) => {
@@ -24,11 +30,13 @@ export function Inbox() {
     <div className="mx-auto max-w-4xl pb-16">
       <header className="mb-8">
         <p className="mb-2 text-sm font-semibold text-secondary">Hộp thư cộng tác</p>
-        <h1 className="text-balance font-headline text-3xl font-extrabold text-on-surface md:text-5xl">Lời mời cần phản hồi</h1>
-        <p className="mt-3 text-pretty text-secondary">Tất cả lời mời chuyến đi và Thư viện được xử lý tại một nơi.</p>
+        <h1 className="text-balance font-headline text-3xl font-extrabold text-on-surface">Hộp thư</h1>
+        <p className="mt-3 text-pretty text-secondary">Lời mời và cập nhật cộng tác được xử lý tại một nơi.</p>
       </header>
 
-      {total === 0 ? (
+      <div role="tablist" className="mb-5 flex rounded-xl bg-surface-container-low p-1"><button role="tab" aria-selected={tab === 'invitations'} onClick={() => setTab('invitations')} className={`min-h-11 flex-1 rounded-lg text-sm font-bold ${tab === 'invitations' ? 'bg-surface text-primary shadow-sm' : 'text-secondary'}`}>Lời mời ({total})</button><button role="tab" aria-selected={tab === 'updates'} onClick={() => setTab('updates')} className={`min-h-11 flex-1 rounded-lg text-sm font-bold ${tab === 'updates' ? 'bg-surface text-primary shadow-sm' : 'text-secondary'}`}>Cập nhật ({notifications.filter((item) => !item.readAt).length})</button></div>
+
+      {tab === 'invitations' && (total === 0 ? (
         <section className="rounded-2xl border border-outline-variant/50 bg-surface-container-lowest p-8 text-center">
           <Icons.Mail className="mx-auto size-10 text-primary" />
           <h2 className="mt-4 font-headline text-xl font-bold">Hộp thư đã được xử lý</h2>
@@ -64,7 +72,8 @@ export function Inbox() {
             ))}
           </InvitationSection>
         </div>
-      )}
+      ))}
+      {tab === 'updates' && <div className="space-y-3">{notifications.map((notification) => <button key={notification.id} type="button" onClick={() => void markNotificationRead(notification.id)} className={`w-full rounded-2xl border p-4 text-left ${notification.readAt ? 'border-outline-variant/50 bg-surface-container-lowest' : 'border-primary/40 bg-primary/5'}`}><h2 className="font-headline font-bold">{notification.title}</h2>{notification.message && <p className="mt-1 text-sm text-secondary">{notification.message}</p>}<p className="mt-2 text-xs text-secondary">{formatLocalDateTime(notification.createdAt)}</p></button>)}{notifications.length === 0 && <section className="rounded-2xl border border-outline-variant/50 bg-surface-container-lowest p-8 text-center"><Icons.Bell className="mx-auto size-10 text-primary" /><h2 className="mt-4 font-headline text-xl font-bold">Chưa có cập nhật</h2><p className="mt-2 text-sm text-secondary">Nhắc tên, nhiệm vụ và bình chọn sẽ xuất hiện ở đây.</p></section>}</div>}
     </div>
   );
 }

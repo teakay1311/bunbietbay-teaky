@@ -8,15 +8,23 @@ if (missingEnv.length > 0 || process.env.VITE_REQUIRE_AUTH !== 'true') {
 const checks = [
   ['trip_memberships', 'revoked_at'],
   ['saved_places', 'source_notebook_place_id'],
-  ['activities', 'place_id'],
+  ['activities', 'place_id,duration_minutes,travel_minutes_after'],
   ['expenses', 'activity_id,place_id'],
-  ['photos', 'activity_id,place_id'],
+  ['photos', 'activity_id,place_id,content_hash,perceptual_hash,hash_version'],
   ['notebooks', 'id,name,type,created_by'],
   ['notebook_memberships', 'id,notebook_id,user_id,role'],
   ['notebook_places', 'id,notebook_id,updated_at'],
   ['notebook_invitations', 'id,notebook_id,status'],
   ['user_preferences', 'theme_mode'],
   ['trip_notification_preferences', 'use_defaults'],
+  ['trip_collaboration_settings', 'trip_id,viewer_can_vote,viewer_can_comment,viewer_can_update_assigned_tasks'],
+  ['trip_tasks', 'id,trip_id,status,assignee_id,updated_at'],
+  ['trip_polls', 'id,trip_id,status,selection_mode,updated_at'],
+  ['trip_poll_options', 'id,poll_id,trip_id'],
+  ['trip_poll_votes', 'id,poll_id,option_id,user_id'],
+  ['trip_comments', 'id,trip_id,target_type,target_id,deleted_at,updated_at'],
+  ['trip_notifications', 'id,recipient_id,event_key,read_at'],
+  ['trip_public_shares', 'id,trip_id,token_hash,scopes,expires_at,revoked_at'],
 ];
 
 const failures = [];

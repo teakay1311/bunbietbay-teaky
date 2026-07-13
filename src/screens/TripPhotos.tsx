@@ -17,6 +17,10 @@ import { SortSelect } from '../components/SortSelect';
 import { type SortOption } from '../utils/listSort';
 import { filterAndSortPhotos, getPhotoAlbums, groupPhotosByTimeline, type PhotoSortKey } from '../features/photos/selectors';
 import { deletePhotoWithStorage, preparePhotoUploads } from '../features/photos/operations';
+import { useStoredOption } from '../hooks/useStoredOption';
+import { inspectDuplicateFiles } from '../features/photos/duplicateDetection';
+import { CommentThread } from '../components/CommentThread';
+import { cachePhotosForOffline } from '../utils/offlinePhotos';
 
 const PHOTO_SORT_OPTIONS: Array<SortOption<PhotoSortKey>> = [
   { value: 'createdDesc', label: 'Mới nhất' },
@@ -28,6 +32,8 @@ const PHOTO_SORT_OPTIONS: Array<SortOption<PhotoSortKey>> = [
   { value: 'photosFirst', label: 'Ảnh trước' },
   { value: 'journalsFirst', label: 'Nhật ký trước' },
 ];
+const PHOTO_SORT_KEYS = PHOTO_SORT_OPTIONS.map((option) => option.value);
+const PHOTO_VIEW_MODES = ['grid', 'timeline'] as const;
 
 export function TripPhotos() {
   const { id } = useParams();
@@ -46,8 +52,8 @@ export function TripPhotos() {
   const [selectedPhotoIds, setSelectedPhotoIds] = useState<string[]>([]);
   const [isDragOver, setIsDragOver] = useState(false);
   const [visibleCount, setVisibleCount] = useState(20);
-  const [sortBy, setSortBy] = useState<PhotoSortKey>('createdDesc');
-  const [viewMode, setViewMode] = useState<'grid' | 'timeline'>('grid');
+  const [sortBy, setSortBy] = useStoredOption('bunbietbay-trip-photos-sort', PHOTO_SORT_KEYS, 'createdDesc');
+  const [viewMode, setViewMode] = useStoredOption('bunbietbay-trip-photos-view', PHOTO_VIEW_MODES, 'grid');
   const [isEditMetadataOpen, setIsEditMetadataOpen] = useState(false);
   const [metadataError, setMetadataError] = useState<string | null>(null);
   const [isSavingMetadata, setIsSavingMetadata] = useState(false);
@@ -249,7 +255,16 @@ export function TripPhotos() {
     setUploadError(null);
     let didSucceed = false;
     try {
-      const nextPhotos = await preparePhotoUploads(files, trip.id, {
+      const inspection = await inspectDuplicateFiles(files, photos, trip.id);
+      const exactSameTrip = new Set(inspection.matches.filter((match) => match.exact && match.sameTrip).map((match) => match.file));
+      const uploadDuplicates = inspection.matches.length === 0 || await confirm({
+        title: 'Phát hiện ảnh có thể bị trùng',
+        message: `${inspection.matches.length} ảnh trùng hoặc gần giống ảnh đã có. Chọn “Vẫn tải lên” để giữ tất cả; đóng hộp thoại để bỏ qua bản trùng chính xác trong chuyến này.`,
+        confirmLabel: 'Vẫn tải lên',
+      });
+      const uploadFiles = uploadDuplicates ? files : files.filter((file) => !exactSameTrip.has(file));
+      if (uploadFiles.length === 0) throw new Error('Tất cả ảnh đã có trong chuyến đi.');
+      const nextPhotos = await preparePhotoUploads(uploadFiles, trip.id, {
         album: albumName,
         takenOn,
         place,
@@ -257,7 +272,7 @@ export function TripPhotos() {
         people,
         activityId,
         placeId,
-      });
+      }, inspection.hashes);
       if (nextPhotos.length > 0) {
         await addPhotos(nextPhotos);
       }
@@ -437,22 +452,22 @@ export function TripPhotos() {
           </div>
           <SortSelect<PhotoSortKey> value={sortBy} options={PHOTO_SORT_OPTIONS} onChange={setSortBy} className="w-full border border-outline-variant/50 bg-surface-container-low py-3 md:w-auto md:min-w-[190px]" />
           <div className="flex rounded-xl bg-surface-container-low p-1 ring-1 ring-outline-variant/40 sm:col-span-2">
-            <button type="button" onClick={() => setViewMode('grid')} className={`rounded-lg px-3 py-2 text-sm font-bold transition ${viewMode === 'grid' ? 'bg-primary text-on-primary' : 'text-secondary hover:bg-surface-container'}`}>
+            <button type="button" onClick={() => setViewMode('grid')} aria-pressed={viewMode === 'grid'} className={`rounded-lg px-3 py-2 text-sm font-bold transition ${viewMode === 'grid' ? 'bg-primary text-on-primary' : 'text-secondary hover:bg-surface-container'}`}>
               Grid
             </button>
-            <button type="button" onClick={() => setViewMode('timeline')} className={`rounded-lg px-3 py-2 text-sm font-bold transition ${viewMode === 'timeline' ? 'bg-primary text-on-primary' : 'text-secondary hover:bg-surface-container'}`}>
+            <button type="button" onClick={() => setViewMode('timeline')} aria-pressed={viewMode === 'timeline'} className={`rounded-lg px-3 py-2 text-sm font-bold transition ${viewMode === 'timeline' ? 'bg-primary text-on-primary' : 'text-secondary hover:bg-surface-container'}`}>
               Timeline
             </button>
           </div>
         </div>
         {isSelectionMode && (
-          <button
+          <div className="flex flex-wrap gap-2"><button type="button" disabled={selectedPhotoIds.length === 0} onClick={async () => { const result = await cachePhotosForOffline(tripPhotos.filter((photo) => selectedPhotoIds.includes(photo.id)).map((photo) => photo.url)); showToast({ tone: result.failed ? 'info' : 'success', title: `Đã lưu ${result.saved} ảnh để dùng offline`, message: result.failed ? `${result.failed} ảnh không thể lưu do nhà cung cấp chặn tải.` : undefined }); }} className="rounded-xl border border-outline-variant px-4 py-3 font-bold text-primary disabled:opacity-50"><Icons.Download className="mr-2 inline size-4" />Dùng offline</button><button
             onClick={deleteSelectedPhotos}
             disabled={selectedPhotoIds.length === 0}
             className="rounded-xl border-2 border-error px-4 py-3 font-bold text-error disabled:opacity-50"
           >
             Xóa {selectedPhotoIds.length} ảnh đã chọn
-          </button>
+          </button></div>
         )}
       </motion.div>
 
@@ -872,6 +887,7 @@ export function TripPhotos() {
             {(!selectedPhoto.people || selectedPhoto.people.length === 0) && (!selectedPhoto.tags || selectedPhoto.tags.length === 0) && (
               <p className="text-sm text-secondary">Ảnh này chưa có metadata bổ sung.</p>
             )}
+            <CommentThread tripId={selectedPhoto.tripId} targetType="photo" targetId={selectedPhoto.id} />
           </div>
         )}
       </Modal>

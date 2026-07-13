@@ -1,9 +1,9 @@
-import type { Notebook, NotebookPlace, PersistedAppState, TripNotificationPreferences, UserPreferences, WorkspaceBackupV7 } from '../domain/models';
+import type { Notebook, NotebookPlace, PersistedAppState, TripNotificationPreferences, UserPreferences, WorkspaceBackupV8 } from '../domain/models';
 import { prepareImportedSnapshot } from './appState';
 
 export type PreparedWorkspaceBackup = {
   workspace: PersistedAppState;
-  library: WorkspaceBackupV7['library'] | null;
+  library: WorkspaceBackupV8['library'] | null;
   preferences: UserPreferences | null;
   tripNotificationPreferences: TripNotificationPreferences[];
 };
@@ -24,7 +24,7 @@ function isIntegerInRange(value: unknown, minimum: number, maximum: number) {
   return typeof value === 'number' && Number.isInteger(value) && value >= minimum && value <= maximum;
 }
 
-function validateLibrary(library: unknown): WorkspaceBackupV7['library'] {
+function validateLibrary(library: unknown): WorkspaceBackupV8['library'] {
   if (!isRecord(library) || !Array.isArray(library.notebooks) || !Array.isArray(library.places)) throw new Error('Backup không hợp lệ: thiếu dữ liệu Thư viện.');
   const notebooks = library.notebooks as Notebook[];
   const places = library.places as NotebookPlace[];
@@ -42,13 +42,18 @@ function validatePreferences(value: unknown): UserPreferences {
   return value as UserPreferences;
 }
 
-export function createWorkspaceBackupV7(input: Omit<WorkspaceBackupV7, 'version' | 'exportedAt'>): WorkspaceBackupV7 {
-  return { version: 7, ...input, exportedAt: new Date().toISOString() };
+export function createWorkspaceBackupV8(input: Omit<WorkspaceBackupV8, 'version' | 'exportedAt'>): WorkspaceBackupV8 {
+  return {
+    version: 8,
+    ...input,
+    workspace: { ...input.workspace, notifications: [], offlineMutations: [] },
+    exportedAt: new Date().toISOString(),
+  };
 }
 
 export function prepareWorkspaceBackup(raw: unknown): PreparedWorkspaceBackup {
-  if (isRecord(raw) && typeof raw.version === 'number' && (raw.version < 1 || raw.version > 7)) throw new Error(`Backup version ${raw.version} chưa được hỗ trợ.`);
-  if (!isRecord(raw) || raw.version !== 7) {
+  if (isRecord(raw) && typeof raw.version === 'number' && (raw.version < 1 || raw.version > 8)) throw new Error(`Backup version ${raw.version} chưa được hỗ trợ.`);
+  if (!isRecord(raw) || (raw.version !== 7 && raw.version !== 8)) {
     return { workspace: prepareImportedSnapshot(raw as Partial<PersistedAppState>), library: null, preferences: null, tripNotificationPreferences: [] };
   }
   const library = validateLibrary(raw.library);

@@ -31,24 +31,51 @@ export function groupActivitiesByDate(activities: Activity[]) {
 }
 
 export function getScheduleInsights(activities: Activity[]) {
-  if (activities.length < 2) return [];
-  const toMinutes = (time: string) => {
-    const [hours, minutes] = normalizeTimeForInput(time).split(':').map(Number);
-    return hours * 60 + minutes;
-  };
-  const ordered = stableSort(activities, (left, right) => compareNumber(toMinutes(left.time), toMinutes(right.time), 'asc'));
+  const conflicts = getScheduleConflicts(activities);
   const insights: Array<{ type: 'warning' | 'info'; title: string; message: string }> = [];
-  for (let index = 0; index < ordered.length - 1 && insights.length < 3; index += 1) {
-    const current = ordered[index];
-    const next = ordered[index + 1];
-    const gap = toMinutes(next.time) - toMinutes(current.time);
-    if (gap < 30) {
-      insights.push({ type: 'warning', title: 'Lịch có thể bị sát giờ', message: `${current.time} ${current.title} và ${next.time} ${next.title} chỉ cách nhau ${Math.max(gap, 0)} phút.` });
-    } else if (gap >= 180) {
-      insights.push({ type: 'info', title: 'Khoảng trống dài', message: `Có khoảng ${Math.round(gap / 60)} giờ giữa ${current.title} và ${next.title}.` });
-    }
+  for (const conflict of conflicts.slice(0, 3)) {
+    if (conflict.kind === 'missing-time') insights.push({ type: 'warning', title: 'Thiếu thời gian', message: `${conflict.current.title} chưa có giờ hợp lệ nên không thể kiểm tra xung đột.` });
+    else if (conflict.kind === 'overlap') insights.push({ type: 'warning', title: 'Lịch bị chồng giờ', message: `${conflict.current.title} chồng ${conflict.minutes} phút với ${conflict.next!.title}.` });
+    else insights.push({ type: 'warning', title: 'Không đủ thời gian di chuyển', message: `Chỉ có ${conflict.gapMinutes} phút giữa ${conflict.current.title} và ${conflict.next!.title}, cần ${conflict.requiredMinutes} phút.` });
   }
   return insights;
+}
+
+export type ScheduleConflict = {
+  kind: 'overlap' | 'travel-gap' | 'missing-time';
+  current: Activity;
+  next?: Activity;
+  minutes?: number;
+  gapMinutes?: number;
+  requiredMinutes?: number;
+};
+
+function activityStart(activity: Activity) {
+  const time = normalizeTimeForInput(activity.time);
+  if (!/^\d{2}:\d{2}$/.test(time) || !/^\d{4}-\d{2}-\d{2}$/.test(activity.date)) return null;
+  const timestamp = new Date(`${activity.date}T${time}:00`).getTime();
+  return Number.isFinite(timestamp) ? timestamp : null;
+}
+
+export function getScheduleConflicts(activities: Activity[]): ScheduleConflict[] {
+  const conflicts: ScheduleConflict[] = [];
+  const timed = activities.flatMap((activity) => {
+    const start = activityStart(activity);
+    if (start === null) {
+      conflicts.push({ kind: 'missing-time', current: activity });
+      return [];
+    }
+    return [{ activity, start }];
+  }).sort((left, right) => left.start - right.start);
+  for (let index = 0; index < timed.length - 1; index += 1) {
+    const current = timed[index];
+    const next = timed[index + 1];
+    const end = current.start + (current.activity.durationMinutes ?? 60) * 60_000;
+    const gapMinutes = Math.floor((next.start - end) / 60_000);
+    if (gapMinutes < 0) conflicts.push({ kind: 'overlap', current: current.activity, next: next.activity, minutes: Math.abs(gapMinutes) });
+    else if (gapMinutes < (current.activity.travelMinutesAfter ?? 0)) conflicts.push({ kind: 'travel-gap', current: current.activity, next: next.activity, gapMinutes, requiredMinutes: current.activity.travelMinutesAfter ?? 0 });
+  }
+  return conflicts;
 }
 
 function activityComparator(sortBy: ActivitySortKey) {

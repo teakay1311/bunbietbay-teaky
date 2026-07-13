@@ -14,6 +14,7 @@ const fallbackState: PersistedAppState = {
   savedPlaces: [],
   packingItems: [],
   photos: [],
+  collaborationSettings: [], tasks: [], polls: [], pollOptions: [], pollVotes: [], comments: [], notifications: [], offlineMutations: [],
   activityLogs: [],
   currentTripId: null,
   viewerProfileId: null,

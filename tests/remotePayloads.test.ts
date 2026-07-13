@@ -17,6 +17,7 @@ test('maps linked trip entities to the existing Supabase column contract', () =>
   }), {
     id: 'a1', trip_id: 't1', date: '2026-01-01', time: '09:00', title: 'Cafe', location: 'Hue', note: '', type: 'cafe',
     image: undefined, map_url: undefined, booking_code: undefined, place_id: 'p1', is_completed: false,
+    duration_minutes: 60, travel_minutes_after: 0,
   });
 
   assert.equal(toRemoteExpense({

@@ -33,6 +33,8 @@ import {
 } from '@dnd-kit/sortable';
 import { SortableActivityItem } from '../components/SortableActivityItem';
 import { filterAndSortActivities, filterAndSortCompactActivities, getScheduleInsights, groupActivitiesByDate, type ActivitySortKey } from '../features/schedule/selectors';
+import { useStoredOption } from '../hooks/useStoredOption';
+import { CommentThread } from '../components/CommentThread';
 
 type ScheduleViewMode = 'timeline' | 'compact';
 
@@ -45,6 +47,8 @@ const ACTIVITY_SORT_OPTIONS: Array<SortOption<ActivitySortKey>> = [
   { value: 'typeAsc', label: 'Loại hoạt động' },
   { value: 'titleAsc', label: 'Tên A-Z' },
 ];
+const ACTIVITY_SORT_KEYS = ACTIVITY_SORT_OPTIONS.map((option) => option.value);
+const SCHEDULE_VIEW_MODES = ['timeline', 'compact'] as const;
 
 export function TripSchedule() {
   const { id } = useParams();
@@ -80,6 +84,8 @@ export function TripSchedule() {
           mapUrl: formData.get('mapUrl') as string,
           bookingCode: (formData.get('bookingCode') as string) || undefined,
           placeId: (formData.get('placeId') as string) || undefined,
+          durationMinutes: Number(formData.get('durationMinutes') || 60),
+          travelMinutesAfter: Number(formData.get('travelMinutesAfter') || 0),
         });
         setEditingActivity(null);
       } else {
@@ -94,6 +100,8 @@ export function TripSchedule() {
           mapUrl: formData.get('mapUrl') as string,
           bookingCode: (formData.get('bookingCode') as string) || undefined,
           placeId: (formData.get('placeId') as string) || undefined,
+          durationMinutes: Number(formData.get('durationMinutes') || 60),
+          travelMinutesAfter: Number(formData.get('travelMinutesAfter') || 0),
         });
       }
       setIsAddOpen(false);
@@ -178,8 +186,8 @@ export function TripSchedule() {
 
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [sortBy, setSortBy] = useState<ActivitySortKey>('timeAsc');
-  const [viewMode, setViewMode] = useState<ScheduleViewMode>('timeline');
+  const [sortBy, setSortBy] = useStoredOption('bunbietbay-schedule-sort', ACTIVITY_SORT_KEYS, 'timeAsc');
+  const [viewMode, setViewMode] = useStoredOption<ScheduleViewMode>('bunbietbay-schedule-view', SCHEDULE_VIEW_MODES, 'timeline');
 
   useEffect(() => {
     if (uniqueDates.length > 0 && (!selectedDate || !uniqueDates.includes(selectedDate))) {
@@ -389,6 +397,7 @@ export function TripSchedule() {
               <button
                 type="button"
                 onClick={() => setViewMode('timeline')}
+                aria-pressed={viewMode === 'timeline'}
                 className={`flex-1 rounded-xl px-4 py-2 transition-colors md:flex-none ${viewMode === 'timeline' ? 'bg-primary text-on-primary shadow-sm' : 'text-secondary hover:bg-surface-container'}`}
               >
                 Chi tiết
@@ -396,6 +405,7 @@ export function TripSchedule() {
               <button
                 type="button"
                 onClick={() => setViewMode('compact')}
+                aria-pressed={viewMode === 'compact'}
                 className={`flex-1 rounded-xl px-4 py-2 transition-colors md:flex-none ${viewMode === 'compact' ? 'bg-primary text-on-primary shadow-sm' : 'text-secondary hover:bg-surface-container'}`}
               >
                 Rút gọn
@@ -549,6 +559,7 @@ export function TripSchedule() {
                                   </button>
                                 </div>
                               )}
+                              <CommentThread tripId={activity.tripId} targetType="activity" targetId={activity.id} />
                             </div>
                           ))}
                         </div>
@@ -689,7 +700,7 @@ export function TripSchedule() {
                 {submitError}
               </div>
             )}
-            <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block font-label text-xs font-bold text-secondary dark:text-gray-300 mb-1">Ngày chung</label>
                 <input required name="date" type="date" defaultValue={selectedDate || ''} className="density-control w-full rounded-xl bg-surface-container-low border border-outline-variant/50 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all" />
@@ -741,6 +752,10 @@ export function TripSchedule() {
                 <label className="block font-label text-xs font-bold text-secondary dark:text-gray-300 mb-1">Giờ</label>
                 <input required name="time" type="time" defaultValue={normalizeTimeForInput(editingActivity?.time || '')} className="density-control w-full rounded-xl bg-surface-container-low border border-outline-variant/50 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all" />
               </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <label className="block"><span className="mb-1 block text-xs font-bold text-secondary">Thời lượng (phút)</span><input required name="durationMinutes" type="number" min="5" max="1440" defaultValue={editingActivity?.durationMinutes ?? 60} className="density-control w-full rounded-xl border border-outline-variant/50 bg-surface-container-low" /></label>
+              <label className="block"><span className="mb-1 block text-xs font-bold text-secondary">Di chuyển sau đó (phút)</span><input required name="travelMinutesAfter" type="number" min="0" max="720" defaultValue={editingActivity?.travelMinutesAfter ?? 0} className="density-control w-full rounded-xl border border-outline-variant/50 bg-surface-container-low" /></label>
             </div>
             <div>
               <label className="block font-label text-xs font-bold text-secondary dark:text-gray-300 mb-1">Tên hoạt động</label>

@@ -7,6 +7,8 @@ import { useSettings } from '../context/SettingsContext';
 import { useAppContext } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 import { useNotebook } from '../context/NotebookContext';
+import { useStoredOption } from '../hooks/useStoredOption';
+import { useCollaboration } from '../context/CollaborationContext';
 
 export function cn(...inputs: (string | undefined | null | false)[]) {
   return twMerge(clsx(inputs));
@@ -184,7 +186,7 @@ export function BottomNav({ tripId }: { tripId: string }) {
         const isActive = item.path === `/trips/${tripId}`
           ? activePath === item.path
           : item.path.endsWith('/more')
-            ? activePath.startsWith(item.path) || activePath.startsWith(`/trips/${tripId}/memories`) || activePath.startsWith(`/trips/${tripId}/settings`)
+            ? activePath.startsWith(item.path) || activePath.startsWith(`/trips/${tripId}/memories`) || activePath.startsWith(`/trips/${tripId}/collaborate`) || activePath.startsWith(`/trips/${tripId}/settings`)
             : activePath.startsWith(item.path);
         const Icon = item.icon;
         return (
@@ -265,7 +267,7 @@ function TabletRail({ tripId }: { tripId?: string }) {
     { path: `/trips/${tripId}/plan`, icon: Icons.Calendar, label: 'Kế hoạch' },
     { path: `/trips/${tripId}/money`, icon: Icons.Banknote, label: 'Chi tiêu' },
     { path: `/trips/${tripId}/prepare`, icon: Icons.Package, label: 'Chuẩn bị' },
-    { path: `/trips/${tripId}/more`, icon: Icons.Menu, label: 'Thêm', aliases: [`/trips/${tripId}/memories`, `/trips/${tripId}/settings`] },
+    { path: `/trips/${tripId}/more`, icon: Icons.Menu, label: 'Thêm', aliases: [`/trips/${tripId}/memories`, `/trips/${tripId}/collaborate`, `/trips/${tripId}/settings`] },
   ] : [];
   const items = [...globalItems, ...tripItems];
 
@@ -283,12 +285,13 @@ function TabletRail({ tripId }: { tripId?: string }) {
   </aside>;
 }
 
-function DesktopSidebar({ tripId }: { tripId?: string }) {
+function DesktopSidebar({ tripId, isCollapsed, onToggle }: { tripId?: string; isCollapsed: boolean; onToggle: () => void }) {
   const location = useLocation();
   const { currentUserProfile, trips } = useAppContext();
   const { pendingInvitations } = useAuth();
   const { pendingNotebookInvitations } = useNotebook();
-  const pendingCount = pendingInvitations.length + pendingNotebookInvitations.length;
+  const { notifications } = useCollaboration();
+  const pendingCount = pendingInvitations.length + pendingNotebookInvitations.length + notifications.filter((item) => !item.readAt).length;
   const trip = trips.find((item) => item.id === tripId);
   const globalItems = [
     { path: '/trips', icon: Icons.Compass, label: 'Chuyến đi', exact: true },
@@ -303,40 +306,51 @@ function DesktopSidebar({ tripId }: { tripId?: string }) {
     { path: `/trips/${tripId}/money`, icon: Icons.Banknote, label: 'Chi tiêu' },
     { path: `/trips/${tripId}/prepare`, icon: Icons.Package, label: 'Chuẩn bị' },
     { path: `/trips/${tripId}/memories`, icon: Icons.Image, label: 'Kỷ niệm' },
+    { path: `/trips/${tripId}/collaborate`, icon: Icons.MessageCircle, label: 'Cộng tác' },
     { path: `/trips/${tripId}/settings`, icon: Icons.Settings, label: 'Thiết lập chuyến đi' },
   ] : [];
 
   const renderLink = (item: { path: string; icon: typeof Icons.Compass; label: string; exact?: boolean; count?: number }) => {
     const active = item.exact ? location.pathname === item.path : location.pathname.startsWith(item.path);
     const Icon = item.icon;
-    return <Link key={item.path} to={item.path} aria-current={active ? 'page' : undefined} className={cn('flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-semibold transition-colors', active ? 'bg-primary text-on-primary' : 'text-secondary hover:bg-surface-container-low hover:text-on-surface')}>
+    return <Link key={item.path} to={item.path} title={isCollapsed ? item.label : undefined} aria-label={isCollapsed ? item.label : undefined} aria-current={active ? 'page' : undefined} className={cn('relative flex min-h-11 items-center rounded-xl text-sm font-semibold transition-colors', isCollapsed ? 'justify-center px-0' : 'gap-3 px-3', active ? 'bg-primary text-on-primary' : 'text-secondary hover:bg-surface-container-low hover:text-on-surface')}>
       <Icon className="size-5 shrink-0" />
-      <span className="min-w-0 flex-1 truncate">{item.label}</span>
-      {item.count ? <span className="flex size-6 items-center justify-center rounded-full bg-error text-xs font-bold text-on-error">{item.count}</span> : null}
+      <span className={isCollapsed ? 'sr-only' : 'min-w-0 flex-1 truncate'}>{item.label}</span>
+      {item.count ? <span className={cn('flex items-center justify-center rounded-full bg-error font-bold text-on-error', isCollapsed ? 'absolute right-0.5 top-0.5 size-4 text-[9px]' : 'size-6 text-xs')}>{item.count}</span> : null}
     </Link>;
   };
 
-  return <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col border-r border-outline-variant/50 bg-surface p-3 lg:flex">
-    <Link to="/trips" className="flex items-center gap-3 px-2 py-2">
-      <img src={`${import.meta.env.BASE_URL}app-logo.svg`} alt="" className="size-10 rounded-xl" />
-      <span className="font-headline text-lg font-extrabold">Bunbietbay Trips</span>
-    </Link>
+  return <aside className={cn('fixed inset-y-0 left-0 z-30 hidden flex-col border-r border-outline-variant/50 bg-surface p-3 lg:flex', isCollapsed ? 'w-20' : 'w-64')}>
+    <div className={cn('flex items-center', isCollapsed ? 'flex-col gap-2' : 'gap-1')}>
+      <Link to="/trips" aria-label="Bunbietbay Trips" className={cn('flex min-w-0 items-center gap-3 py-2', isCollapsed ? 'justify-center px-0' : 'flex-1 px-2')}>
+        <img src={`${import.meta.env.BASE_URL}app-logo.svg`} alt="" className="size-10 shrink-0 rounded-xl" />
+        {!isCollapsed && <span className="whitespace-nowrap font-headline text-sm font-extrabold">Bunbietbay Trips</span>}
+      </Link>
+      <button type="button" onClick={onToggle} aria-label={isCollapsed ? 'Mở rộng thanh bên' : 'Thu gọn thanh bên'} title={isCollapsed ? 'Mở rộng thanh bên' : 'Thu gọn thanh bên'} className="flex size-11 shrink-0 items-center justify-center rounded-xl text-secondary hover:bg-surface-container-low hover:text-on-surface">
+        {isCollapsed ? <Icons.ChevronRight className="size-5" /> : <Icons.ChevronLeft className="size-5" />}
+      </button>
+    </div>
     <nav aria-label="Điều hướng chính" className="mt-6 space-y-1">{globalItems.map(renderLink)}</nav>
     {tripItems.length > 0 && <>
       <div className="my-5 border-t border-outline-variant/50" />
-      <p className="px-3 text-xs font-semibold text-secondary">{trip?.title ?? 'Chuyến đi hiện tại'}</p>
+      {!isCollapsed && <p className="px-3 text-xs font-semibold text-secondary">{trip?.title ?? 'Chuyến đi hiện tại'}</p>}
       <nav aria-label="Điều hướng chuyến đi" className="mt-2 space-y-1">{tripItems.map(renderLink)}</nav>
     </>}
-    <Link to="/account/profile" className="mt-auto flex items-center gap-3 rounded-xl bg-surface-container-low p-3">
+    <Link to="/account/profile" aria-label="Quản lý tài khoản" title={isCollapsed ? 'Quản lý tài khoản' : undefined} className={cn('mt-auto flex items-center rounded-xl bg-surface-container-low', isCollapsed ? 'justify-center p-2' : 'gap-3 p-3')}>
       <img src={currentUserProfile?.avatar || 'https://api.dicebear.com/9.x/glass/svg?seed=traveler'} alt="" className="size-9 rounded-full object-cover" />
-      <span className="min-w-0"><span className="block truncate text-sm font-semibold">{currentUserProfile?.displayName || 'Khách'}</span><span className="block truncate text-xs text-secondary">Quản lý tài khoản</span></span>
+      {!isCollapsed && <span className="min-w-0"><span className="block truncate text-sm font-semibold">{currentUserProfile?.displayName || 'Khách'}</span><span className="block truncate text-xs text-secondary">Quản lý tài khoản</span></span>}
     </Link>
   </aside>;
 }
 
 export function Layout({ children, hideNavLinks = false, tripId }: { children: ReactNode; hideNavLinks?: boolean; tripId?: string }) {
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
+  const [sidebarMode, setSidebarMode] = useStoredOption('bunbietbay-sidebar', ['expanded', 'collapsed'] as const, 'expanded');
+  const isSidebarCollapsed = sidebarMode === 'collapsed';
   const { isRemoteMode, isSyncing, retryWorkspaceSync, workspaceError, workspaceStatus } = useAppContext();
+  const { offlineMutations } = useCollaboration();
+  const pendingOfflineCount = offlineMutations.filter((item) => item.status === 'pending').length;
+  const conflictCount = offlineMutations.filter((item) => item.status === 'conflict' || item.status === 'failed').length;
   const hasWorkspaceError = workspaceStatus === 'remote-unavailable' || workspaceStatus === 'schema-incompatible';
 
   useEffect(() => {
@@ -351,18 +365,19 @@ export function Layout({ children, hideNavLinks = false, tripId }: { children: R
   }, []);
 
   return (
-    <div className="min-h-dvh w-full overflow-x-hidden bg-surface pb-24 font-body text-on-surface md:pb-0 md:pl-20 lg:pl-64">
-      {isOffline && (
-        <div className="fixed inset-x-0 top-0 z-50 flex items-center justify-center gap-2 bg-error py-1.5 text-center text-xs font-bold text-on-error md:left-20 lg:left-64">
-          <Icons.AlertTriangle className="w-3.5 h-3.5" /> {isRemoteMode ? 'Đang ngoại tuyến. Dữ liệu cloud tạm thời chỉ đọc.' : 'Đang ngoại tuyến. Dữ liệu sẽ lưu trên máy.'}
+    <div className={cn('min-h-dvh w-full overflow-x-hidden bg-surface pb-24 font-body text-on-surface md:pb-0 md:pl-20', isSidebarCollapsed ? 'lg:pl-20' : 'lg:pl-64')}>
+      {(isOffline || pendingOfflineCount > 0 || conflictCount > 0) && (
+        <div className={cn('fixed inset-x-0 top-0 z-50 flex items-center justify-center gap-2 bg-error py-1.5 text-center text-xs font-bold text-on-error md:left-20', isSidebarCollapsed ? 'lg:left-20' : 'lg:left-64')}>
+          <Icons.AlertTriangle className="w-3.5 h-3.5" /> {conflictCount ? `${conflictCount} thay đổi cần xử lý.` : isOffline && isRemoteMode ? 'Đang ngoại tuyến. Thay đổi sẽ được xếp hàng đồng bộ.' : isOffline ? 'Đang ngoại tuyến. Dữ liệu sẽ lưu trên máy.' : `${pendingOfflineCount} thay đổi đang chờ đồng bộ.`}
+          {isRemoteMode && <Link to="/account/sync" className="underline">Mở đồng bộ</Link>}
         </div>
       )}
-      <DesktopSidebar tripId={tripId} />
+      <DesktopSidebar tripId={tripId} isCollapsed={isSidebarCollapsed} onToggle={() => setSidebarMode(isSidebarCollapsed ? 'expanded' : 'collapsed')} />
       <TabletRail tripId={tripId} />
-      <div className={isOffline ? "pt-7" : ""}>
+      <div className={isOffline || pendingOfflineCount || conflictCount ? "pt-7" : ""}>
         <TopNav hideNavLinks={hideNavLinks} />
       </div>
-      <main id="main-content" className={`mx-auto max-w-[92rem] px-4 md:px-6 lg:px-8 ${isOffline ? 'pt-[7.25rem] lg:pt-12' : 'pt-24 lg:pt-8'}`}>
+      <main id="main-content" className={`mx-auto max-w-[92rem] px-4 md:px-6 lg:px-8 ${isOffline || pendingOfflineCount || conflictCount ? 'pt-[7.25rem] lg:pt-12' : 'pt-24 lg:pt-8'}`}>
         {hasWorkspaceError && workspaceError && (
           <div role="alert" className="mb-5 flex flex-col gap-3 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-amber-950 shadow-sm dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-100 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-start gap-3">

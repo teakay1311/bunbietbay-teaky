@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
 import { deleteImageFromCloudinary } from '../lib/cloudinary';
-import { loadPersistedState, savePersistedState } from '../utils/persistence';
+import { deleteOfflineMedia, loadPersistedState, loadRemoteCachedState, savePersistedState, saveRemoteCachedState } from '../utils/persistence';
 import { buildDuplicatedMembershipRoles, EMPTY_PERSISTED_STATE, normalizePersistedState, validateImportedSnapshot } from '../utils/appState';
 import { classifyRemoteWorkspaceError, type RemoteWorkspaceErrorCode } from '../utils/cloudSyncDecisions';
 import { useAuth } from './AuthContext';
@@ -12,6 +12,8 @@ import { fetchRemoteWorkspace } from '../data/remoteWorkspace';
 import { readRemotePinnedTripIds, writeRemotePinnedTripIds } from '../data/remoteTripPreferences';
 import { runSupabaseMutation } from '../data/supabaseMutation';
 import { getTripDateValidationError } from '../utils/tripValidation';
+import { coalesceOfflineMutations } from '../features/collaboration/selectors';
+import { mergeRemoteWorkspaceWithOffline } from '../utils/offlineWorkspaceMerge';
 import {
   toRemoteActivity,
   toRemoteActivityUpdate,
@@ -40,6 +42,7 @@ import {
   type TripRecord,
   type TripReview,
   type UserProfile,
+  type OfflineMutation,
 } from '../domain/models';
 
 export { CURRENCIES } from '../domain/models';
@@ -62,6 +65,14 @@ export type {
   TripPermissions,
   TripRecord,
   TripReview,
+  TripTask,
+  TripPoll,
+  TripPollOption,
+  TripPollVote,
+  TripComment,
+  TripNotification,
+  TripCollaborationSettings,
+  OfflineMutation,
 } from '../domain/models';
 
 type InviteTripMemberInput = {
@@ -104,9 +115,11 @@ type AppContextType = {
   currentTripId: string | null;
   setCurrentTripId: (id: string | null) => void;
   replacePersistedState: (state: PersistedAppState) => void;
+  updatePersistedState: (updater: (state: PersistedAppState) => PersistedAppState) => void;
   refreshWorkspace: () => Promise<void>;
   retryWorkspaceSync: () => Promise<void>;
   batchRemote: (callback: () => Promise<void>) => Promise<void>;
+  recordActivityLog: (entry: Omit<ActivityLogEntry, 'id' | 'createdAt' | 'actorId' | 'actorName'>) => void;
   inviteTripMember: (tripId: string, input: InviteTripMemberInput) => Promise<void>;
   revokeTripInvitation: (invitationId: string) => Promise<void>;
   updateTripMemberRole: (membershipId: string, role: TripAccessRole) => Promise<void>;
@@ -149,6 +162,12 @@ function toFinitePositiveNumber(value: unknown, fieldLabel: string) {
   return nextValue;
 }
 
+function toIntegerInRange(value: unknown, fieldLabel: string, minimum: number, maximum: number) {
+  const nextValue = Number(value);
+  if (!Number.isInteger(nextValue) || nextValue < minimum || nextValue > maximum) throw new Error(`${fieldLabel} phải từ ${minimum} đến ${maximum}.`);
+  return nextValue;
+}
+
 const DEFAULT_LOCAL_WORKSPACE = import.meta.env.DEV ? INITIAL_PERSISTED_STATE : EMPTY_PERSISTED_STATE;
 
 function prepareStoredWorkspace(state: unknown) {
@@ -167,6 +186,46 @@ function toWorkspaceError(error: unknown): WorkspaceError {
     unknown: 'Không thể tải workspace từ Supabase. Hãy thử lại sau.',
   };
   return { code, message: messages[code] };
+}
+
+function queueOfflineWorkspaceChanges(before: PersistedAppState, after: PersistedAppState) {
+  let queue = before.offlineMutations;
+  const add = (value: Omit<OfflineMutation, 'id' | 'createdAt' | 'status'>) => {
+    queue = coalesceOfflineMutations(queue, { ...value, id: crypto.randomUUID(), createdAt: new Date().toISOString(), status: 'pending' });
+  };
+  const diff = <T extends { id: string; tripId?: string; updatedAt?: string }>(
+    entityType: OfflineMutation['entityType'],
+    oldItems: T[],
+    newItems: T[],
+    createPayload: (item: T) => Record<string, unknown>,
+    updatePayload: (item: T) => Record<string, unknown>,
+    deletePayload: (item: T) => Record<string, unknown> = () => ({}),
+  ) => {
+    const oldMap = new Map(oldItems.map((item) => [item.id, item]));
+    const newMap = new Map(newItems.map((item) => [item.id, item]));
+    newItems.forEach((item) => {
+      const previous = oldMap.get(item.id);
+      const tripId = item.tripId ?? item.id;
+      if (!previous) add({ entityType, entityId: item.id, tripId, action: 'create', payload: createPayload(item) });
+      else {
+        const previousPayload = updatePayload(previous);
+        const nextPayload = updatePayload(item);
+        if (JSON.stringify(previousPayload) !== JSON.stringify(nextPayload)) add({ entityType, entityId: item.id, tripId, action: 'update', payload: nextPayload, restorePayload: createPayload(item), baseUpdatedAt: previous.updatedAt });
+      }
+    });
+    oldItems.forEach((item) => {
+      if (!newMap.has(item.id)) add({ entityType, entityId: item.id, tripId: item.tripId ?? item.id, action: 'delete', payload: deletePayload(item), baseUpdatedAt: item.updatedAt });
+    });
+  };
+  diff('trip', before.trips, after.trips,
+    (trip) => ({ row: { id: trip.id, ...toRemoteTrip(trip, trip.createdBy ?? before.viewerProfileId ?? '') }, ownerId: trip.createdBy ?? before.viewerProfileId }),
+    (trip) => toRemoteTripUpdate(trip, trip.budget));
+  diff('activity', before.activities, after.activities, (item) => toRemoteActivity(item), (item) => toRemoteActivityUpdate(item));
+  diff('expense', before.expenses, after.expenses, (item) => toRemoteExpense(item), (item) => toRemoteExpenseUpdate(item));
+  diff('place', before.savedPlaces, after.savedPlaces, (item) => toRemoteSavedPlace(item), (item) => toRemoteSavedPlaceUpdate(item));
+  diff('packing', before.packingItems, after.packingItems, (item) => toRemotePackingItem(item), (item) => toRemotePackingItemUpdate(item));
+  diff('photo', before.photos, after.photos, (item) => ({ row: toRemotePhoto(item), offlineBlobKey: item.offlineBlobKey }), (item) => toRemotePhotoUpdate(item), (item) => ({ providerPublicId: item.providerPublicId }));
+  return { ...after, offlineMutations: queue };
 }
 
 export function AppProvider({ children }: { children: ReactNode }) {
@@ -209,10 +268,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setWorkspaceError(null);
       setWorkspaceStatus('ready-remote');
       setWorkspaceState((currentState) => ({
-        ...currentState,
-        ...nextState,
+        ...mergeRemoteWorkspaceWithOffline(currentState, nextState),
+        profiles: nextState.profiles,
+        memberships: nextState.memberships,
+        invitations: nextState.invitations,
         pinnedTripIds,
-        currentTripId: currentState.currentTripId && nextState.trips.some((trip) => trip.id === currentState.currentTripId)
+        currentTripId: currentState.currentTripId && (nextState.trips.some((trip) => trip.id === currentState.currentTripId) || currentState.offlineMutations.some((mutation) => mutation.entityType === 'trip' && mutation.entityId === currentState.currentTripId && mutation.action === 'create'))
           ? currentState.currentTripId
           : nextState.currentTripId,
       }));
@@ -277,9 +338,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setWorkspaceError(null);
         setWorkspaceState(EMPTY_PERSISTED_STATE);
       }
-      void refreshWorkspace().catch((error) => {
-        console.error('Failed to refresh remote workspace', error);
-      });
+      const userId = session!.user.id;
+      void loadRemoteCachedState(userId, prepareStoredWorkspace).then((cached) => {
+        if (cached && loadedRemoteUserIdRef.current !== userId) {
+          setWorkspaceState(cached);
+          hasLoadedRemoteRef.current = true;
+          loadedRemoteUserIdRef.current = userId;
+        }
+      }).finally(() => refreshWorkspace()).catch((error) => console.error('Failed to refresh remote workspace', error));
       return;
     }
 
@@ -342,6 +408,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
 
     if (isRemoteMode) {
+      if (session?.user.id && workspaceState.viewerProfileId === session.user.id) {
+        void saveRemoteCachedState(session.user.id, workspaceState).catch((error) => console.error('Failed to cache remote workspace', error));
+      }
       return;
     }
 
@@ -349,7 +418,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     void savePersistedState(workspaceState).catch((error) => {
       console.error('Failed to save local workspace state', error);
     });
-  }, [isHydrated, isRemoteMode, workspaceState]);
+  }, [isHydrated, isRemoteMode, session?.user.id, workspaceState]);
 
   const currentUserProfile = useMemo(() => {
     if (isRemoteMode) {
@@ -375,12 +444,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setWorkspaceState(normalizePersistedState(state, state));
   }, []);
 
-  const withLocalUpdate = useCallback((updater: (state: PersistedAppState) => PersistedAppState) => {
-    if (isRemoteMode && remoteUnavailableRef.current) {
-      throw new Error(workspaceError?.message ?? 'Workspace cloud đang không khả dụng.');
-    }
+  const updatePersistedState = useCallback((updater: (state: PersistedAppState) => PersistedAppState) => {
     setWorkspaceState((currentState) => updater(currentState));
-  }, [isRemoteMode, workspaceError?.message]);
+  }, []);
+
+  const withLocalUpdate = useCallback((updater: (state: PersistedAppState) => PersistedAppState) => {
+    setWorkspaceState((currentState) => {
+      const nextState = updater(currentState);
+      return isRemoteMode && remoteUnavailableRef.current ? queueOfflineWorkspaceChanges(currentState, nextState) : nextState;
+    });
+  }, [isRemoteMode]);
 
   const getTripPermission = useCallback((tripId: string) => {
     const trip = trips.find((item) => item.id === tripId);
@@ -418,15 +491,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!isRemoteMode) {
       return false;
     }
-    if (remoteUnavailableRef.current) {
-      throw new Error(workspaceError?.message ?? 'Workspace cloud đang không khả dụng.');
+    if (remoteUnavailableRef.current || (typeof navigator !== 'undefined' && !navigator.onLine)) {
+      remoteUnavailableRef.current = true;
+      setWorkspaceStatus('remote-unavailable');
+      return false;
     }
 
     try {
       await run();
     } catch (error) {
       const nextError = toWorkspaceError(error);
-      if (nextError.code === 'schema-incompatible' || nextError.code === 'network' || nextError.code === 'auth') {
+      if (nextError.code === 'network') {
+        remoteUnavailableRef.current = true;
+        setWorkspaceError(nextError);
+        setWorkspaceStatus('remote-unavailable');
+        return false;
+      }
+      if (nextError.code === 'schema-incompatible' || nextError.code === 'auth') {
         remoteUnavailableRef.current = true;
         setWorkspaceError(nextError);
         setWorkspaceStatus(nextError.code === 'schema-incompatible' ? 'schema-incompatible' : 'remote-unavailable');
@@ -442,7 +523,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
     }
     return true;
-  }, [isRemoteMode, refreshWorkspace, workspaceError?.message]);
+  }, [isRemoteMode, refreshWorkspace]);
 
   const batchRemote = useCallback(async (callback: () => Promise<void>) => {
     batchDepthRef.current++;
@@ -461,9 +542,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [isRemoteMode, refreshWorkspace]);
 
   const logTripEvent = useCallback((entry: Omit<ActivityLogEntry, 'id' | 'createdAt' | 'actorId' | 'actorName'>) => {
-    if (isRemoteMode && remoteUnavailableRef.current) {
-      return;
-    }
     const createdAt = new Date().toISOString();
     const nextEntry: ActivityLogEntry = {
       ...entry,
@@ -518,9 +596,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     currentTripId: workspaceState.currentTripId,
     setCurrentTripId,
     replacePersistedState,
+    updatePersistedState,
     refreshWorkspace,
     retryWorkspaceSync: refreshWorkspace,
     batchRemote,
+    recordActivityLog: logTripEvent,
     inviteTripMember: async (tripId, input) => {
       assertCanManageMembers(tripId);
       const normalizedEmail = input.email.trim().toLowerCase();
@@ -650,7 +730,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const createdAt = new Date().toISOString();
       withLocalUpdate((currentState) => ({
         ...currentState,
-        expenses: [...currentState.expenses, { ...expense, amount: normalizedAmount, originalAmount: normalizedOriginalAmount, exchangeRate: normalizedRate, id: `e${Date.now()}`, createdAt, updatedAt: createdAt }],
+        expenses: [...currentState.expenses, { ...expense, amount: normalizedAmount, originalAmount: normalizedOriginalAmount, exchangeRate: normalizedRate, id: crypto.randomUUID(), createdAt, updatedAt: createdAt }],
       }));
       logTripEvent({ tripId: expense.tripId, action: expense.isSettlement ? 'settled' : 'created', entityType: 'expense', summary: expense.isSettlement ? `Ghi nhận thanh toán: ${expense.title}` : `Thêm chi tiêu: ${expense.title}` });
     },
@@ -725,8 +805,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(50);
       assertCanEditTripContent(activity.tripId);
       assertTripEntityLinks(activity.tripId, undefined, activity.placeId);
+      const normalizedActivity = { ...activity, durationMinutes: toIntegerInRange(activity.durationMinutes ?? 60, 'Thời lượng', 5, 1440), travelMinutesAfter: toIntegerInRange(activity.travelMinutesAfter ?? 0, 'Thời gian di chuyển', 0, 720) };
       const didRemoteMutate = await mutateRemote(async () => {
-        await runSupabaseMutation(() => supabase!.from('activities').insert(toRemoteActivity(activity)));
+        await runSupabaseMutation(() => supabase!.from('activities').insert(toRemoteActivity(normalizedActivity)));
       });
 
       if (didRemoteMutate) {
@@ -737,7 +818,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const createdAt = new Date().toISOString();
       withLocalUpdate((currentState) => ({
         ...currentState,
-        activities: [...currentState.activities, { ...activity, id: `a${Date.now()}`, createdAt, updatedAt: createdAt }],
+        activities: [...currentState.activities, { ...normalizedActivity, id: crypto.randomUUID(), createdAt, updatedAt: createdAt }],
       }));
       logTripEvent({ tripId: activity.tripId, action: 'created', entityType: 'activity', summary: `Thêm hoạt động: ${activity.title}` });
     },
@@ -748,9 +829,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
       assertCanEditTripContent(currentActivity.tripId);
       assertTripEntityLinks(currentActivity.tripId, undefined, activity.placeId ?? currentActivity.placeId);
+      const normalizedActivity = { ...activity, ...(activity.durationMinutes === undefined ? {} : { durationMinutes: toIntegerInRange(activity.durationMinutes, 'Thời lượng', 5, 1440) }), ...(activity.travelMinutesAfter === undefined ? {} : { travelMinutesAfter: toIntegerInRange(activity.travelMinutesAfter, 'Thời gian di chuyển', 0, 720) }) };
 
       const didRemoteMutate = await mutateRemote(async () => {
-        await runSupabaseMutation(() => supabase!.from('activities').update(toRemoteActivityUpdate(activity)).eq('id', id));
+        await runSupabaseMutation(() => supabase!.from('activities').update(toRemoteActivityUpdate(normalizedActivity)).eq('id', id));
       });
 
       if (didRemoteMutate) {
@@ -760,7 +842,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       withLocalUpdate((currentState) => ({
         ...currentState,
-        activities: currentState.activities.map((item) => item.id === id ? { ...item, ...activity, updatedAt: new Date().toISOString() } : item),
+        activities: currentState.activities.map((item) => item.id === id ? { ...item, ...normalizedActivity, updatedAt: new Date().toISOString() } : item),
       }));
     },
     deleteActivity: async (id) => {
@@ -831,12 +913,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const currentUserId = currentUserProfile?.id ?? workspaceState.viewerProfileId ?? 'm1';
       const createdAt = new Date().toISOString();
       withLocalUpdate((currentState) => {
-        const nextId = `t${Date.now()}`;
+        const nextId = crypto.randomUUID();
         return {
           ...currentState,
           trips: [{ ...trip, budget: normalizedBudget, id: nextId, createdBy: currentUserId, createdAt, updatedAt: createdAt }, ...currentState.trips],
           memberships: [
-            { id: `tm-${Date.now()}`, tripId: nextId, userId: currentUserId, role: 'owner' },
+            { id: crypto.randomUUID(), tripId: nextId, userId: currentUserId, role: 'owner' },
             ...currentState.memberships,
           ],
         };
@@ -923,6 +1005,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
               booking_code: a.bookingCode,
               place_id: null,
               is_completed: a.isCompleted ?? false,
+              duration_minutes: a.durationMinutes ?? 60,
+              travel_minutes_after: a.travelMinutesAfter ?? 0,
             }));
             await runSupabaseMutation(() => supabase!.from('activities').insert(actData));
           }
@@ -938,6 +1022,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
             }));
             await runSupabaseMutation(() => supabase!.from('packing_items').insert(packData));
           }
+
+          const tasks = workspaceState.tasks.filter((task) => task.tripId === id && task.status !== 'done');
+          if (tasks.length > 0) {
+            const taskData = tasks.map((task) => ({
+              trip_id: newTrip.id,
+              title: task.title,
+              description: task.description,
+              status: task.status,
+              priority: task.priority,
+              assignee_id: task.assigneeId && duplicatedUserIds.has(task.assigneeId) ? task.assigneeId : null,
+              due_date: task.dueDate ? shiftDate(task.dueDate, startOffsetDays) : null,
+              due_time: task.dueTime,
+              activity_id: null,
+              place_id: null,
+              created_by: task.createdBy && duplicatedUserIds.has(task.createdBy) ? task.createdBy : session!.user.id,
+            }));
+            await runSupabaseMutation(() => supabase!.from('trip_tasks').insert(taskData));
+          }
         } catch (duplicationError) {
           const { error: cleanupError } = await supabase!.from('trips').delete().eq('id', newTrip.id);
           if (cleanupError) console.error('Failed to clean up incomplete duplicated trip', cleanupError);
@@ -951,26 +1053,38 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       const currentUserId = currentUserProfile?.id ?? workspaceState.viewerProfileId ?? 'm1';
       withLocalUpdate((currentState) => {
-        const nextId = `t${Date.now()}`;
+        const nextId = crypto.randomUUID();
         const createdAt = new Date().toISOString();
         const duplicatedMemberships = buildDuplicatedMembershipRoles(currentState.memberships, id, currentUserId);
         const duplicatedUserIds = new Set(duplicatedMemberships.map((membership) => membership.userId));
-        const activitiesCopy = currentState.activities.filter(a => a.tripId === id).map((a, i) => ({
+        const activitiesCopy = currentState.activities.filter(a => a.tripId === id).map((a) => ({
           ...a,
           tripId: nextId,
           date: shiftDate(a.date, startOffsetDays),
-          id: `a${Date.now()}-${i}`,
+          id: crypto.randomUUID(),
           placeId: undefined,
         }));
-        const packingsCopy = currentState.packingItems.filter(p => p.tripId === id).map((p, i) => ({
+        const packingsCopy = currentState.packingItems.filter(p => p.tripId === id).map((p) => ({
           ...p,
           tripId: nextId,
           isPacked: false,
-          id: `p${Date.now()}-${i}`,
+          id: crypto.randomUUID(),
           assigneeId: p.assigneeId && duplicatedUserIds.has(p.assigneeId) ? p.assigneeId : undefined,
         }));
         const membershipsCopy = duplicatedMemberships
-          .map((membership, index) => ({ ...membership, id: `tm${Date.now()}-${index}`, tripId: nextId }));
+          .map((membership) => ({ ...membership, id: crypto.randomUUID(), tripId: nextId }));
+        const tasksCopy = currentState.tasks.filter((task) => task.tripId === id && task.status !== 'done').map((task) => ({
+          ...task,
+          id: crypto.randomUUID(),
+          tripId: nextId,
+          assigneeId: task.assigneeId && duplicatedUserIds.has(task.assigneeId) ? task.assigneeId : undefined,
+          dueDate: task.dueDate ? shiftDate(task.dueDate, startOffsetDays) : undefined,
+          activityId: undefined,
+          placeId: undefined,
+          createdBy: task.createdBy && duplicatedUserIds.has(task.createdBy) ? task.createdBy : currentUserId,
+          updatedAt: createdAt,
+          createdAt,
+        }));
 
         return {
           ...currentState,
@@ -988,7 +1102,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
           }, ...currentState.trips],
           memberships: [...membershipsCopy, ...currentState.memberships],
           activities: [...activitiesCopy, ...currentState.activities],
-          packingItems: [...packingsCopy, ...currentState.packingItems]
+          packingItems: [...packingsCopy, ...currentState.packingItems],
+          tasks: [...tasksCopy, ...currentState.tasks],
         };
       });
     },
@@ -1016,19 +1131,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
           savedPlaces: currentState.savedPlaces.filter(sp => sp.tripId !== id),
           invitations: currentState.invitations.filter(inv => inv.tripId !== id),
           activityLogs: currentState.activityLogs.filter((entry) => entry.tripId !== id),
+          collaborationSettings: currentState.collaborationSettings.filter((settings) => settings.tripId !== id),
+          tasks: currentState.tasks.filter((task) => task.tripId !== id),
+          polls: currentState.polls.filter((poll) => poll.tripId !== id),
+          pollOptions: currentState.pollOptions.filter((option) => option.tripId !== id),
+          pollVotes: currentState.pollVotes.filter((vote) => vote.tripId !== id),
+          comments: currentState.comments.filter((comment) => comment.tripId !== id),
+          notifications: currentState.notifications.filter((notification) => notification.tripId !== id),
+          offlineMutations: currentState.offlineMutations.filter((mutation) => mutation.tripId !== id),
           pinnedTripIds: (currentState.pinnedTripIds ?? []).filter((tripId) => tripId !== id),
           currentTripId: currentState.currentTripId === id ? null : currentState.currentTripId,
         }));
       }
 
-      void Promise.allSettled(
-        targets.map(p => {
-          if (p.providerPublicId) {
-            return deleteImageFromCloudinary(p.providerPublicId).catch(() => { });
-          }
-          return Promise.resolve();
-        })
-      );
+      if (didRemoteMutate || !isRemoteMode) {
+        void Promise.allSettled(
+          targets.map(p => p.providerPublicId ? deleteImageFromCloudinary(p.providerPublicId) : Promise.resolve())
+        );
+      }
     },
     editTrip: async (id, trip) => {
       assertCanManageTrip(id);
@@ -1098,7 +1218,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const createdAt = new Date().toISOString();
       withLocalUpdate((currentState) => ({
         ...currentState,
-        savedPlaces: [...currentState.savedPlaces, { ...place, id: `p${Date.now()}`, createdAt, updatedAt: createdAt }],
+        savedPlaces: [...currentState.savedPlaces, { ...place, id: crypto.randomUUID(), createdAt, updatedAt: createdAt }],
       }));
       logTripEvent({ tripId: place.tripId, action: 'created', entityType: 'place', summary: `Thêm địa điểm: ${place.name}` });
     },
@@ -1174,7 +1294,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (didRemoteMutate) return;
 
       const timestamp = Date.now();
-      const savedPlaceId = `p${timestamp}`;
+      const savedPlaceId = crypto.randomUUID();
       const createdAt = new Date(timestamp).toISOString();
       const tripPlaceType = place.type === 'hotel' ? 'hotel' : place.type === 'restaurant' || place.type === 'cafe' ? 'restaurant' : 'other';
       withLocalUpdate((currentState) => ({
@@ -1189,7 +1309,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           updatedAt: createdAt,
         }],
         activities: createActivity ? [...currentState.activities, {
-          id: `a${timestamp}`,
+          id: crypto.randomUUID(),
           tripId,
           date: date!,
           time,
@@ -1218,7 +1338,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const createdAt = new Date().toISOString();
       withLocalUpdate((currentState) => ({
         ...currentState,
-        packingItems: [...currentState.packingItems, { ...item, id: `pk-${Date.now()}`, createdAt, updatedAt: createdAt }],
+        packingItems: [...currentState.packingItems, { ...item, id: crypto.randomUUID(), createdAt, updatedAt: createdAt }],
       }));
       logTripEvent({ tripId: item.tripId, action: 'created', entityType: 'packing', summary: `Thêm hành lý: ${item.name}` });
     },
@@ -1318,7 +1438,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         photos: [
           ...photos.map((photo, index) => ({
             ...photo,
-            id: `ph-${timestamp}-${index}`,
+            id: crypto.randomUUID(),
             createdAt: new Date(timestamp + index).toISOString(),
           })),
           ...currentState.photos,
@@ -1383,6 +1503,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         ...currentState,
         photos: currentState.photos.filter((item) => item.id !== id),
       }));
+      if (currentPhoto.offlineBlobKey) void deleteOfflineMedia(currentPhoto.offlineBlobKey);
 
       if (currentPhoto.provider !== 'cloudinary') {
         undoStackRef.current.push(async () => {
@@ -1399,7 +1520,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         await action();
       }
     },
-  }), [assertCanEditTripContent, assertCanManageMembers, assertCanManageTrip, assertTripEntityLinks, batchRemote, currentUserProfile, isHydrated, isRemoteMode, isSyncing, logTripEvent, mutateRemote, refreshWorkspace, replacePersistedState, setCurrentTripId, trips, withLocalUpdate, workspaceError, workspaceState, workspaceStatus, session]);
+  }), [assertCanEditTripContent, assertCanManageMembers, assertCanManageTrip, assertTripEntityLinks, batchRemote, currentUserProfile, isHydrated, isRemoteMode, isSyncing, logTripEvent, mutateRemote, refreshWorkspace, replacePersistedState, setCurrentTripId, trips, updatePersistedState, withLocalUpdate, workspaceError, workspaceState, workspaceStatus, session]);
 
   return (
     <AppContext.Provider value={contextValue}>

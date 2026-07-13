@@ -6,6 +6,7 @@ import { Activity } from '../context/AppContext';
 import { useFeedback } from '../context/FeedbackContext';
 import { LinkifyText } from './LinkifyText';
 import { Link } from 'react-router-dom';
+import { CommentThread } from './CommentThread';
 
 interface SortableActivityItemProps {
     activity: Activity;
@@ -74,6 +75,7 @@ export const SortableActivityItem: React.FC<SortableActivityItemProps> = ({ acti
                             </a>
                         )}
                     </p>
+                    <p className="mb-3 text-xs font-semibold text-secondary"><Icons.Clock3 className="mr-1 inline size-3.5" />{activity.durationMinutes ?? 60} phút{activity.travelMinutesAfter ? ` · Dự kiến ${activity.travelMinutesAfter} phút di chuyển tiếp` : ''}</p>
 
                     {activity.bookingCode && (
                         <div className="mb-4 inline-flex items-center gap-3 bg-surface-container-high px-4 py-2 rounded-xl border border-outline-variant/30 group/code z-20 relative">
@@ -115,6 +117,7 @@ export const SortableActivityItem: React.FC<SortableActivityItemProps> = ({ acti
                         {canEdit && <Link to={`/trips/${activity.tripId}/memories?action=photo&activityId=${encodeURIComponent(activity.id)}${activity.placeId ? `&placeId=${encodeURIComponent(activity.placeId)}` : ''}`} className="inline-flex min-h-10 items-center rounded-xl border border-outline-variant px-3 text-xs font-bold text-primary">Thêm ảnh</Link>}
                         {canEdit && <Link to={`/trips/${activity.tripId}/memories?action=journal&activityId=${encodeURIComponent(activity.id)}${activity.placeId ? `&placeId=${encodeURIComponent(activity.placeId)}` : ''}`} className="inline-flex min-h-10 items-center rounded-xl border border-outline-variant px-3 text-xs font-bold text-primary">Viết nhật ký</Link>}
                     </div>
+                    <CommentThread tripId={activity.tripId} targetType="activity" targetId={activity.id} />
                 </div>
                 {canEdit && (
                     <div className="flex md:flex-col gap-2 z-20 relative">

@@ -8,6 +8,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { FeedbackProvider, useFeedback } from './context/FeedbackContext';
 import { SettingsProvider } from './context/SettingsContext';
 import { NotebookProvider } from './context/NotebookContext';
+import { CollaborationProvider } from './context/CollaborationContext';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { useTripReminders } from './hooks/useTripReminders';
 import { lazyWithRetry } from './utils/lazyWithRetry';
@@ -28,6 +29,9 @@ const GlobalPhotoLibrary = lazyWithRetry(() => import('./screens/GlobalPhotoLibr
 const Inbox = lazyWithRetry(() => import('./screens/Inbox').then((module) => ({ default: module.Inbox })));
 const TripMore = lazyWithRetry(() => import('./screens/TripMore').then((module) => ({ default: module.TripMore })));
 const TripSettings = lazyWithRetry(() => import('./screens/TripSettings').then((module) => ({ default: module.TripSettings })));
+const TripCollaboration = lazyWithRetry(() => import('./screens/TripCollaboration').then((module) => ({ default: module.TripCollaboration })));
+const SyncCenter = lazyWithRetry(() => import('./screens/SyncCenter').then((module) => ({ default: module.SyncCenter })));
+const PublicTripShare = lazyWithRetry(() => import('./screens/PublicTripShare').then((module) => ({ default: module.PublicTripShare })));
 
 function TripPlanRoute() {
   return <TripSectionTabs tabs={[{ value: 'itinerary', label: 'Lịch trình' }, { value: 'places', label: 'Địa điểm' }]} fallback="itinerary">
@@ -155,6 +159,7 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<Suspense fallback={<BootLoadingFallback />}><PublicLoginRoute /></Suspense>} />
+      <Route path="/share/:token" element={<Suspense fallback={<BootLoadingFallback />}><PublicTripShare /></Suspense>} />
       <Route element={<ProtectedRoutes />}>
         <Route path="/" element={<Navigate to="/trips" replace />} />
 
@@ -169,6 +174,7 @@ function AppRoutes() {
         <Route element={<GlobalSettingsLayoutWrapper />}>
           <Route path="/account" element={<Navigate to="/account/profile" replace />} />
           <Route path="/account/:section" element={<Settings />} />
+          <Route path="/account/sync" element={<SyncCenter />} />
           <Route path="/settings" element={<LegacyRedirect to="/account/profile" />} />
         </Route>
 
@@ -178,6 +184,7 @@ function AppRoutes() {
           <Route path="money" element={<TripExpenses />} />
           <Route path="prepare" element={<TripPrepareRoute />} />
           <Route path="memories" element={<TripPhotos />} />
+          <Route path="collaborate" element={<TripCollaboration />} />
           <Route path="more" element={<TripMore />} />
           <Route path="settings" element={<TripSettings />} />
           <Route path="overview" element={<LegacyTripRedirect path="" />} />
@@ -247,9 +254,11 @@ export default function App() {
         <AuthProvider>
           <SettingsProvider>
             <AppProvider>
-              <NotebookProvider>
-                <AppShell />
-              </NotebookProvider>
+              <CollaborationProvider>
+                <NotebookProvider>
+                  <AppShell />
+                </NotebookProvider>
+              </CollaborationProvider>
             </AppProvider>
           </SettingsProvider>
         </AuthProvider>

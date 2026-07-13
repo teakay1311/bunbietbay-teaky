@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } fro
 import { Link } from 'react-router-dom';
 import { Icons } from '../components/Icons';
 import { Modal } from '../components/Modal';
+import { CommentThread } from '../components/CommentThread';
 import { SmartEmptyState } from '../components/SmartEmptyState';
 import { SortSelect } from '../components/SortSelect';
 import { useAppContext } from '../context/AppContext';
@@ -18,6 +19,9 @@ import { isCloudinaryConfigured } from '../lib/cloudinary';
 import { formatLocalDate } from '../utils/date';
 import { getErrorMessage } from '../utils/errorMessage';
 import type { SortOption } from '../utils/listSort';
+import { useStoredOption } from '../hooks/useStoredOption';
+import { hashPhoto, inspectDuplicateFiles } from '../features/photos/duplicateDetection';
+import { cachePhotosForOffline } from '../utils/offlinePhotos';
 
 const SORT_OPTIONS: Array<SortOption<GlobalPhotoSortKey>> = [
   { value: 'takenDesc', label: 'Ngày chụp mới nhất' },
@@ -31,6 +35,8 @@ const SORT_OPTIONS: Array<SortOption<GlobalPhotoSortKey>> = [
 const EMPTY_FILTERS: GlobalPhotoFilters = {
   query: '', tripId: '', album: '', dateFrom: '', dateTo: '', place: '', tag: '', person: '', sortBy: 'takenDesc',
 };
+const GLOBAL_PHOTO_VIEW_MODES = ['folders', 'photos'] as const;
+const GLOBAL_PHOTO_SORT_KEYS = SORT_OPTIONS.map((option) => option.value);
 
 function uniqueValues(values: Array<string | undefined>) {
   return [...new Set(values.filter((value): value is string => !!value?.trim()))].sort((left, right) => left.localeCompare(right, 'vi'));
@@ -41,10 +47,11 @@ function splitValues(value: FormDataEntryValue | null) {
 }
 
 export function GlobalPhotoLibrary() {
-  const { trips, photos, activities, savedPlaces, addPhotos, editPhoto, deletePhoto } = useAppContext();
+  const { trips, photos, activities, savedPlaces, addPhotos, editPhoto, deletePhoto, batchRemote } = useAppContext();
   const { confirm, showToast } = useFeedback();
-  const [viewMode, setViewMode] = useState<'folders' | 'photos'>('folders');
-  const [filters, setFilters] = useState<GlobalPhotoFilters>(EMPTY_FILTERS);
+  const [viewMode, setViewMode] = useStoredOption('bunbietbay-photos-view', GLOBAL_PHOTO_VIEW_MODES, 'folders');
+  const [storedSortBy, setStoredSortBy] = useStoredOption('bunbietbay-photos-sort', GLOBAL_PHOTO_SORT_KEYS, 'takenDesc');
+  const [filters, setFilters] = useState<GlobalPhotoFilters>(() => ({ ...EMPTY_FILTERS, sortBy: storedSortBy }));
   const [visibleCount, setVisibleCount] = useState(20);
   const [selectedPhotoId, setSelectedPhotoId] = useState<string | null>(null);
   const [isSelectionMode, setIsSelectionMode] = useState(false);
@@ -57,6 +64,7 @@ export function GlobalPhotoLibrary() {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
+  const [isScanningDuplicates, setIsScanningDuplicates] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const photoOnly = useMemo(() => photos.filter((photo) => photo.itemType !== 'journal'), [photos]);
@@ -72,6 +80,7 @@ export function GlobalPhotoLibrary() {
   const uploadPlaces = useMemo(() => savedPlaces.filter((item) => item.tripId === uploadTripId), [savedPlaces, uploadTripId]);
   const editActivities = useMemo(() => activities.filter((item) => item.tripId === selectedPhoto?.tripId), [activities, selectedPhoto?.tripId]);
   const editPlaces = useMemo(() => savedPlaces.filter((item) => item.tripId === selectedPhoto?.tripId), [savedPlaces, selectedPhoto?.tripId]);
+  const unscannedPhotos = useMemo(() => photoOnly.filter((photo) => !photo.contentHash && photo.hashVersion !== -1 && tripById.get(photo.tripId)?.permissions.canEditContent), [photoOnly, tripById]);
 
   const albums = useMemo(() => uniqueValues(photoOnly.map((photo) => photo.album)), [photoOnly]);
   const places = useMemo(() => uniqueValues(photoOnly.map((photo) => photo.place)), [photoOnly]);
@@ -94,8 +103,11 @@ export function GlobalPhotoLibrary() {
   }, [isSelectionMode]);
 
   const updateFilter = <Key extends keyof GlobalPhotoFilters>(key: Key, value: GlobalPhotoFilters[Key]) => {
+    if (key === 'sortBy') setStoredSortBy(value as GlobalPhotoSortKey);
     setFilters((current) => ({ ...current, [key]: value }));
   };
+
+  const clearFilters = () => setFilters((current) => ({ ...EMPTY_FILTERS, sortBy: current.sortBy }));
 
   const openUpload = (tripId = '') => {
     const nextTripId = editableTrips.some((trip) => trip.id === tripId) ? tripId : editableTrips[0]?.id ?? '';
@@ -129,7 +141,12 @@ export function GlobalPhotoLibrary() {
     setIsUploading(true);
     setUploadError(null);
     try {
-      const nextPhotos = await preparePhotoUploads(files, uploadTripId, {
+      const inspection = await inspectDuplicateFiles(files, photos, uploadTripId);
+      const exactSameTrip = new Set(inspection.matches.filter((match) => match.exact && match.sameTrip).map((match) => match.file));
+      const uploadDuplicates = inspection.matches.length === 0 || await confirm({ title: 'Phát hiện ảnh có thể bị trùng', message: `${inspection.matches.length} ảnh trùng hoặc gần giống ảnh đã có. Chọn “Vẫn tải lên” để giữ tất cả; đóng hộp thoại để bỏ qua bản trùng chính xác trong chuyến này.`, confirmLabel: 'Vẫn tải lên' });
+      const uploadFiles = uploadDuplicates ? files : files.filter((file) => !exactSameTrip.has(file));
+      if (uploadFiles.length === 0) throw new Error('Tất cả ảnh đã có trong chuyến đi.');
+      const nextPhotos = await preparePhotoUploads(uploadFiles, uploadTripId, {
         album: String(form.get('album') || 'Chung').trim() || 'Chung',
         takenOn: String(form.get('takenOn') || '') || undefined,
         place: String(form.get('place') || ''),
@@ -137,7 +154,7 @@ export function GlobalPhotoLibrary() {
         people: splitValues(form.get('people')),
         activityId: String(form.get('activityId') || '') || undefined,
         placeId: String(form.get('placeId') || '') || undefined,
-      });
+      }, inspection.hashes);
       await addPhotos(nextPhotos);
       setIsUploadOpen(false);
       setSelectedFiles([]);
@@ -226,8 +243,34 @@ export function GlobalPhotoLibrary() {
   }, [goToAdjacentPhoto, isEditOpen, selectedPhoto]);
 
   const openFolder = (tripId: string) => {
-    setFilters({ ...EMPTY_FILTERS, tripId });
+    setFilters((current) => ({ ...EMPTY_FILTERS, tripId, sortBy: current.sortBy }));
     setViewMode('photos');
+  };
+
+  const scanDuplicateBatch = async () => {
+    if (isScanningDuplicates || !unscannedPhotos.length) return;
+    setIsScanningDuplicates(true);
+    let checked = 0;
+    let unavailable = 0;
+    try {
+      await batchRemote(async () => {
+        for (const photo of unscannedPhotos.slice(0, 20)) {
+          try {
+            const response = await fetch(photo.url);
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const hash = await hashPhoto(await response.blob());
+            await editPhoto(photo.id, hash);
+            checked += 1;
+          } catch {
+            unavailable += 1;
+            try { await editPhoto(photo.id, { hashVersion: -1 }); } catch { /* keep the photo usable even when scan metadata cannot be saved */ }
+          }
+        }
+      });
+      showToast({ tone: unavailable ? 'info' : 'success', title: `Đã kiểm tra ${checked} ảnh`, message: unavailable ? `${unavailable} ảnh không thể đọc pixel và đã được bỏ qua.` : unscannedPhotos.length > 20 ? 'Có thể tiếp tục quét lô tiếp theo.' : undefined });
+    } finally {
+      setIsScanningDuplicates(false);
+    }
   };
 
   return (
@@ -238,16 +281,12 @@ export function GlobalPhotoLibrary() {
           <h1 className="text-balance font-headline text-2xl font-extrabold text-on-surface md:text-3xl">Thư viện ảnh</h1>
           <p className="mt-1 text-pretty text-sm text-secondary">{folders.length} thư mục · {photoOnly.length} ảnh</p>
         </div>
-        {editableTrips.length > 0 && (
-          <button type="button" onClick={() => openUpload(filters.tripId)} className="flex min-h-11 items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-on-primary hover:opacity-90">
-            <Icons.ImagePlus className="size-5" /> Tải ảnh lên
-          </button>
-        )}
+        {editableTrips.length > 0 && <div className="flex flex-wrap gap-2">{unscannedPhotos.length > 0 && <button type="button" disabled={isScanningDuplicates} onClick={() => void scanDuplicateBatch()} className="min-h-11 rounded-xl border border-outline-variant px-4 text-sm font-bold text-primary disabled:opacity-50">{isScanningDuplicates ? 'Đang quét…' : `Quét ảnh trùng (${unscannedPhotos.length})`}</button>}<button type="button" onClick={() => openUpload(filters.tripId)} className="flex min-h-11 items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-on-primary hover:opacity-90"><Icons.ImagePlus className="size-5" /> Tải ảnh lên</button></div>}
       </header>
 
       <div className="mb-4 flex w-full max-w-sm rounded-xl bg-surface-container-low p-1 text-sm font-bold">
-        <button type="button" onClick={() => { setViewMode('folders'); setFilters(EMPTY_FILTERS); }} className={`min-h-10 flex-1 rounded-lg px-3 ${viewMode === 'folders' ? 'bg-primary text-on-primary' : 'text-secondary hover:bg-surface-container'}`}>Thư mục</button>
-        <button type="button" onClick={() => setViewMode('photos')} className={`min-h-10 flex-1 rounded-lg px-3 ${viewMode === 'photos' ? 'bg-primary text-on-primary' : 'text-secondary hover:bg-surface-container'}`}>Tất cả ảnh</button>
+        <button type="button" onClick={() => { setViewMode('folders'); clearFilters(); }} aria-pressed={viewMode === 'folders'} className={`min-h-10 flex-1 rounded-lg px-3 ${viewMode === 'folders' ? 'bg-primary text-on-primary' : 'text-secondary hover:bg-surface-container'}`}>Thư mục</button>
+        <button type="button" onClick={() => setViewMode('photos')} aria-pressed={viewMode === 'photos'} className={`min-h-10 flex-1 rounded-lg px-3 ${viewMode === 'photos' ? 'bg-primary text-on-primary' : 'text-secondary hover:bg-surface-container'}`}>Tất cả ảnh</button>
       </div>
 
       {viewMode === 'folders' ? (
@@ -298,7 +337,7 @@ export function GlobalPhotoLibrary() {
                 <select aria-label="Lọc theo người" value={filters.person} onChange={(event) => updateFilter('person', event.target.value)} className="min-h-11 rounded-xl border border-outline-variant/50 bg-surface px-3 text-sm"><option value="">Tất cả người</option>{people.map((person) => <option key={person}>{person}</option>)}</select>
                 <label className="text-xs font-semibold text-secondary">Từ ngày<input type="date" value={filters.dateFrom} onChange={(event) => updateFilter('dateFrom', event.target.value)} className="mt-1 min-h-11 w-full rounded-xl border border-outline-variant/50 bg-surface px-3 text-sm text-on-surface" /></label>
                 <label className="text-xs font-semibold text-secondary">Đến ngày<input type="date" value={filters.dateTo} onChange={(event) => updateFilter('dateTo', event.target.value)} className="mt-1 min-h-11 w-full rounded-xl border border-outline-variant/50 bg-surface px-3 text-sm text-on-surface" /></label>
-                <button type="button" onClick={() => setFilters(EMPTY_FILTERS)} className="min-h-11 self-end rounded-xl px-3 text-sm font-bold text-primary hover:bg-primary/10">Xóa tất cả bộ lọc</button>
+                <button type="button" onClick={clearFilters} className="min-h-11 self-end rounded-xl px-3 text-sm font-bold text-primary hover:bg-primary/10">Xóa tất cả bộ lọc</button>
               </div>
             </details>
             {!!filterChips.length && <div className="mt-2 flex flex-wrap gap-2">{filterChips.map((chip) => <button key={chip.key} type="button" aria-label={`Xóa bộ lọc ${chip.label}`} onClick={() => updateFilter(chip.key, '')} className="inline-flex min-h-9 items-center gap-1 rounded-full bg-primary/10 px-3 text-xs font-bold text-primary"><span>{chip.label}</span><Icons.X className="size-3.5" /></button>)}</div>}
@@ -306,7 +345,7 @@ export function GlobalPhotoLibrary() {
 
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-sm text-secondary">
             <span className="tabular-nums">{filteredPhotos.length} ảnh phù hợp</span>
-            {isSelectionMode && <button type="button" onClick={handleDeleteMany} disabled={!selectedPhotoIds.length} className="rounded-lg bg-error px-3 py-2 font-bold text-on-error disabled:opacity-50">Xóa {selectedPhotoIds.length} ảnh</button>}
+            {isSelectionMode && <div className="flex gap-2"><button type="button" disabled={!selectedPhotoIds.length} onClick={async () => { const result = await cachePhotosForOffline(photoOnly.filter((photo) => selectedPhotoIds.includes(photo.id)).map((photo) => photo.url)); showToast({ tone: result.failed ? 'info' : 'success', title: `Đã lưu ${result.saved} ảnh để dùng offline`, message: result.failed ? `${result.failed} ảnh không thể lưu.` : undefined }); }} className="rounded-lg border border-outline-variant px-3 py-2 font-bold text-primary disabled:opacity-50">Dùng offline</button><button type="button" onClick={handleDeleteMany} disabled={!selectedPhotoIds.length} className="rounded-lg bg-error px-3 py-2 font-bold text-on-error disabled:opacity-50">Xóa {selectedPhotoIds.length} ảnh</button></div>}
           </div>
 
           {filteredPhotos.length ? (
@@ -357,6 +396,7 @@ export function GlobalPhotoLibrary() {
                 <Link to={`/trips/${selectedPhoto.tripId}/memories`} className="min-h-11 rounded-xl bg-surface-container-high px-4 py-3 text-center font-bold">Mở chuyến đi</Link>
                 {tripById.get(selectedPhoto.tripId)?.permissions.canEditContent && <><button type="button" onClick={() => { setEditError(null); setIsEditOpen(true); }} className="min-h-11 rounded-xl bg-primary px-4 font-bold text-on-primary">Sửa thông tin</button><button type="button" onClick={handleDeleteSelectedPhoto} className="min-h-11 rounded-xl border border-error px-4 font-bold text-error">Xóa ảnh</button></>}
               </div>
+              <CommentThread tripId={selectedPhoto.tripId} targetType="photo" targetId={selectedPhoto.id} />
             </aside>
           </div>
         )}

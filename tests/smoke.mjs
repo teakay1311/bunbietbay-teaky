@@ -190,10 +190,32 @@ async function runSmoke() {
   await page.reload({ waitUntil: 'networkidle' });
   if (await page.locator('input[name="startDate"]').inputValue() === '2024-10-20') throw new Error('Thiết lập chuyến đi đã lưu khoảng ngày không hợp lệ.');
 
+  await page.goto(`${baseUrl}/trips/t3/collaborate`, { waitUntil: 'networkidle' });
+  await page.getByRole('button', { name: 'Thêm nhiệm vụ' }).click();
+  const taskDialog = page.getByRole('dialog', { name: 'Thêm nhiệm vụ' });
+  await taskDialog.getByLabel('Tên nhiệm vụ').fill('Smoke task');
+  await taskDialog.getByRole('button', { name: 'Tạo nhiệm vụ' }).click();
+  const taskCard = page.locator('article').filter({ hasText: 'Smoke task' });
+  await taskCard.waitFor();
+  await taskCard.getByRole('combobox', { name: 'Trạng thái Smoke task' }).selectOption('done');
+  await taskCard.getByRole('button', { name: 'Bình luận' }).click();
+  await taskCard.getByLabel('Nội dung bình luận').fill('Bình luận smoke');
+  await taskCard.getByRole('button', { name: 'Gửi bình luận' }).click();
+  await taskCard.getByText('Bình luận smoke', { exact: true }).waitFor();
+  await page.getByRole('tab', { name: 'Bình chọn' }).click();
+  await page.getByRole('button', { name: 'Tạo bình chọn' }).click();
+  const pollDialog = page.getByRole('dialog', { name: 'Tạo bình chọn' });
+  await pollDialog.getByLabel('Câu hỏi').fill('Chọn phương án smoke?');
+  await pollDialog.getByLabel('Các lựa chọn, mỗi dòng một mục').fill('Phương án A\nPhương án B');
+  await pollDialog.getByRole('button', { name: 'Tạo bình chọn' }).click();
+  const pollCard = page.locator('article').filter({ hasText: 'Chọn phương án smoke?' });
+  await pollCard.getByRole('button', { name: /Phương án A/ }).click();
+  await pollCard.getByText('1', { exact: true }).waitFor();
+
   for (const route of [
     '/trips', '/trips/t3', '/trips/t3/plan?tab=itinerary', '/trips/t3/plan?tab=places', '/trips/t3/money',
-    '/trips/t3/prepare?tab=packing', '/trips/t3/prepare?tab=team', '/trips/t3/memories', '/trips/t3/settings',
-    '/library', '/photos', '/inbox', '/account/profile', '/account/preferences', '/account/notifications', '/account/data', '/account/shortcuts',
+    '/trips/t3/prepare?tab=packing', '/trips/t3/prepare?tab=team', '/trips/t3/memories', '/trips/t3/settings', '/trips/t3/collaborate',
+    '/library', '/photos', '/inbox', '/account/profile', '/account/preferences', '/account/notifications', '/account/data', '/account/shortcuts', '/account/sync',
   ]) {
     await page.goto(`${baseUrl}${route}`, { waitUntil: 'networkidle' });
     const unnamedButtons = await page.evaluate(() => [...document.querySelectorAll('button')]
@@ -232,6 +254,29 @@ async function runSmoke() {
   await page.getByRole('navigation', { name: 'Điều hướng chính' }).first().waitFor();
   const visibleCurrentLinks = page.locator('nav:visible [aria-current="page"]');
   if (await visibleCurrentLinks.count() !== 1) throw new Error('Desktop đánh dấu nhiều hơn một mục điều hướng hiện tại.');
+
+  await page.getByRole('button', { name: 'Thu gọn thanh bên' }).click();
+  await page.getByRole('button', { name: 'Mở rộng thanh bên' }).waitFor();
+  await page.goto(`${baseUrl}/library`, { waitUntil: 'networkidle' });
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.getByRole('button', { name: 'Mở rộng thanh bên' }).waitFor();
+  await page.getByRole('button', { name: 'Mở rộng thanh bên' }).click();
+
+  const listViewButton = page.getByRole('button', { name: 'Xem dạng danh sách' });
+  await listViewButton.click();
+  if (await listViewButton.getAttribute('aria-pressed') !== 'true') throw new Error('Thư viện địa điểm không chuyển sang chế độ danh sách.');
+  await page.goto(`${baseUrl}/trips`, { waitUntil: 'networkidle' });
+  await page.goto(`${baseUrl}/library`, { waitUntil: 'networkidle' });
+  if (await page.getByRole('button', { name: 'Xem dạng danh sách' }).getAttribute('aria-pressed') !== 'true') throw new Error('Chế độ xem Thư viện địa điểm không được bảo lưu khi đổi tab.');
+  await page.reload({ waitUntil: 'networkidle' });
+  if (await page.getByRole('button', { name: 'Xem dạng danh sách' }).getAttribute('aria-pressed') !== 'true') throw new Error('Chế độ xem Thư viện địa điểm không được bảo lưu sau khi tải lại.');
+  await page.getByRole('button', { name: 'Xem dạng lưới' }).click();
+
+  await page.goto(`${baseUrl}/trips/t3/plan`, { waitUntil: 'networkidle' });
+  await page.getByRole('button', { name: 'Địa điểm', exact: true }).click();
+  await page.goto(`${baseUrl}/trips/t3/money`, { waitUntil: 'networkidle' });
+  await page.goto(`${baseUrl}/trips/t3/plan`, { waitUntil: 'networkidle' });
+  if (await page.getByRole('button', { name: 'Địa điểm', exact: true }).getAttribute('aria-current') !== 'page') throw new Error('Tab con của chuyến đi không được bảo lưu.');
 
   await page.emulateMedia({ reducedMotion: 'reduce' });
   const reducedTransitionDuration = await page.getByRole('link', { name: 'Trang chủ', exact: true }).evaluate((element) => getComputedStyle(element).transitionDuration);

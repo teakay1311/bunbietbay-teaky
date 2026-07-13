@@ -9,6 +9,7 @@ import { SortSelect } from '../components/SortSelect';
 import { type SortOption } from '../utils/listSort';
 import { useAppContext } from '../context/AppContext';
 import { buildLibraryUsage, filterAndSortLibraryPlaces, type NotebookPlaceSortKey } from '../features/library/selectors';
+import { useStoredOption } from '../hooks/useStoredOption';
 
 const NOTEBOOK_PLACE_SORT_OPTIONS: Array<SortOption<NotebookPlaceSortKey>> = [
     { value: 'createdDesc', label: 'Mới nhất' },
@@ -20,18 +21,21 @@ const NOTEBOOK_PLACE_SORT_OPTIONS: Array<SortOption<NotebookPlaceSortKey>> = [
     { value: 'typeAsc', label: 'Loại địa điểm' },
 ];
 const NOTEBOOK_ROLE_LABELS = { owner: 'Chủ sở hữu', admin: 'Quản trị', editor: 'Chỉnh sửa', viewer: 'Chỉ xem' } as const;
+const NOTEBOOK_TYPE_FILTERS = ['all', 'hotel', 'restaurant', 'cafe', 'entertainment', 'other'] as const;
+const NOTEBOOK_VIEW_MODES = ['grid', 'list'] as const;
+const NOTEBOOK_SORT_KEYS = NOTEBOOK_PLACE_SORT_OPTIONS.map((option) => option.value);
 export function PlacesNotebook() {
     const { notebooks, notebookMembers, addNotebook, editNotebook, deleteNotebook, notebookPlaces, addNotebookPlace, editNotebookPlace, deleteNotebookPlace, bulkDeleteNotebookPlaces, inviteToNotebook, updateNotebookMemberRole, transferNotebookOwnership, removeNotebookMember, libraryStatus, libraryError, retryLibrarySync } = useNotebook();
     const { trips, savedPlaces, addLibraryPlaceToTrip, editSavedPlace, isRemoteMode } = useAppContext();
     const { showToast, confirm } = useFeedback();
 
-    const [activeTab, setActiveTab] = useState<'all' | 'hotel' | 'restaurant' | 'cafe' | 'entertainment' | 'other'>('all');
+    const [activeTab, setActiveTab] = useStoredOption('bunbietbay-library-type', NOTEBOOK_TYPE_FILTERS, 'all');
     const [activeNotebookId, setActiveNotebookId] = useState<string>('all');
     const [searchQuery, setSearchQuery] = useState('');
     const [isAddOpen, setIsAddOpen] = useState(false);
     const [editingPlace, setEditingPlace] = useState<NotebookPlace | null>(null);
-    const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
-    const [sortBy, setSortBy] = useState<NotebookPlaceSortKey>('createdDesc');
+    const [viewMode, setViewMode] = useStoredOption('bunbietbay-library-view', NOTEBOOK_VIEW_MODES, 'grid');
+    const [sortBy, setSortBy] = useStoredOption('bunbietbay-library-sort', NOTEBOOK_SORT_KEYS, 'createdDesc');
 
     const [isCreateNbOpen, setIsCreateNbOpen] = useState(false);
     const [isRenameNbOpen, setIsRenameNbOpen] = useState(false);
@@ -373,10 +377,10 @@ export function PlacesNotebook() {
 
                 <div className="mb-5 flex justify-start md:mb-6">
                     <div className="flex bg-surface rounded-xl overflow-hidden editorial-shadow border border-outline/10 text-xs font-bold">
-                        <button onClick={() => setViewMode('grid')} className={`flex items-center gap-2 px-3 py-2.5 transition-colors md:px-4 md:py-3 ${viewMode === 'grid' ? 'bg-primary text-on-primary' : 'hover:bg-surface-variant text-secondary'}`}>
+                        <button type="button" onClick={() => setViewMode('grid')} aria-label="Xem dạng lưới" aria-pressed={viewMode === 'grid'} className={`flex items-center gap-2 px-3 py-2.5 transition-colors md:px-4 md:py-3 ${viewMode === 'grid' ? 'bg-primary text-on-primary' : 'hover:bg-surface-variant text-secondary'}`}>
                             <Icons.LayoutDashboard className="w-4 h-4" /> <span className="hidden sm:inline">Lưới</span>
                         </button>
-                        <button onClick={() => setViewMode('list')} className={`flex items-center gap-2 px-3 py-2.5 transition-colors md:px-4 md:py-3 ${viewMode === 'list' ? 'bg-primary text-on-primary' : 'hover:bg-surface-variant text-secondary'}`}>
+                        <button type="button" onClick={() => setViewMode('list')} aria-label="Xem dạng danh sách" aria-pressed={viewMode === 'list'} className={`flex items-center gap-2 px-3 py-2.5 transition-colors md:px-4 md:py-3 ${viewMode === 'list' ? 'bg-primary text-on-primary' : 'hover:bg-surface-variant text-secondary'}`}>
                             <Icons.List className="w-4 h-4" /> <span className="hidden sm:inline">Danh sách</span>
                         </button>
                     </div>

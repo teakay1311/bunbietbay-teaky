@@ -12,6 +12,7 @@ import { motion } from 'motion/react';
 import { fadeUpVariants, pageStaggerVariants } from '../ui/motion';
 import { SortSelect } from '../components/SortSelect';
 import { chainComparators, compareDate, compareNumber, compareText, stableSort, type SortOption } from '../utils/listSort';
+import { useStoredOption } from '../hooks/useStoredOption';
 
 const ROLE_OPTIONS: Array<{ value: Exclude<TripAccessRole, 'owner'>; label: string; description: string }> = [
   { value: 'admin', label: 'Quản trị viên', description: 'Quản lý thành viên, nội dung và thiết lập chuyến đi' },
@@ -40,6 +41,8 @@ const INVITATION_SORT_OPTIONS: Array<SortOption<InvitationSortKey>> = [
   { value: 'roleAsc', label: 'Vai trò' },
   { value: 'emailAsc', label: 'Email A-Z' },
 ];
+const MEMBER_SORT_KEYS = MEMBER_SORT_OPTIONS.map((option) => option.value);
+const INVITATION_SORT_KEYS = INVITATION_SORT_OPTIONS.map((option) => option.value);
 
 const ROLE_RANK: Record<TripAccessRole, number> = {
   owner: 0,
@@ -70,8 +73,8 @@ export function TripMembers() {
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [isInviting, setIsInviting] = useState(false);
   const [busyMembershipId, setBusyMembershipId] = useState<string | null>(null);
-  const [memberSortBy, setMemberSortBy] = useState<MemberSortKey>('roleAsc');
-  const [invitationSortBy, setInvitationSortBy] = useState<InvitationSortKey>('createdDesc');
+  const [memberSortBy, setMemberSortBy] = useStoredOption('bunbietbay-members-sort', MEMBER_SORT_KEYS, 'roleAsc');
+  const [invitationSortBy, setInvitationSortBy] = useStoredOption('bunbietbay-invitations-sort', INVITATION_SORT_KEYS, 'createdDesc');
 
   useEffect(() => {
     if (id) {

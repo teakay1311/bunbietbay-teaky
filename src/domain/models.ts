@@ -58,7 +58,7 @@ export type ActivityLogEntry = {
   actorId?: string;
   actorName?: string;
   action: 'created' | 'updated' | 'deleted' | 'settled' | 'imported';
-  entityType: 'trip' | 'activity' | 'expense' | 'place' | 'packing' | 'photo' | 'member' | 'notebook';
+  entityType: 'trip' | 'activity' | 'expense' | 'place' | 'packing' | 'photo' | 'member' | 'notebook' | 'task' | 'poll' | 'comment' | 'share';
   entityId?: string;
   summary: string;
   createdAt: string;
@@ -99,6 +99,8 @@ export type Activity = {
   bookingCode?: string;
   placeId?: string;
   isCompleted?: boolean;
+  durationMinutes?: number;
+  travelMinutesAfter?: number;
   createdAt?: string;
   updatedAt?: string;
 };
@@ -167,7 +169,141 @@ export type Photo = {
   content?: string;
   activityId?: string;
   placeId?: string;
+  contentHash?: string;
+  perceptualHash?: string;
+  hashVersion?: number;
+  offlineBlobKey?: string;
   updatedAt?: string;
+};
+
+export type TripCollaborationSettings = {
+  tripId: string;
+  viewerCanVote: boolean;
+  viewerCanComment: boolean;
+  viewerCanUpdateAssignedTasks: boolean;
+  updatedAt?: string;
+};
+
+export type TripTaskStatus = 'todo' | 'in_progress' | 'done';
+export type TripTaskPriority = 'low' | 'normal' | 'high';
+
+export type TripTask = {
+  id: string;
+  tripId: string;
+  title: string;
+  description?: string;
+  status: TripTaskStatus;
+  priority: TripTaskPriority;
+  assigneeId?: string;
+  dueDate?: string;
+  dueTime?: string;
+  activityId?: string;
+  placeId?: string;
+  createdBy: string;
+  completedBy?: string;
+  completedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type TripPollKind = 'place' | 'hotel' | 'restaurant' | 'time' | 'custom';
+
+export type TripPoll = {
+  id: string;
+  tripId: string;
+  question: string;
+  kind: TripPollKind;
+  selectionMode: 'single' | 'multiple';
+  status: 'open' | 'closed';
+  deadline?: string;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type TripPollOption = {
+  id: string;
+  pollId: string;
+  tripId: string;
+  label: string;
+  activityId?: string;
+  placeId?: string;
+  proposedDate?: string;
+  proposedTime?: string;
+  createdAt: string;
+};
+
+export type TripPollVote = {
+  id: string;
+  pollId: string;
+  optionId: string;
+  tripId: string;
+  userId: string;
+  createdAt: string;
+};
+
+export type TripCommentTargetType = 'activity' | 'expense' | 'place' | 'photo' | 'task' | 'poll';
+
+export type TripComment = {
+  id: string;
+  tripId: string;
+  targetType: TripCommentTargetType;
+  targetId: string;
+  parentId?: string;
+  authorId: string;
+  body: string;
+  mentionedUserIds: string[];
+  createdAt: string;
+  updatedAt: string;
+  deletedAt?: string;
+};
+
+export type TripNotificationType = 'task_assigned' | 'comment_reply' | 'mention' | 'poll_closed';
+
+export type TripNotification = {
+  id: string;
+  tripId: string;
+  recipientId: string;
+  actorId?: string;
+  type: TripNotificationType;
+  eventKey: string;
+  title: string;
+  message?: string;
+  entityType?: TripCommentTargetType;
+  entityId?: string;
+  readAt?: string;
+  createdAt: string;
+};
+
+export type PublicTripShareScope = 'overview' | 'itinerary' | 'places' | 'photos';
+
+export type PublicTripShare = {
+  id: string;
+  tripId: string;
+  scopes: PublicTripShareScope[];
+  expiresAt: string;
+  revokedAt?: string;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type OfflineEntityType = 'trip' | 'activity' | 'expense' | 'place' | 'packing' | 'photo' | 'task' | 'poll' | 'vote' | 'comment';
+export type OfflineMutationAction = 'create' | 'update' | 'delete';
+
+export type OfflineMutation = {
+  id: string;
+  entityType: OfflineEntityType;
+  entityId: string;
+  tripId: string;
+  action: OfflineMutationAction;
+  payload: Record<string, unknown>;
+  restorePayload?: Record<string, unknown>;
+  baseUpdatedAt?: string;
+  createdAt: string;
+  status: 'pending' | 'failed' | 'conflict';
+  error?: string;
+  serverValue?: Record<string, unknown>;
 };
 
 export type TripPermissions = {
@@ -208,6 +344,14 @@ export type PersistedAppState = {
   savedPlaces: SavedPlace[];
   packingItems: PackingItem[];
   photos: Photo[];
+  collaborationSettings: TripCollaborationSettings[];
+  tasks: TripTask[];
+  polls: TripPoll[];
+  pollOptions: TripPollOption[];
+  pollVotes: TripPollVote[];
+  comments: TripComment[];
+  notifications: TripNotification[];
+  offlineMutations: OfflineMutation[];
   activityLogs: ActivityLogEntry[];
   currentTripId: string | null;
   viewerProfileId: string | null;
@@ -298,8 +442,8 @@ export type TripNotificationPreferences = {
   updatedAt?: string;
 };
 
-export type WorkspaceBackupV7 = {
-  version: 7;
+export type WorkspaceBackupV8 = {
+  version: 8;
   workspace: PersistedAppState;
   library: {
     notebooks: Notebook[];
@@ -309,3 +453,6 @@ export type WorkspaceBackupV7 = {
   tripNotificationPreferences: TripNotificationPreferences[];
   exportedAt: string;
 };
+
+/** Legacy envelope kept so existing backup files remain importable. */
+export type WorkspaceBackupV7 = Omit<WorkspaceBackupV8, 'version'> & { version: 7 };
