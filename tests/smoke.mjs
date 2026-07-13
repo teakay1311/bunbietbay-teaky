@@ -205,8 +205,12 @@ async function runSmoke() {
   await page.getByRole('tab', { name: 'Bình chọn' }).click();
   await page.getByRole('button', { name: 'Tạo bình chọn' }).click();
   const pollDialog = page.getByRole('dialog', { name: 'Tạo bình chọn' });
-  await pollDialog.getByLabel('Câu hỏi').fill('Chọn phương án smoke?');
+  await pollDialog.getByLabel('Câu hỏi').fill('   ');
   await pollDialog.getByLabel('Các lựa chọn, mỗi dòng một mục').fill('Phương án A\nPhương án B');
+  await pollDialog.getByRole('button', { name: 'Tạo bình chọn' }).click();
+  await page.getByText('Câu hỏi bình chọn không được để trống.', { exact: true }).waitFor();
+  if (!await pollDialog.isVisible()) throw new Error('Hộp thoại bình chọn bị đóng sau khi dữ liệu không hợp lệ.');
+  await pollDialog.getByLabel('Câu hỏi').fill('Chọn phương án smoke?');
   await pollDialog.getByRole('button', { name: 'Tạo bình chọn' }).click();
   const pollCard = page.locator('article').filter({ hasText: 'Chọn phương án smoke?' });
   await pollCard.getByRole('button', { name: /Phương án A/ }).click();
@@ -304,7 +308,7 @@ async function runSmoke() {
   await legacyPage.goto(`${baseUrl}/trips`, { waitUntil: 'networkidle' });
   await legacyPage.getByText('Chuyến đi cũ cần khôi phục', { exact: true }).waitFor();
   const migratedTripId = await legacyPage.evaluate(async () => await new Promise((resolve, reject) => {
-    const request = indexedDB.open('bunbietbay-trips-db', 1);
+    const request = indexedDB.open('bunbietbay-trips-db');
     request.onerror = () => reject(request.error);
     request.onsuccess = () => {
       const transaction = request.result.transaction('app-state', 'readonly');

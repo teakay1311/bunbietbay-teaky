@@ -20,7 +20,7 @@
     "clean": "rm -rf dist",
     "test": "tsx --test tests/**/*.test.ts",
     "test:smoke": "node tests/smoke.mjs",
-    "test:electron-smoke": "node tests/electron-smoke.mjs",
+    "test:electron-smoke": "npm run build:desktop:renderer && node tests/electron-smoke.mjs",
     "benchmark:bundle": "npm run build:web && node scripts/report-bundle.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "tsc --noEmit --noUnusedLocals --noUnusedParameters",

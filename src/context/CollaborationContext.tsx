@@ -73,7 +73,7 @@ function isNetworkFailure(error: unknown) {
 
 export function CollaborationProvider({ children }: { children: ReactNode }) {
   const app = useAppContext();
-  const { snapshot, trips, currentUserProfile, isRemoteMode, updatePersistedState, refreshWorkspace, recordActivityLog } = app;
+  const { snapshot, trips, currentUserProfile, isRemoteMode, workspaceStatus, updatePersistedState, refreshWorkspace, recordActivityLog } = app;
   const [publicShares, setPublicShares] = useState<PublicTripShare[]>([]);
   const viewerId = currentUserProfile?.id;
 
@@ -167,7 +167,9 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
 
   const createPoll = useCallback(async (input: PollInput) => {
     if (!viewerId || !getPermissions(input.tripId).canCreatePolls) throw new Error('Bạn không có quyền tạo bình chọn.');
+    if (!input.question.trim()) throw new Error('Câu hỏi bình chọn không được để trống.');
     if (input.options.length < 2) throw new Error('Bình chọn cần ít nhất hai lựa chọn.');
+    if (input.options.some((option) => !option.label.trim())) throw new Error('Lựa chọn bình chọn không được để trống.');
     input.options.forEach((option) => assertTripLinks(input.tripId, option.activityId, option.placeId));
     const timestamp = now();
     const poll: TripPoll = { id: id(), tripId: input.tripId, question: input.question.trim(), kind: input.kind, selectionMode: input.selectionMode, status: 'open', deadline: input.deadline, createdBy: viewerId, createdAt: timestamp, updatedAt: timestamp };
@@ -327,11 +329,14 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
   }, [isRemoteMode, refreshWorkspace, replayMutation, snapshot.offlineMutations, updatePersistedState]);
 
   useEffect(() => {
-    const handleOnline = () => { void syncOfflineMutations(); };
+    const handleOnline = () => {
+      if (snapshot.offlineMutations.some((item) => item.status === 'pending')) void syncOfflineMutations();
+      else if (isRemoteMode && workspaceStatus === 'remote-unavailable') void refreshWorkspace();
+    };
     window.addEventListener('online', handleOnline);
-    if (navigator.onLine) void syncOfflineMutations();
+    if (navigator.onLine) handleOnline();
     return () => window.removeEventListener('online', handleOnline);
-  }, [syncOfflineMutations]);
+  }, [isRemoteMode, refreshWorkspace, snapshot.offlineMutations, syncOfflineMutations, workspaceStatus]);
 
   const resolveOfflineConflict = useCallback(async (mutationId: string, resolution: 'server' | 'local', mergedPayload?: Record<string, unknown>) => {
     const mutation = snapshot.offlineMutations.find((item) => item.id === mutationId);
