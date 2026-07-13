@@ -413,7 +413,7 @@ export function PlacesNotebook() {
                                         variants={itemVariants}
                                         key={place.id}
                                         onClick={() => isSelectMode ? toggleSelectPlace(place.id) : null}
-                                        className={`group flex flex-col gap-3 rounded-2xl border bg-surface-container-lowest px-4 py-3 shadow-[0_8px_20px_rgba(0,0,0,0.04)] transition-all hover:-translate-y-0.5 hover:shadow-lg md:flex-row md:items-center ${isSelected ? 'border-primary ring-2 ring-primary/20' : 'border-outline-variant/20'}`}
+                                        className={`group flex flex-col gap-3 rounded-2xl border bg-surface-container-lowest px-4 py-3 shadow-sm transition-colors duration-200 hover:border-primary/40 md:flex-row md:items-center ${isSelected ? 'border-primary ring-2 ring-primary/20' : 'border-outline-variant/40'}`}
                                     >
                                         <div className="flex min-w-0 flex-1 items-center gap-3">
                                             {place.coverImage ? (
@@ -495,11 +495,11 @@ export function PlacesNotebook() {
                             return (
                                 <motion.div variants={itemVariants} key={place.id}
                                     onClick={() => isSelectMode ? toggleSelectPlace(place.id) : null}
-                                    className={`group relative flex h-full cursor-pointer flex-col overflow-hidden rounded-[1.25rem] border bg-surface-container-lowest transition-all hover:-translate-y-1 hover:shadow-xl md:rounded-[1.5rem] ${isSelected ? 'border-primary ring-2 ring-primary/20' : 'border-outline-variant/20'}`}>
+                                    className={`group relative flex h-full cursor-pointer flex-col overflow-hidden rounded-2xl border bg-surface-container-lowest shadow-sm transition-colors duration-200 hover:border-primary/40 ${isSelected ? 'border-primary ring-2 ring-primary/20' : 'border-outline-variant/40'}`}>
 
                                     <div className="flex flex-1 flex-col p-4 md:p-6">
                                         <div className="flex justify-between items-start mb-4">
-                                            <div className="flex bg-primary/10 text-primary p-3 rounded-xl mt-1 shrink-0 group-hover:scale-110 transition-transform">
+                                            <div className="mt-1 flex shrink-0 rounded-xl bg-primary/10 p-3 text-primary">
                                                 {typeIcon}
                                             </div>
                                             <div className={`flex gap-1.5 transition-opacity ${isSelectMode ? 'opacity-100' : 'opacity-100 md:opacity-0 md:group-hover:opacity-100'}`}>
@@ -755,7 +755,7 @@ export function PlacesNotebook() {
                         </div>
                     </div>
 
-                    <button type="submit" className="w-full bg-primary text-on-primary py-4 rounded-xl font-headline font-bold text-base hover:-translate-y-0.5 transition-transform active:scale-95 shadow-md">
+                    <button type="submit" className="w-full rounded-xl bg-primary py-4 font-headline text-base font-bold text-on-primary shadow-sm transition-opacity hover:opacity-90 active:opacity-80">
                         Lưu vào Thư viện
                     </button>
                 </form>

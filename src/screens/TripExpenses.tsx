@@ -426,7 +426,7 @@ export function TripExpenses() {
             <div className="break-words font-headline text-xl font-extrabold tracking-tight text-on-surface md:text-3xl" title={`${formatMoney(trip.budget, baseCurrencySymbol)}`}>{formatMoney(trip.budget, baseCurrencySymbol)}</div>
             <p className="text-xs text-on-surface-variant mt-2">Dự kiến cho {trip.members.length} người</p>
           </div>
-          <Icons.Wallet className="absolute -bottom-4 -right-4 w-20 h-20 md:w-24 md:h-24 text-primary dark:text-white/5 rotate-12 group-hover:scale-110 transition-transform" />
+          <Icons.Wallet className="absolute -bottom-4 -right-4 h-20 w-20 rotate-12 text-primary md:h-24 md:w-24 dark:text-white/5" />
         </div>
 
         <div className={uiDensity === 'compact' ? 'bg-surface-container-lowest p-4 rounded-xl editorial-shadow relative overflow-hidden group density-card' : 'bg-surface-container-lowest p-4 md:p-6 rounded-xl editorial-shadow relative overflow-hidden group density-card'}>
@@ -437,7 +437,7 @@ export function TripExpenses() {
               <div className={`h-full transition-all ${spentPercentage >= 100 ? 'bg-error' : spentPercentage >= 90 ? 'bg-yellow-500' : 'bg-tertiary'}`} style={{ width: `${spentPercentage}%` }}></div>
             </div>
           </div>
-          <Icons.Banknote className="absolute -bottom-4 -right-4 w-20 h-20 md:w-24 md:h-24 text-tertiary/5 rotate-12 group-hover:scale-110 transition-transform" />
+          <Icons.Banknote className="absolute -bottom-4 -right-4 h-20 w-20 rotate-12 text-tertiary/5 md:h-24 md:w-24" />
         </div>
 
         <div className={uiDensity === 'compact' ? 'bg-surface-container-lowest p-4 rounded-xl editorial-shadow relative overflow-hidden group density-card' : 'bg-surface-container-lowest p-4 md:p-6 rounded-xl editorial-shadow relative overflow-hidden group density-card'}>
@@ -446,7 +446,7 @@ export function TripExpenses() {
             <div className="break-words font-headline text-xl font-extrabold tracking-tight text-primary dark:text-white-container md:text-3xl" title={`${formatMoney(remaining, baseCurrencySymbol)}`}>{formatMoney(remaining, baseCurrencySymbol)}</div>
             <p className="text-xs text-on-surface-variant mt-2">{safeBudget > 0 ? ((remaining / safeBudget) * 100).toFixed(1) : '0.0'}% ngân sách</p>
           </div>
-          <Icons.PiggyBank className="absolute -bottom-4 -right-4 w-20 h-20 md:w-24 md:h-24 text-primary dark:text-white-container/5 rotate-12 group-hover:scale-110 transition-transform" />
+          <Icons.PiggyBank className="absolute -bottom-4 -right-4 h-20 w-20 rotate-12 text-primary md:h-24 md:w-24 dark:text-white-container/5" />
         </div>
 
         <div className={uiDensity === 'compact' ? 'bg-surface-container-lowest p-4 rounded-xl editorial-shadow relative overflow-hidden group density-card' : 'bg-surface-container-lowest p-4 md:p-6 rounded-xl editorial-shadow relative overflow-hidden group density-card'}>
@@ -455,7 +455,7 @@ export function TripExpenses() {
             <div className="break-words font-headline text-xl font-extrabold tracking-tight text-on-surface md:text-3xl" title={`${formatMoney(avgPerPerson, baseCurrencySymbol)}`}>{formatMoney(avgPerPerson, baseCurrencySymbol)}</div>
             <p className="text-xs text-on-surface-variant mt-2">Chia cho {trip.members.length} thành viên</p>
           </div>
-          <Icons.Users className="absolute -bottom-4 -right-4 w-20 h-20 md:w-24 md:h-24 text-on-surface/5 rotate-12 group-hover:scale-110 transition-transform" />
+          <Icons.Users className="absolute -bottom-4 -right-4 h-20 w-20 rotate-12 text-on-surface/5 md:h-24 md:w-24" />
         </div>
       </motion.section>
 
@@ -523,7 +523,7 @@ export function TripExpenses() {
         <div className="bg-surface-container-lowest rounded-[1.4rem] overflow-hidden">
           {activeTab === 'list' && (
             <>
-              <div className="flex flex-col items-start justify-between gap-3 border-b border-surface-variant/30 bg-surface-container-low/60 p-4 backdrop-blur-sm md:flex-row md:items-center md:gap-4 md:p-6">
+              <div className="flex flex-col items-start justify-between gap-3 border-b border-surface-variant/30 bg-surface-container-low p-4 md:flex-row md:items-center md:gap-4 md:p-6">
                 <h2 className="text-xl font-bold font-headline text-on-surface hidden lg:block">Danh sách Chi tiêu</h2>
                 <div className="no-scrollbar grid w-full grid-cols-1 gap-2 sm:grid-cols-2 lg:flex lg:w-auto lg:flex-wrap lg:overflow-x-auto">
                   <div className="relative flex-1 md:w-64">

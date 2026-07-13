@@ -30,6 +30,17 @@ test('preference and notebook migration enforces per-user RLS and role matrix', 
   assert.match(sql, /ownership must be transferred with the ownership rpc/);
 });
 
+test('app background preferences are additive and keep photo links nullable', () => {
+  const sql = readSql('add_app_background_preferences.sql');
+  const schema = readSql('schema.sql');
+  for (const column of ['background_source', 'background_photo_id', 'background_image_url', 'background_provider_public_id']) {
+    assert.match(sql, new RegExp(column));
+    assert.match(schema, new RegExp(column));
+  }
+  assert.match(sql, /references public\.photos \(id\) on delete set null/);
+  assert.match(sql, /background_source in \('none', 'library', 'upload'\)/);
+});
+
 test('invitation RPC reactivates revoked trip membership without duplication', () => {
   const sql = readSql('accept_invitation_function.sql');
   assert.match(sql, /on conflict \(trip_id, user_id\)/);

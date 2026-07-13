@@ -3,7 +3,7 @@ import test from 'node:test';
 import { createWorkspaceBackupV8, prepareWorkspaceBackup } from '../src/utils/workspaceBackup';
 import { EMPTY_PERSISTED_STATE } from '../src/utils/appState';
 
-const preferences = { themeMode: 'system' as const, themePresetId: 'teal-editorial', uiDensity: 'cozy' as const, isPrivacyMode: false, remindersEnabled: true, activityLeadMinutes: 120, tripStartLeadMinutes: 1440 };
+const preferences = { themeMode: 'system' as const, themePresetId: 'teal-editorial', uiDensity: 'cozy' as const, appBackground: { source: 'none' as const }, isPrivacyMode: false, remindersEnabled: true, activityLeadMinutes: 120, tripStartLeadMinutes: 1440 };
 const timestamp = '2026-01-01T00:00:00.000Z';
 
 test('accepts a complete workspace backup v8', () => {

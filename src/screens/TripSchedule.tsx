@@ -335,7 +335,7 @@ export function TripSchedule() {
         <motion.div variants={itemVariants} className="group relative mb-8 overflow-hidden rounded-2xl border border-primary/20 bg-surface-container-low p-4 editorial-shadow md:mb-10 md:p-5">
           <div className="absolute top-0 left-0 w-1.5 h-full bg-primary/80 transition-all group-hover:w-2"></div>
           <div className="flex items-start gap-4">
-            <div className="bg-primary/10 text-primary p-3 rounded-xl mt-1 shrink-0 group-hover:scale-110 transition-transform">
+            <div className="mt-1 shrink-0 rounded-xl bg-primary/10 p-3 text-primary">
               <Icons.Hotel className="w-6 h-6" />
             </div>
             <div className="flex-1 min-w-0">
@@ -414,7 +414,7 @@ export function TripSchedule() {
           </motion.div>
 
           <motion.div variants={itemVariants} className="relative space-y-8 md:space-y-12">
-            <div className="sticky top-20 z-10 flex flex-col items-start justify-between gap-3 bg-surface/85 py-2 backdrop-blur-sm md:top-24 md:flex-row md:items-center md:gap-4">
+            <div className="sticky top-20 z-10 flex flex-col items-start justify-between gap-3 bg-surface py-2 md:top-24 md:flex-row md:items-center md:gap-4">
               <h2 className="flex items-center gap-2 font-headline text-lg font-bold text-secondary dark:text-gray-300 md:gap-3 md:text-2xl">
                 <span className="h-[2px] w-6 bg-outline-variant md:w-8"></span>
                 {viewMode === 'compact' ? 'Toàn bộ lịch trình' : selectedDate && formatFullDate(selectedDate)}
@@ -432,7 +432,7 @@ export function TripSchedule() {
                 </div>
                 <SortSelect<ActivitySortKey> value={sortBy} options={ACTIVITY_SORT_OPTIONS} onChange={setSortBy} className="w-full py-1.5 md:w-auto md:flex-none" />
                 <button type="button" onClick={handleOpenMap} className="group flex shrink-0 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-bold text-primary transition-colors hover:bg-primary/10 md:py-1.5">
-                  <Icons.Map className="w-4 h-4 group-hover:scale-110 transition-transform" /> Bản đồ
+                  <Icons.Map className="h-4 w-4" /> Bản đồ
                 </button>
               </div>
             </div>
@@ -675,7 +675,7 @@ export function TripSchedule() {
       {canEdit && (
         <motion.div variants={itemVariants} className={uniqueDates.length > 0 ? "mt-12 pl-8 md:ml-4 md:pl-12" : "mt-8"}>
           <button onClick={() => { setEditingActivity(null); setIsAddOpen(true); }} className="w-full py-8 border-2 border-dashed border-outline-variant rounded-2xl flex flex-col items-center justify-center gap-2 text-secondary dark:text-gray-300 hover:border-primary hover:text-primary dark:text-white transition-all group">
-            <Icons.PlusCircle className="w-8 h-8 group-hover:scale-110 transition-transform" />
+            <Icons.PlusCircle className="size-8" />
             <span className="font-bold">{viewMode === 'compact' ? 'Thêm hoạt động mới cho lịch trình' : 'Thêm hoạt động mới cho ngày này'}</span>
           </button>
         </motion.div>

@@ -137,7 +137,7 @@ export function FeedbackProvider({ children }: { children: ReactNode }) {
           {toasts.map((toast) => {
             const classes = getToastClasses(toast.tone ?? 'info');
             return (
-              <div key={toast.id} className={`pointer-events-auto overflow-hidden rounded-[1.5rem] border shadow-[0_18px_40px_rgba(0,0,0,0.08)] backdrop-blur ${classes.shell}`}>
+              <div key={toast.id} className={`pointer-events-auto overflow-hidden rounded-2xl border shadow-sm ${classes.shell}`}>
                 <div className="flex items-start gap-3 px-4 py-4">
                   <div className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[10px] font-black uppercase tracking-[0.2em] ${classes.badge}`}>
                     {toast.tone === 'error' ? '!' : toast.tone === 'success' ? 'OK' : 'i'}

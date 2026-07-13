@@ -15,7 +15,7 @@ const checks = [
   ['notebook_memberships', 'id,notebook_id,user_id,role'],
   ['notebook_places', 'id,notebook_id,updated_at'],
   ['notebook_invitations', 'id,notebook_id,status'],
-  ['user_preferences', 'theme_mode'],
+  ['user_preferences', 'theme_mode,background_source,background_photo_id,background_image_url,background_provider_public_id'],
   ['trip_notification_preferences', 'use_defaults'],
   ['trip_collaboration_settings', 'trip_id,viewer_can_vote,viewer_can_comment,viewer_can_update_assigned_tasks'],
   ['trip_tasks', 'id,trip_id,status,assignee_id,updated_at'],

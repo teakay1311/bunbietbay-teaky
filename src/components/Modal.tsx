@@ -100,7 +100,7 @@ export function Modal({
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.2 }}
-          className="fixed inset-0 z-[100] flex items-end justify-center bg-slate-900/55 p-0 backdrop-blur-md sm:items-center sm:p-4"
+          className="fixed inset-0 z-[100] flex items-end justify-center bg-slate-950/60 p-0 sm:items-center sm:p-4"
           onClick={onClose}
         >
           <motion.div
@@ -113,7 +113,7 @@ export function Modal({
             animate={{ scale: 1, opacity: 1, y: 0 }}
             exit={{ scale: 0.95, opacity: 0, y: 10 }}
             transition={{ ease: 'easeOut', duration: 0.2 }}
-            className={`flex max-h-[calc(100dvh-0.75rem)] w-full flex-col overflow-hidden rounded-t-2xl bg-surface shadow-[0_24px_48px_-12px_rgba(0,0,0,0.3)] ring-1 ring-white/10 dark:ring-white/5 sm:max-h-[90vh] sm:rounded-[2rem] ${size === 'wide' ? 'sm:max-w-[min(96vw,72rem)]' : 'sm:max-w-2xl'}`}
+            className={`flex max-h-[calc(100dvh-0.75rem)] w-full flex-col overflow-hidden rounded-t-2xl border border-outline-variant/60 bg-surface shadow-lg sm:max-h-[90vh] sm:rounded-2xl ${size === 'wide' ? 'sm:max-w-[min(96vw,72rem)]' : 'sm:max-w-2xl'}`}
             onClick={(event) => event.stopPropagation()}
           >
             <div className="density-modal-shell flex shrink-0 items-center justify-between border-b border-outline-variant/30">

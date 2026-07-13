@@ -114,7 +114,7 @@ export function CommandPalette() {
   };
 
   return (
-    <div className="fixed inset-0 z-[140] bg-slate-950/50 p-4 backdrop-blur-sm" onMouseDown={() => setIsOpen(false)}>
+    <div className="fixed inset-0 z-[140] bg-slate-950/60 p-4" onMouseDown={() => setIsOpen(false)}>
       <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="command-palette-title" className="mx-auto mt-20 max-w-2xl overflow-hidden rounded-[1.5rem] bg-surface-container-lowest shadow-2xl ring-1 ring-outline-variant/40" onMouseDown={(event) => event.stopPropagation()}>
         <h2 id="command-palette-title" className="sr-only">Tìm nhanh và chuyển màn hình</h2>
         <div className="flex items-center gap-3 border-b border-outline-variant/30 px-5 py-4">

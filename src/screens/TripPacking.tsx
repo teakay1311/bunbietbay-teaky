@@ -378,7 +378,7 @@ export function TripPacking() {
                   </div>
                 </div>
                 <div className="h-1.5 overflow-hidden rounded-full bg-surface-variant">
-                  <div className="h-full bg-primary transition-all duration-500" style={{ width: `${progress}%` }} />
+                  <div className="h-full bg-primary transition-all duration-200" style={{ width: `${progress}%` }} />
                 </div>
               </div>
             ))}
@@ -407,7 +407,7 @@ export function TripPacking() {
               </div>
 
               <div className="h-1.5 w-full bg-surface-variant rounded-full overflow-hidden mb-4">
-                <div className="h-full bg-primary transition-all duration-500" style={{ width: `${progress}%` }}></div>
+                <div className="h-full bg-primary transition-all duration-200" style={{ width: `${progress}%` }}></div>
               </div>
 
               <div className="space-y-2">
@@ -563,7 +563,7 @@ export function TripPacking() {
                   disabled={isSubmitting}
                   className="flex flex-col items-center justify-center p-4 rounded-2xl bg-surface-container-low border border-outline-variant/30 hover:border-primary hover:bg-primary/5 transition-all group disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <span className="text-3xl mb-2 group-hover:scale-110 transition-transform">{preset.icon}</span>
+                  <span className="mb-2 text-3xl">{preset.icon}</span>
                   <span className="font-headline font-bold text-sm text-on-surface text-center line-clamp-1">{preset.name}</span>
                   <span className="text-xs font-medium text-secondary dark:text-gray-300 mt-1">{preset.items.length} món</span>
                 </button>

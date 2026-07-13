@@ -1,9 +1,9 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useAuth } from './AuthContext';
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
-import type { TripNotificationPreferences, UserPreferences } from '../domain/models';
+import type { AppBackgroundPreference, TripNotificationPreferences, UserPreferences } from '../domain/models';
 import { resolveTripReminders } from '../domain/notificationPreferences';
-import { mapRemoteTripPreferences, mapRemoteUserPreferences, readStoredTripPreferences, toRemoteTripPreferences, toRemoteUserPreferences } from '../data/preferencesService';
+import { mapRemoteTripPreferences, mapRemoteUserPreferences, normalizeAppBackgroundPreference, readStoredAppBackground, readStoredTripPreferences, toRemoteTripPreferences, toRemoteUserPreferences } from '../data/preferencesService';
 
 type ThemeMode = 'light' | 'dark' | 'system';
 type Language = 'vi' | 'en';
@@ -34,6 +34,8 @@ interface SettingsContextType {
   themePresets: ThemePreset[];
   uiDensity: UiDensity;
   setUiDensity: (density: UiDensity) => void;
+  appBackground: AppBackgroundPreference;
+  setAppBackground: (background: AppBackgroundPreference) => Promise<void>;
   language: Language;
   setLanguage: (lang: Language) => void;
   remindersEnabled: boolean;
@@ -187,6 +189,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const [themePresetId, setThemePresetId] = useState(() => localStorage.getItem('themePresetId') || THEME_PRESETS[0].id);
   const [language, setLanguage] = useState<Language>('vi');
   const [uiDensity, setUiDensity] = useState<UiDensity>(() => localStorage.getItem('uiDensity') as UiDensity || 'cozy');
+  const [appBackground, setAppBackgroundState] = useState<AppBackgroundPreference>(() => readStoredAppBackground());
   const [remindersEnabled, setRemindersEnabled] = useState(() => localStorage.getItem('remindersEnabled') !== 'false');
   const [reminderLeadMinutes, setReminderLeadMinutes] = useState(() => Number(localStorage.getItem('reminderLeadMinutes') || '120'));
   const [tripStartLeadMinutes, setTripStartLeadMinutes] = useState(() => Number(localStorage.getItem('tripStartLeadMinutes') || '1440'));
@@ -206,11 +209,12 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     themeMode,
     themePresetId: selectedThemePreset.id,
     uiDensity,
+    appBackground,
     isPrivacyMode,
     remindersEnabled,
     activityLeadMinutes: reminderLeadMinutes,
     tripStartLeadMinutes,
-  }), [isPrivacyMode, reminderLeadMinutes, remindersEnabled, selectedThemePreset.id, themeMode, tripStartLeadMinutes, uiDensity]);
+  }), [appBackground, isPrivacyMode, reminderLeadMinutes, remindersEnabled, selectedThemePreset.id, themeMode, tripStartLeadMinutes, uiDensity]);
 
   useEffect(() => {
     localStorage.setItem('themeMode', themeMode);
@@ -241,6 +245,10 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('uiDensity', uiDensity);
     document.body.dataset.density = uiDensity;
   }, [uiDensity]);
+
+  useEffect(() => {
+    localStorage.setItem('appBackground', JSON.stringify(appBackground));
+  }, [appBackground]);
 
   useEffect(() => {
     localStorage.setItem('remindersEnabled', String(remindersEnabled));
@@ -289,6 +297,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         setThemeMode(remotePreferences.themeMode);
         setThemePresetId(remotePreferences.themePresetId);
         setUiDensity(remotePreferences.uiDensity);
+        setAppBackgroundState(remotePreferences.appBackground);
         setIsPrivacyMode(remotePreferences.isPrivacyMode);
         setRemindersEnabled(remotePreferences.remindersEnabled);
         setReminderLeadMinutes(remotePreferences.activityLeadMinutes);
@@ -328,6 +337,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
               setThemeMode(previous.themeMode);
               setThemePresetId(previous.themePresetId);
               setUiDensity(previous.uiDensity);
+              setAppBackgroundState(previous.appBackground);
               setIsPrivacyMode(previous.isPrivacyMode);
               setRemindersEnabled(previous.remindersEnabled);
               setReminderLeadMinutes(previous.activityLeadMinutes);
@@ -343,7 +353,28 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       })();
     }, 250);
     return () => window.clearTimeout(timeout);
-  }, [isPrivacyMode, preferences, reminderLeadMinutes, remindersEnabled, selectedThemePreset.id, session, themeMode, tripStartLeadMinutes, uiDensity]);
+  }, [appBackground, isPrivacyMode, preferences, reminderLeadMinutes, remindersEnabled, selectedThemePreset.id, session, themeMode, tripStartLeadMinutes, uiDensity]);
+
+  const setAppBackground = useCallback(async (nextBackground: AppBackgroundPreference) => {
+    const normalized = normalizeAppBackgroundPreference(nextBackground);
+    const nextPreferences: UserPreferences = { ...preferences, appBackground: normalized, updatedAt: new Date().toISOString() };
+    if (session && supabase && didLoadRemotePreferences.current) {
+      setIsPreferencesSyncing(true);
+      try {
+        const { error } = await supabase.from('user_preferences').upsert(toRemoteUserPreferences(session.user.id, nextPreferences), { onConflict: 'user_id' });
+        if (error) throw error;
+        lastSyncedPreferencesRef.current = nextPreferences;
+        setPreferencesSyncError(null);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Không thể lưu ảnh nền.';
+        setPreferencesSyncError(message);
+        throw error;
+      } finally {
+        setIsPreferencesSyncing(false);
+      }
+    }
+    setAppBackgroundState(normalized);
+  }, [preferences, session]);
 
   const getEffectiveTripReminders = useCallback((tripId: string) => {
     return resolveTripReminders({ enabled: remindersEnabled, activityLeadMinutes: reminderLeadMinutes, tripStartLeadMinutes }, tripNotificationPreferences[tripId]);
@@ -402,6 +433,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     themePresets: THEME_PRESETS,
     uiDensity,
     setUiDensity,
+    appBackground,
+    setAppBackground,
     language,
     setLanguage,
     remindersEnabled,
@@ -422,7 +455,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     isPreferencesSyncing,
     preferencesSyncError,
     preferences,
-  }), [getEffectiveTripReminders, isPreferencesSyncing, isPrivacyMode, language, notificationPermission, preferences, preferencesSyncError, reminderLeadMinutes, remindersEnabled, replaceLocalTripNotificationPreferences, requestNotificationPermission, resetTripNotificationPreferences, selectedThemePreset.id, selectedThemePreset.primary, setTripNotificationPreferences, themeMode, tripNotificationPreferences, tripStartLeadMinutes, uiDensity]);
+  }), [appBackground, getEffectiveTripReminders, isPreferencesSyncing, isPrivacyMode, language, notificationPermission, preferences, preferencesSyncError, reminderLeadMinutes, remindersEnabled, replaceLocalTripNotificationPreferences, requestNotificationPermission, resetTripNotificationPreferences, selectedThemePreset.id, selectedThemePreset.primary, setAppBackground, setTripNotificationPreferences, themeMode, tripNotificationPreferences, tripStartLeadMinutes, uiDensity]);
 
   return (
     <SettingsContext.Provider value={value}>

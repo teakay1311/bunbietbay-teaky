@@ -18,6 +18,7 @@ import { CoverPhotoSelector } from '../components/CoverPhotoSelector';
 import { SortSelect } from '../components/SortSelect';
 import { type SortOption } from '../utils/listSort';
 import { countPackingByTrip, countPhotosByTrip, filterAndSortTrips, sumExpensesByTrip, type TripSortKey } from '../features/trips/selectors';
+import { TripStamp } from '../components/TripStamp';
 
 const TRIP_SORT_OPTIONS: Array<SortOption<TripSortKey>> = [
   { value: 'startDateDesc', label: 'Ngày đi mới nhất' },
@@ -63,7 +64,7 @@ const MiniCircularProgress = ({ value, size = 32, strokeWidth = 4, colorClass = 
           fill="transparent"
         />
         <circle
-          className={`${colorClass} stroke-current transition-all duration-1000 ease-out`}
+          className={`${colorClass} stroke-current transition-all duration-200 ease-out`}
           strokeWidth={strokeWidth}
           strokeLinecap="round"
           strokeDasharray={circumference}
@@ -232,14 +233,14 @@ export function MyTrips() {
   return (
     <>
       <section className="mb-6">
-        <div className="density-hero flex flex-col gap-4 rounded-2xl border border-outline-variant/40 bg-primary p-5 text-on-primary shadow-sm sm:flex-row sm:items-center sm:justify-between md:p-6">
+        <div className="density-hero flex flex-col gap-4 rounded-2xl border border-outline-variant/40 bg-[#00515f] p-5 text-white shadow-sm sm:flex-row sm:items-center sm:justify-between md:p-6">
           <div>
-            <p className="text-sm font-semibold text-on-primary/75">Bunbietbay Trips</p>
+            <p className="text-sm font-semibold text-white/75">Bunbietbay Trips</p>
             <h1 className="mt-1 max-w-2xl text-balance font-headline text-2xl font-extrabold leading-tight md:text-3xl">
               {language === 'vi' ? 'Sẵn sàng cho hành trình tiếp theo?' : 'Ready for your next journey?'}
             </h1>
           </div>
-          <button onClick={() => { setEditingTripId(null); setIsAddOpen(true); }} className="flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-surface px-4 py-2.5 text-sm font-bold text-primary hover:opacity-90">
+          <button onClick={() => { setEditingTripId(null); setIsAddOpen(true); }} className="flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-accent-coral px-4 py-2.5 text-sm font-bold text-on-accent-coral transition-opacity hover:opacity-90">
             <Icons.PlusCircle className="size-5" />
             {language === 'vi' ? 'Tạo chuyến đi mới' : 'Create new trip'}
           </button>
@@ -315,7 +316,7 @@ export function MyTrips() {
             const daysLeft = isUpcoming ? Math.max(1, Math.ceil((new Date(trip.startDate).getTime() - new Date(today).getTime()) / (1000 * 60 * 60 * 24))) : 0;
             const currentDay = isOngoing ? Math.max(1, Math.ceil((new Date(today).getTime() - new Date(trip.startDate).getTime()) / (1000 * 60 * 60 * 24)) + 1) : 0;
             const statusLabel = trip.status === 'draft' ? 'Bản nháp' : (isUpcoming ? `Còn ${daysLeft} ngày` : isOngoing ? `Đang diễn ra (Ngày ${currentDay})` : 'Đã xong');
-            const statusBadgeClass = trip.status === 'draft' ? "bg-surface-container-high text-outline" : (isUpcoming ? "bg-primary-container text-on-primary-container" : isOngoing ? "bg-tertiary-fixed text-on-tertiary-fixed" : "bg-surface-container-high text-outline");
+            const statusBadgeClass = trip.status === 'draft' ? "bg-surface-container-high text-outline" : (isUpcoming ? "bg-accent-lime text-on-accent-lime" : isOngoing ? "bg-accent-coral/20 text-on-surface" : "bg-surface-container-high text-outline");
 
             if (trip.status === 'draft') {
               return (
@@ -355,7 +356,7 @@ export function MyTrips() {
             if (viewMode === 'list') {
               return (
                 <motion.div variants={itemVariants} key={trip.id}>
-                  <div className={cn("group relative rounded-2xl bg-surface-container-lowest shadow-[0_8px_20px_rgba(0,0,0,0.05)] ring-1 ring-outline/10 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_16px_36px_-14px_rgba(0,0,0,0.16)] active:scale-[0.98]", uiDensity === 'compact' ? 'p-2.5' : 'p-3')}>
+                  <div className={cn("group relative rounded-2xl border border-outline-variant/40 bg-surface-container-lowest shadow-sm transition-opacity duration-200 active:opacity-90", uiDensity === 'compact' ? 'p-2.5' : 'p-3')}>
                     <Link to={`/trips/${trip.id}`} aria-label={`Mở chuyến đi ${trip.title}`} className="absolute inset-0 rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
                     <div className="pointer-events-none relative flex items-center gap-4">
                     <div className="h-14 w-14 shrink-0 rounded-lg bg-secondary-container flex items-center justify-center text-primary dark:text-white overflow-hidden">
@@ -468,6 +469,7 @@ export function MyTrips() {
                     <div className="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-secondary-container text-primary dark:text-white">
                       <img alt={trip.title} className="h-full w-full object-cover" src={trip.image} loading="lazy" decoding="async" />
                     </div>
+                    <TripStamp tripId={trip.id} location={trip.location} compact className="ml-auto hidden shrink-0 opacity-55 xl:flex" />
                     <div className="pointer-events-auto relative z-10 flex min-w-0 flex-wrap items-center justify-end gap-1">
                       <button
                         onClick={async (e) => {
@@ -648,7 +650,7 @@ export function MyTrips() {
               ].map(color => (
                 <label key={color.hex || 'default'} className="flex flex-col items-center gap-1 cursor-pointer group" title={color.name}>
                   <input type="radio" name="themeColor" value={color.hex} defaultChecked={(editingTrip?.themeColor || '') === color.hex} className="sr-only peer" />
-                  <div style={color.hex ? { backgroundColor: color.hex } : {}} className={`w-8 h-8 rounded-full border-2 border-transparent peer-checked:border-on-surface ring-2 ring-transparent peer-checked:ring-offset-2 peer-checked:ring-offset-surface peer-checked:ring-on-surface transition-all group-hover:scale-110 ${!color.hex ? 'bg-primary' : ''}`}></div>
+                  <div style={color.hex ? { backgroundColor: color.hex } : {}} className={`size-8 rounded-full border-2 border-transparent ring-2 ring-transparent transition-colors peer-checked:border-on-surface peer-checked:ring-on-surface peer-checked:ring-offset-2 peer-checked:ring-offset-surface ${!color.hex ? 'bg-primary' : ''}`}></div>
                 </label>
               ))}
             </div>

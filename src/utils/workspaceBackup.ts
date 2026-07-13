@@ -1,5 +1,6 @@
 import type { Notebook, NotebookPlace, PersistedAppState, TripNotificationPreferences, UserPreferences, WorkspaceBackupV8 } from '../domain/models';
 import { prepareImportedSnapshot } from './appState';
+import { normalizeAppBackgroundPreference } from '../data/preferencesService';
 
 export type PreparedWorkspaceBackup = {
   workspace: PersistedAppState;
@@ -39,7 +40,9 @@ function validateLibrary(library: unknown): WorkspaceBackupV8['library'] {
 
 function validatePreferences(value: unknown): UserPreferences {
   if (!isRecord(value) || !['light', 'dark', 'system'].includes(String(value.themeMode)) || !['cozy', 'compact'].includes(String(value.uiDensity)) || typeof value.themePresetId !== 'string' || !value.themePresetId.trim() || typeof value.isPrivacyMode !== 'boolean' || typeof value.remindersEnabled !== 'boolean' || !isIntegerInRange(value.activityLeadMinutes, 1, 10080) || !isIntegerInRange(value.tripStartLeadMinutes, 1, 20160) || (value.updatedAt !== undefined && !isValidDateTime(value.updatedAt))) throw new Error('Backup không hợp lệ: tùy chỉnh tài khoản có dữ liệu sai.');
-  return value as UserPreferences;
+  const appBackground = normalizeAppBackgroundPreference(value.appBackground);
+  if (value.appBackground !== undefined && isRecord(value.appBackground) && value.appBackground.source !== 'none' && appBackground.source === 'none') throw new Error('Backup không hợp lệ: ảnh nền ứng dụng có dữ liệu sai.');
+  return { ...(value as Omit<UserPreferences, 'appBackground'>), appBackground };
 }
 
 export function createWorkspaceBackupV8(input: Omit<WorkspaceBackupV8, 'version' | 'exportedAt'>): WorkspaceBackupV8 {

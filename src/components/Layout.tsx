@@ -9,6 +9,7 @@ import { useAuth } from '../context/AuthContext';
 import { useNotebook } from '../context/NotebookContext';
 import { useStoredOption } from '../hooks/useStoredOption';
 import { useCollaboration } from '../context/CollaborationContext';
+import { useAppBackgroundUrl } from '../hooks/useAppBackgroundUrl';
 
 export function cn(...inputs: (string | undefined | null | false)[]) {
   return twMerge(clsx(inputs));
@@ -73,7 +74,7 @@ export function TopNav({ hideNavLinks = false }: { hideNavLinks?: boolean }) {
             </button>
           )}
           <Link to="/trips" className="group flex min-w-0 flex-1 items-center gap-2 transition-transform active:scale-95 md:gap-3">
-            <img src={logoSrc} alt="Bunbietbay Trips" className="h-10 w-10 shrink-0 rounded-xl shadow-sm transition-transform group-hover:scale-105 md:h-11 md:w-11 md:rounded-2xl" />
+            <img src={logoSrc} alt="Bunbietbay Trips" className="h-10 w-10 shrink-0 rounded-xl shadow-sm md:h-11 md:w-11 md:rounded-2xl" />
             <div className="min-w-0">
               <span className="block truncate font-headline text-lg font-black text-on-surface md:text-2xl">
                 Bunbietbay Trips
@@ -343,11 +344,29 @@ function DesktopSidebar({ tripId, isCollapsed, onToggle }: { tripId?: string; is
   </aside>;
 }
 
+function AppBackgroundLayer({ url }: { url?: string }) {
+  const [isLoaded, setIsLoaded] = useState(false);
+  if (!url) return null;
+  return (
+    <div aria-hidden="true" className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
+      <img
+        src={url}
+        alt=""
+        onLoad={() => setIsLoaded(true)}
+        className={cn('size-full object-cover opacity-0 transition-opacity duration-200 motion-reduce:transition-none', isLoaded && 'opacity-100')}
+      />
+      <div className="absolute inset-0 bg-[rgba(255,249,240,0.82)] dark:bg-[rgba(19,28,29,0.86)]" />
+    </div>
+  );
+}
+
 export function Layout({ children, hideNavLinks = false, tripId }: { children: ReactNode; hideNavLinks?: boolean; tripId?: string }) {
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
   const [sidebarMode, setSidebarMode] = useStoredOption('bunbietbay-sidebar', ['expanded', 'collapsed'] as const, 'expanded');
   const isSidebarCollapsed = sidebarMode === 'collapsed';
-  const { isRemoteMode, isSyncing, retryWorkspaceSync, workspaceError, workspaceStatus } = useAppContext();
+  const { isRemoteMode, isSyncing, retryWorkspaceSync, workspaceError, workspaceStatus, photos } = useAppContext();
+  const { appBackground } = useSettings();
+  const { url: backgroundUrl } = useAppBackgroundUrl(appBackground, photos);
   const { offlineMutations } = useCollaboration();
   const pendingOfflineCount = offlineMutations.filter((item) => item.status === 'pending').length;
   const conflictCount = offlineMutations.filter((item) => item.status === 'conflict' || item.status === 'failed').length;
@@ -365,7 +384,8 @@ export function Layout({ children, hideNavLinks = false, tripId }: { children: R
   }, []);
 
   return (
-    <div className={cn('min-h-dvh w-full overflow-x-hidden bg-surface pb-24 font-body text-on-surface md:pb-0 md:pl-20', isSidebarCollapsed ? 'lg:pl-20' : 'lg:pl-64')}>
+    <div className={cn('isolate min-h-dvh w-full overflow-x-hidden bg-surface pb-24 font-body text-on-surface md:pb-0 md:pl-20', isSidebarCollapsed ? 'lg:pl-20' : 'lg:pl-64')}>
+      <AppBackgroundLayer key={backgroundUrl ?? 'none'} url={backgroundUrl} />
       {(isOffline || pendingOfflineCount > 0 || conflictCount > 0) && (
         <div className={cn('fixed inset-x-0 top-0 z-50 flex items-center justify-center gap-2 bg-error py-1.5 text-center text-xs font-bold text-on-error md:left-20', isSidebarCollapsed ? 'lg:left-20' : 'lg:left-64')}>
           <Icons.AlertTriangle className="w-3.5 h-3.5" /> {conflictCount ? `${conflictCount} thay đổi cần xử lý.` : isOffline && isRemoteMode ? 'Đang ngoại tuyến. Thay đổi sẽ được xếp hàng đồng bộ.' : isOffline ? 'Đang ngoại tuyến. Dữ liệu sẽ lưu trên máy.' : `${pendingOfflineCount} thay đổi đang chờ đồng bộ.`}
@@ -377,7 +397,7 @@ export function Layout({ children, hideNavLinks = false, tripId }: { children: R
       <div className={isOffline || pendingOfflineCount || conflictCount ? "pt-7" : ""}>
         <TopNav hideNavLinks={hideNavLinks} />
       </div>
-      <main id="main-content" className={`mx-auto max-w-[92rem] px-4 md:px-6 lg:px-8 ${isOffline || pendingOfflineCount || conflictCount ? 'pt-[7.25rem] lg:pt-12' : 'pt-24 lg:pt-8'}`}>
+      <main id="main-content" className={`relative z-10 mx-auto max-w-[92rem] px-4 md:px-6 lg:px-8 ${isOffline || pendingOfflineCount || conflictCount ? 'pt-[7.25rem] lg:pt-12' : 'pt-24 lg:pt-8'}`}>
         {hasWorkspaceError && workspaceError && (
           <div role="alert" className="mb-5 flex flex-col gap-3 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-amber-950 shadow-sm dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-100 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-start gap-3">

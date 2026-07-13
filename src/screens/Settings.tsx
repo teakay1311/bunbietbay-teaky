@@ -13,6 +13,12 @@ import { createWorkspaceBackupV8, prepareWorkspaceBackup } from '../utils/worksp
 import { motion, AnimatePresence } from 'motion/react';
 import { usePwaInstallPrompt } from '../features/settings/usePwaInstallPrompt';
 import { resizeImageFileToDataUrl } from '../utils/avatarImage';
+import { Modal } from '../components/Modal';
+import { compressImage } from '../utils/photoUpload';
+import { deleteImageFromCloudinary, isCloudinaryConfigured, uploadImageToCloudinary } from '../lib/cloudinary';
+import { deleteOfflineMedia, saveOfflineMedia } from '../utils/persistence';
+import { useAppBackgroundUrl } from '../hooks/useAppBackgroundUrl';
+import type { AppBackgroundPreference } from '../domain/models';
 
 type SectionKey = 'account' | 'appearance' | 'reminders' | 'shortcuts' | 'data';
 
@@ -64,6 +70,8 @@ export function Settings() {
     themePresets,
     uiDensity,
     setUiDensity,
+    appBackground,
+    setAppBackground,
     remindersEnabled,
     setRemindersEnabled,
     reminderLeadMinutes,
@@ -95,6 +103,7 @@ export function Settings() {
     currentUserProfile,
     replacePersistedState,
     isRemoteMode,
+    isHydrated,
   } = useAppContext();
   const { notebooks, notebookPlaces, replaceLocalNotebookState } = useNotebook();
   const { showToast, confirm } = useFeedback();
@@ -118,6 +127,10 @@ export function Settings() {
   const { canInstall, install } = usePwaInstallPrompt();
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const avatarInputRef = useRef<HTMLInputElement>(null);
+  const backgroundInputRef = useRef<HTMLInputElement>(null);
+  const [isBackgroundPickerOpen, setIsBackgroundPickerOpen] = useState(false);
+  const [isSavingBackground, setIsSavingBackground] = useState(false);
+  const [backgroundError, setBackgroundError] = useState<string | null>(null);
 
   const handleInstallClick = () => { void install(); };
   const [dataDirectory, setDataDirectory] = useState<string | null>(null);
@@ -125,6 +138,8 @@ export function Settings() {
   const isDesktopApp = Boolean(window.desktopApi?.isDesktopApp);
   const photoStorageSummary = useMemo(() => getPhotoStorageSummary(photos), [photos]);
   const shouldWarnAboutLocalPhotoStorage = useMemo(() => shouldWarnAboutEmbeddedStorage(photos), [photos]);
+  const selectableBackgroundPhotos = useMemo(() => photos.filter((photo) => photo.itemType !== 'journal' && Boolean(photo.url)), [photos]);
+  const { url: backgroundUrl, isMissing: isBackgroundMissing, isLoading: isBackgroundLoading } = useAppBackgroundUrl(appBackground, photos);
   useEffect(() => {
     setProfileForm({
       displayName: currentUserProfile?.displayName ?? '',
@@ -184,6 +199,7 @@ export function Settings() {
         setRemindersEnabled(prepared.preferences.remindersEnabled);
         setReminderLeadMinutes(prepared.preferences.activityLeadMinutes);
         setTripStartLeadMinutes(prepared.preferences.tripStartLeadMinutes);
+        await setAppBackground(prepared.preferences.appBackground);
       }
       replaceLocalTripNotificationPreferences(prepared.tripNotificationPreferences);
       showToast({
@@ -289,6 +305,100 @@ export function Settings() {
       if (avatarInputRef.current) {
         avatarInputRef.current.value = '';
       }
+    }
+  };
+
+  const cleanupOwnedBackground = async (background: AppBackgroundPreference) => {
+    if (background.source !== 'upload') return false;
+    if (background.localMediaKey) await deleteOfflineMedia(background.localMediaKey);
+    if (!background.providerPublicId) return false;
+    try {
+      return !(await deleteImageFromCloudinary(background.providerPublicId));
+    } catch {
+      return true;
+    }
+  };
+
+  const selectLibraryBackground = async (photoId: string) => {
+    const previous = appBackground;
+    setBackgroundError(null);
+    setIsSavingBackground(true);
+    try {
+      await setAppBackground({ source: 'library', photoId });
+      setIsBackgroundPickerOpen(false);
+      const cleanupFailed = await cleanupOwnedBackground(previous);
+      showToast({
+        tone: cleanupFailed ? 'info' : 'success',
+        title: 'Đã đổi ảnh nền',
+        message: cleanupFailed ? 'Ảnh nền mới đã lưu, nhưng file nền cũ trên Cloudinary chưa được dọn.' : 'Ảnh trong Thư viện đã được dùng làm nền ứng dụng.',
+      });
+    } catch (error) {
+      setBackgroundError(error instanceof Error ? error.message : 'Không thể lưu ảnh nền.');
+    } finally {
+      setIsSavingBackground(false);
+    }
+  };
+
+  const uploadBackground = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setBackgroundError(null);
+    setIsSavingBackground(true);
+    let uploaded: AppBackgroundPreference | null = null;
+    try {
+      if (!file.type.startsWith('image/')) throw new Error('Hãy chọn một file ảnh hợp lệ.');
+      if (file.size > 20 * 1024 * 1024) throw new Error('Ảnh nền không được vượt quá 20 MB.');
+      const compressed = await compressImage(file);
+      if (session) {
+        if (!navigator.onLine) throw new Error('Cần kết nối mạng để đồng bộ ảnh nền theo tài khoản.');
+        if (!isCloudinaryConfigured) throw new Error('Cloudinary chưa được cấu hình để tải ảnh nền.');
+        const result = await uploadImageToCloudinary(compressed, {
+          folder: `bunbietbay/backgrounds/${session.user.id}`,
+          tags: ['bunbietbay-trips', 'app-background'],
+        });
+        uploaded = { source: 'upload', imageUrl: result.url, providerPublicId: result.publicId };
+      } else {
+        const localMediaKey = `app-background:${crypto.randomUUID()}`;
+        await saveOfflineMedia(localMediaKey, compressed);
+        uploaded = { source: 'upload', imageUrl: '', localMediaKey };
+      }
+
+      const previous = appBackground;
+      await setAppBackground(uploaded);
+      const cleanupFailed = await cleanupOwnedBackground(previous);
+      showToast({
+        tone: cleanupFailed ? 'info' : 'success',
+        title: 'Đã tải ảnh nền',
+        message: cleanupFailed ? 'Ảnh mới đã lưu, nhưng file nền cũ trên Cloudinary chưa được dọn.' : session ? 'Ảnh nền sẽ đồng bộ theo tài khoản.' : 'Ảnh nền được lưu trên thiết bị này.',
+      });
+    } catch (error) {
+      if (uploaded) await cleanupOwnedBackground(uploaded);
+      setBackgroundError(error instanceof Error ? error.message : 'Không thể tải ảnh nền.');
+    } finally {
+      setIsSavingBackground(false);
+      event.target.value = '';
+    }
+  };
+
+  const removeBackground = async () => {
+    const shouldRemove = await confirm({
+      title: 'Bỏ ảnh nền ứng dụng',
+      message: appBackground.source === 'library' ? 'Ảnh trong Thư viện vẫn được giữ nguyên.' : 'File được tải riêng làm nền sẽ được dọn nếu dịch vụ lưu trữ cho phép.',
+      confirmLabel: 'Bỏ ảnh nền',
+      cancelLabel: 'Giữ lại',
+    });
+    if (!shouldRemove) return;
+    const previous = appBackground;
+    setBackgroundError(null);
+    setIsSavingBackground(true);
+    try {
+      await setAppBackground({ source: 'none' });
+      const cleanupFailed = await cleanupOwnedBackground(previous);
+      showToast({ tone: cleanupFailed ? 'info' : 'success', title: 'Đã bỏ ảnh nền', message: cleanupFailed ? 'Giao diện đã trở về nền be, nhưng file Cloudinary cũ chưa được dọn.' : undefined });
+    } catch (error) {
+      setBackgroundError(error instanceof Error ? error.message : 'Không thể bỏ ảnh nền.');
+    } finally {
+      setIsSavingBackground(false);
     }
   };
 
@@ -599,7 +709,7 @@ export function Settings() {
             {activeSection === 'appearance' && (
               <motion.section key="appearance" variants={sectionVariants} initial="hidden" animate="visible" exit="exit" className="rounded-[2rem] bg-surface-container-lowest p-6 shadow-[0_18px_40px_rgba(0,0,0,0.06)] md:p-8">
                 <p className="font-label text-xs font-bold uppercase tracking-[0.24em] text-secondary dark:text-gray-300">Giao diện</p>
-                <h2 className="mt-2 mb-8 font-headline text-3xl font-black tracking-[-0.04em] text-on-surface">Bố cục dày thông tin hơn, ít khoảng trống lãng phí hơn</h2>
+                <h2 className="mt-2 mb-8 text-balance font-headline text-3xl font-black text-on-surface">Travel Pop trẻ trung, rõ ràng và dễ dùng</h2>
 
                 {canInstall && (
                   <div className="mb-8 rounded-[1.75rem] bg-tertiary/10 p-6 border border-tertiary/20 flex flex-col md:flex-row gap-6 items-center justify-between shadow-sm">
@@ -666,6 +776,58 @@ export function Settings() {
                       </button>
                     ))}
                   </div>
+                </div>
+
+                <div className="mt-8 border-t border-outline-variant/40 pt-8">
+                  <div className="mb-4">
+                    <p className="font-label text-xs font-bold uppercase tracking-[0.22em] text-secondary dark:text-gray-300">Ảnh nền ứng dụng</p>
+                    <h3 className="mt-2 text-balance font-headline text-2xl font-black text-on-surface">Mang ảnh chuyến đi vào không gian làm việc</h3>
+                    <p className="mt-2 text-pretty text-sm leading-6 text-secondary dark:text-gray-300">Chọn ảnh trong Thư viện hoặc tải ảnh mới. Nội dung luôn có lớp nền bảo vệ để dễ đọc.</p>
+                  </div>
+
+                  <div className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(16rem,0.8fr)]">
+                    <div className="relative aspect-[16/9] overflow-hidden rounded-2xl border border-outline-variant/60 bg-surface-container-low">
+                      {backgroundUrl ? (
+                        <>
+                          <img src={backgroundUrl} alt="Xem trước ảnh nền ứng dụng" className="size-full object-cover" />
+                          <div aria-hidden="true" className="absolute inset-0 bg-[rgba(255,249,240,0.62)] dark:bg-[rgba(19,28,29,0.72)]" />
+                          <div className="absolute inset-x-4 bottom-4 rounded-xl border border-outline-variant/60 bg-surface-container-lowest/95 px-4 py-3 shadow-sm">
+                            <p className="font-headline font-bold text-on-surface">Bunbietbay Trips</p>
+                            <p className="mt-1 text-xs text-secondary">Bản xem trước độ đọc trên ảnh nền</p>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="flex size-full flex-col items-center justify-center gap-2 px-6 text-center text-secondary">
+                          <Icons.Image className="size-8 text-primary" />
+                          <p className="font-headline font-bold text-on-surface">Nền be Travel Pop</p>
+                          <p className="text-xs">Chưa dùng ảnh nền tùy chỉnh</p>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="grid content-start gap-3">
+                      <button type="button" onClick={() => setIsBackgroundPickerOpen(true)} disabled={isSavingBackground || selectableBackgroundPhotos.length === 0} className="min-h-11 rounded-xl border border-outline-variant/60 bg-surface-container-lowest px-4 py-3 text-left font-bold text-on-surface transition-colors hover:border-primary disabled:cursor-not-allowed disabled:opacity-50">
+                        Chọn từ Thư viện ảnh
+                      </button>
+                      <button type="button" onClick={() => backgroundInputRef.current?.click()} disabled={isSavingBackground} className="min-h-11 rounded-xl bg-primary px-4 py-3 text-left font-bold text-on-primary transition-opacity hover:opacity-90 disabled:cursor-wait disabled:opacity-60">
+                        {isSavingBackground ? 'Đang lưu ảnh nền…' : 'Tải ảnh mới'}
+                      </button>
+                      <input ref={backgroundInputRef} type="file" accept="image/*" className="hidden" onChange={(event) => { void uploadBackground(event); }} />
+                      {appBackground.source !== 'none' && (
+                        <button type="button" onClick={() => { void removeBackground(); }} disabled={isSavingBackground} className="min-h-11 rounded-xl border border-error/40 px-4 py-3 text-left font-bold text-error transition-colors hover:bg-error-container disabled:opacity-50">
+                          Bỏ ảnh nền
+                        </button>
+                      )}
+                      <p className="text-xs leading-5 text-secondary dark:text-gray-300">
+                        {session ? 'Lựa chọn được đồng bộ theo tài khoản.' : 'Local mode lưu ảnh tải mới trên thiết bị này.'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {isHydrated && isBackgroundMissing && !isBackgroundLoading && (
+                    <p role="status" className="mt-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-100">Ảnh nền không còn khả dụng. Ứng dụng đang dùng nền be an toàn.</p>
+                  )}
+                  {backgroundError && <p role="alert" className="mt-3 rounded-xl border border-error/40 bg-error-container px-4 py-3 text-sm text-on-error-container">{backgroundError}</p>}
                 </div>
 
                 <p className="mt-8 rounded-2xl bg-surface-container-low px-4 py-3 text-sm text-secondary">Ngôn ngữ hiện tại: Tiếng Việt. Tùy chọn tiếng Anh sẽ xuất hiện khi toàn bộ giao diện được dịch đầy đủ.</p>
@@ -822,6 +984,34 @@ export function Settings() {
           </AnimatePresence>
         </div>
       </div>
+      <Modal isOpen={isBackgroundPickerOpen} onClose={() => setIsBackgroundPickerOpen(false)} title="Chọn ảnh nền từ Thư viện" size="wide">
+        {selectableBackgroundPhotos.length > 0 ? (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+            {selectableBackgroundPhotos.map((photo) => {
+              const isSelected = appBackground.source === 'library' && appBackground.photoId === photo.id;
+              return (
+                <button
+                  key={photo.id}
+                  type="button"
+                  aria-pressed={isSelected}
+                  onClick={() => { void selectLibraryBackground(photo.id); }}
+                  disabled={isSavingBackground}
+                  className={`group relative aspect-square overflow-hidden rounded-xl border-2 bg-surface-container-low text-left transition-opacity disabled:cursor-wait disabled:opacity-60 ${isSelected ? 'border-primary' : 'border-transparent hover:border-outline'}`}
+                >
+                  <img src={photo.url} alt={photo.album || 'Ảnh chuyến đi'} loading="lazy" decoding="async" className="size-full object-cover" />
+                  <span className="absolute inset-x-2 bottom-2 truncate rounded-lg bg-surface-container-lowest/95 px-2 py-1 text-xs font-bold text-on-surface">{photo.album || 'Chung'}</span>
+                </button>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="py-10 text-center">
+            <Icons.Image className="mx-auto size-10 text-primary" />
+            <p className="mt-3 font-headline font-bold">Thư viện chưa có ảnh phù hợp</p>
+            <Link to="/photos" className="mt-4 inline-flex min-h-11 items-center rounded-xl bg-primary px-4 py-2 font-bold text-on-primary">Mở Thư viện ảnh</Link>
+          </div>
+        )}
+      </Modal>
     </motion.div>
   );
 }

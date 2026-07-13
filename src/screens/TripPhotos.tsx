@@ -583,7 +583,7 @@ export function TripPhotos() {
                 />
               </div>
             )}
-            <div className="pointer-events-none absolute inset-0 flex flex-col justify-end bg-gradient-to-t from-black/60 via-transparent to-transparent p-4 opacity-0 transition-opacity group-hover:opacity-100">
+            <div className="pointer-events-none absolute inset-0 flex flex-col justify-end bg-black/55 p-4 opacity-0 transition-opacity group-hover:opacity-100">
               <p className="text-white font-bold text-sm truncate">{photo.album}</p>
               <span className="mt-1 inline-flex w-fit items-center rounded-full bg-black/45 px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-white">
                 {photo.itemType === 'journal' ? 'Nhật ký' : photo.storage === 'remote' ? 'Cloud' : 'Máy này'}
@@ -839,7 +839,7 @@ export function TripPhotos() {
                     <button
                       type="button"
                       onClick={() => goToAdjacentPhoto(-1)}
-                      className="absolute left-3 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur transition hover:bg-black/65"
+                      className="absolute left-3 top-1/2 flex size-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/55 text-white transition-colors hover:bg-black/70"
                       aria-label="Ảnh trước"
                     >
                       <Icons.ChevronLeft className="h-6 w-6" />
@@ -847,7 +847,7 @@ export function TripPhotos() {
                     <button
                       type="button"
                       onClick={() => goToAdjacentPhoto(1)}
-                      className="absolute right-3 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur transition hover:bg-black/65"
+                      className="absolute right-3 top-1/2 flex size-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/55 text-white transition-colors hover:bg-black/70"
                       aria-label="Ảnh tiếp theo"
                     >
                       <Icons.ChevronRight className="h-6 w-6" />

@@ -93,12 +93,12 @@ export function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(0,107,125,0.18),_transparent_34%),linear-gradient(160deg,_var(--color-surface)_0%,_var(--color-surface-container-low)_46%,_var(--color-background)_100%)] px-6 py-8 text-on-surface">
-      <div className="mx-auto grid min-h-[calc(100vh-4rem)] max-w-7xl grid-cols-1 overflow-hidden rounded-[2rem] border border-outline-variant/35 bg-surface-container-lowest/90 shadow-[0_30px_80px_rgba(2,33,39,0.12)] backdrop-blur-xl lg:grid-cols-[1.12fr_0.88fr]">
+    <div className="min-h-dvh bg-surface px-6 py-8 text-on-surface">
+      <div className="mx-auto grid min-h-[calc(100dvh-4rem)] max-w-7xl grid-cols-1 overflow-hidden rounded-2xl border border-outline-variant/60 bg-surface-container-lowest shadow-sm lg:grid-cols-[1.12fr_0.88fr]">
         <section className="relative overflow-hidden px-6 pt-4 pb-10 lg:px-8 lg:pt-6 lg:pb-14 bg-cover bg-center rounded-[2rem] md:rounded-[none] md:rounded-l-[2rem]" style={{ backgroundImage: "url('/login-bg.png')" }}>
-          <div className="absolute inset-y-0 right-0 hidden w-px bg-gradient-to-b from-transparent via-outline-variant/50 to-transparent lg:block" />
+          <div className="absolute inset-y-0 right-0 hidden w-px bg-outline-variant/50 lg:block" />
           <div className="relative z-10 flex h-[100%] flex-col justify-start">
-            <div className="max-w-xl bg-surface/85 backdrop-blur-3xl p-6 lg:p-8 rounded-[2.5rem] shadow-2xl border border-white/20 dark:border-white/5">
+            <div className="max-w-xl rounded-2xl border border-outline-variant/50 bg-surface/95 p-6 shadow-sm lg:p-8">
               <p className="font-label text-xs font-extrabold uppercase tracking-[0.35em] text-primary dark:text-white">Bunbietbay & Teakay's Trips</p>
               <h1 className="mt-4 max-w-xl text-balance font-headline text-2xl font-black leading-tight text-on-surface lg:text-3xl">
                 Hành trình trọn vẹn, kỷ niệm lưu giữ mãi mãi.
@@ -110,7 +110,7 @@ export function Login() {
           </div>
         </section>
 
-        <section className="flex items-center bg-[linear-gradient(180deg,_rgba(0,81,95,0.06),_rgba(0,81,95,0.01))] px-6 py-10 lg:px-10">
+        <section className="flex items-center bg-surface-container-low px-6 py-10 lg:px-10">
           <div className="mx-auto w-full max-w-md">
             <div className="rounded-[2rem] bg-surface-container-lowest p-7 shadow-[0_20px_40px_rgba(0,0,0,0.08)]">
               <div className="mb-5 flex items-start justify-between gap-4">

@@ -421,10 +421,21 @@ export type PendingNotebookInvitation = {
   invitedByName: string | null;
 };
 
+export type AppBackgroundPreference =
+  | { source: 'none' }
+  | { source: 'library'; photoId: string }
+  | {
+      source: 'upload';
+      imageUrl: string;
+      providerPublicId?: string;
+      localMediaKey?: string;
+    };
+
 export type UserPreferences = {
   themeMode: 'light' | 'dark' | 'system';
   themePresetId: string;
   uiDensity: 'cozy' | 'compact';
+  appBackground: AppBackgroundPreference;
   isPrivacyMode: boolean;
   remindersEnabled: boolean;
   activityLeadMinutes: number;

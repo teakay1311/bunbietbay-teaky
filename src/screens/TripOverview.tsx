@@ -15,6 +15,7 @@ import { pageStaggerVariants } from '../ui/motion';
 import { StarRatingInput } from '../components/StarRatingInput';
 import { getTripPhase } from '../domain/tripPhase';
 import { getFinancialMembers } from '../domain/tripLogic';
+import { TripStamp } from '../components/TripStamp';
 
 export function TripOverview() {
   const { id } = useParams();
@@ -270,7 +271,8 @@ export function TripOverview() {
         )}
       </div>
       <div className="relative mb-6">
-        <div className="w-full">
+        <TripStamp tripId={trip.id} location={trip.location} className="absolute right-1 top-0 hidden lg:flex" />
+        <div className="w-full lg:pr-36">
           <p className="mb-2 font-label text-[11px] font-bold uppercase tracking-[0.16em] text-secondary dark:text-gray-300 md:text-xs md:tracking-[0.2em]">Chi tiết chuyến đi</p>
           <h1 className="font-headline text-2xl font-extrabold text-on-surface md:text-5xl md:tracking-tighter">{trip.title}</h1>
           <p className="mt-3 flex max-w-md items-center gap-2 leading-relaxed text-on-surface-variant md:mt-4">
@@ -315,7 +317,7 @@ export function TripOverview() {
 
       <section className={uiDensity === 'compact' ? 'mb-8' : 'mb-12'}>
         <div className={uiDensity === 'compact' ? 'grid grid-cols-1 lg:grid-cols-3 gap-4 density-stack' : 'grid grid-cols-1 lg:grid-cols-3 gap-6'}>
-          <motion.div variants={itemVariants} className="rounded-[1.25rem] bg-surface-container-lowest p-4 shadow-[0_12px_24px_rgba(0,0,0,0.06)] density-card ring-1 ring-outline/10 transition-transform hover:-translate-y-1 md:rounded-[1.5rem] md:p-6">
+          <motion.div variants={itemVariants} className="density-card rounded-2xl border border-outline-variant/40 bg-surface-container-lowest p-4 shadow-sm md:p-6">
             <p className="mb-2 font-label text-[10px] font-bold uppercase tracking-wide text-secondary dark:text-gray-300 md:tracking-[0.2em]">Trạng thái ngân sách</p>
             <h2 className="font-headline text-2xl font-bold text-on-surface">{spentPercentage.toFixed(1)}%</h2>
             <div className="flex-1">
@@ -325,12 +327,12 @@ export function TripOverview() {
                 : `Bạn đã vượt ${formatMoney(Math.abs(remaining), baseCurrencySymbol)} so với ngân sách dự kiến.`}</p>
             </div>
           </motion.div>
-          <motion.div variants={itemVariants} className="rounded-[1.25rem] bg-surface-container-lowest p-4 shadow-[0_12px_24px_rgba(0,0,0,0.06)] density-card ring-1 ring-outline/10 transition-transform hover:-translate-y-1 md:rounded-[1.5rem] md:p-6">
+          <motion.div variants={itemVariants} className="density-card rounded-2xl border border-outline-variant/40 bg-surface-container-lowest p-4 shadow-sm md:p-6">
             <p className="mb-2 font-label text-[10px] font-bold uppercase tracking-wide text-secondary dark:text-gray-300 md:tracking-[0.2em]">Checklist nhanh</p>
             <h2 className="font-headline text-2xl font-bold text-on-surface">{packedItemsCount}/{tripPackingItems.length}</h2>
             <p className="mt-2 text-sm text-on-surface-variant">Đã chuẩn bị xong {packedItemsCount} món hành lý. Mở ngay danh sách nếu muốn hoàn tất phần còn thiếu.</p>
           </motion.div>
-          <motion.div variants={itemVariants} className="rounded-[1.25rem] bg-surface-container-lowest p-4 shadow-[0_12px_24px_rgba(0,0,0,0.06)] density-card ring-1 ring-outline/10 transition-transform hover:-translate-y-1 md:rounded-[1.5rem] md:p-6">
+          <motion.div variants={itemVariants} className="density-card rounded-2xl border border-outline-variant/40 bg-surface-container-lowest p-4 shadow-sm md:p-6">
             <p className="mb-2 font-label text-[10px] font-bold uppercase tracking-wide text-secondary dark:text-gray-300 md:tracking-[0.2em]">Timeline sắp tới</p>
             {upcomingActivities.length > 0 ? (
               <div className="space-y-3">
@@ -406,7 +408,7 @@ export function TripOverview() {
               <motion.div variants={itemVariants} key={member.id}>
                 <div
                   onClick={() => { setSelectedMember(member); setIsMemberInfoOpen(true); }}
-                  className={`group flex cursor-pointer items-center justify-between gap-3 rounded-[1.25rem] bg-surface-container-lowest p-4 shadow-sm ring-1 ring-outline/10 transition-all duration-300 hover:-translate-y-1 hover:shadow-md md:rounded-[1.5rem] md:p-6 ${member.balance < 0 ? 'border-l-4 border-l-error' : ''}`}
+                  className={`group flex cursor-pointer items-center justify-between gap-3 rounded-2xl border border-outline-variant/40 bg-surface-container-lowest p-4 shadow-sm transition-colors duration-200 hover:border-primary/40 md:p-6 ${member.balance < 0 ? 'border-l-4 border-l-error' : ''}`}
                 >
                   <div className="flex items-center gap-4">
                     <img alt={member.displayName} className="w-12 h-12 rounded-full object-cover" src={member.avatar} />
@@ -505,7 +507,7 @@ export function TripOverview() {
 
               <div className="space-y-6">
                 {transactions.length > 0 ? transactions.map((t) => (
-                  <div key={t.id} className="flex items-center gap-4 bg-surface-container-low/40 p-4 rounded-2xl backdrop-blur-md">
+                  <div key={t.id} className="flex items-center gap-4 rounded-2xl bg-surface-container-low p-4">
                     <div className="flex -space-x-3">
                       <img alt={t.debtor.displayName} className="w-8 h-8 rounded-full border-2 border-primary bg-surface-container-lowest" src={t.debtor.avatar} />
                       <Icons.ArrowRight className="w-5 h-5 text-on-primary/60 pt-1" />
