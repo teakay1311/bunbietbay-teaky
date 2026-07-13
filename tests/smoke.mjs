@@ -150,6 +150,38 @@ async function runSmoke() {
   await page.getByText('Tên bộ sưu tập không được chỉ gồm khoảng trắng.', { exact: true }).waitFor();
   await page.getByRole('button', { name: 'Đóng hộp thoại' }).click();
 
+  await page.route('https://api.cloudinary.com/**', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ secure_url: 'data:image/webp;base64,UklGRiIAAABXRUJQVlA4IC4AAADQAwCdASoBAAEADsD+JaQAA3AA/vuUAAA=', public_id: 'smoke-photo' }),
+  }));
+  await page.goto(`${baseUrl}/photos`, { waitUntil: 'networkidle' });
+  await page.getByRole('button', { name: 'Tải ảnh lên' }).first().click();
+  const uploadDialog = page.getByRole('dialog', { name: 'Tải ảnh lên' });
+  await uploadDialog.getByLabel('Chuyến đi', { exact: true }).selectOption('t3');
+  await uploadDialog.getByLabel('Album', { exact: true }).fill('Smoke album');
+  await uploadDialog.getByLabel('Chọn ảnh', { exact: true }).setInputFiles({
+    name: 'smoke.png',
+    mimeType: 'image/png',
+    buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZQmcAAAAASUVORK5CYII=', 'base64'),
+  });
+  await uploadDialog.getByRole('button', { name: 'Tải ảnh lên' }).click();
+  await page.getByText('Đã tải ảnh', { exact: true }).waitFor();
+  await page.goto(`${baseUrl}/trips/t3/memories`, { waitUntil: 'networkidle' });
+  await page.getByRole('button', { name: 'Smoke album', exact: true }).waitFor();
+  await page.goto(`${baseUrl}/photos`, { waitUntil: 'networkidle' });
+  await page.getByRole('button', { name: 'Tất cả ảnh' }).click();
+  await page.getByRole('button', { name: /Mùa Thu Tại Đà Lạt · Smoke album/ }).click();
+  await page.getByRole('button', { name: 'Sửa thông tin' }).click();
+  const editPhotoDialog = page.getByRole('dialog', { name: 'Sửa thông tin ảnh' });
+  await editPhotoDialog.getByLabel('Album', { exact: true }).fill('Smoke album đã sửa');
+  await editPhotoDialog.getByRole('button', { name: 'Lưu thay đổi' }).click();
+  await page.getByText('Đã cập nhật thông tin ảnh', { exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Xóa ảnh', exact: true }).click();
+  const deletePhotoDialog = page.getByRole('dialog', { name: 'Xóa ảnh khỏi chuyến đi' });
+  await deletePhotoDialog.getByRole('button', { name: 'Xóa ảnh', exact: true }).click();
+  await page.getByText('Đã xóa ảnh', { exact: true }).waitFor();
+
   await page.goto(`${baseUrl}/trips/t3/settings`, { waitUntil: 'networkidle' });
   await page.locator('input[name="startDate"]').fill('2024-10-20');
   await page.locator('input[name="endDate"]').fill('2024-10-19');
@@ -161,7 +193,7 @@ async function runSmoke() {
   for (const route of [
     '/trips', '/trips/t3', '/trips/t3/plan?tab=itinerary', '/trips/t3/plan?tab=places', '/trips/t3/money',
     '/trips/t3/prepare?tab=packing', '/trips/t3/prepare?tab=team', '/trips/t3/memories', '/trips/t3/settings',
-    '/library', '/inbox', '/account/profile', '/account/preferences', '/account/notifications', '/account/data', '/account/shortcuts',
+    '/library', '/photos', '/inbox', '/account/profile', '/account/preferences', '/account/notifications', '/account/data', '/account/shortcuts',
   ]) {
     await page.goto(`${baseUrl}${route}`, { waitUntil: 'networkidle' });
     const unnamedButtons = await page.evaluate(() => [...document.querySelectorAll('button')]
@@ -184,6 +216,10 @@ async function runSmoke() {
   if (!page.url().includes('/account/profile?ref=legacy')) throw new Error('Route Cài đặt cũ không redirect đúng sang Tài khoản.');
 
   await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`${baseUrl}/photos`, { waitUntil: 'networkidle' });
+  const globalMobileNavigation = page.getByRole('navigation', { name: 'Điều hướng chính' });
+  if (await globalMobileNavigation.getByRole('link').count() !== 5) throw new Error('Mobile không có đúng 5 mục điều hướng toàn cục.');
+  if (await globalMobileNavigation.locator('[aria-current="page"]').count() !== 1) throw new Error('Mobile đánh dấu sai mục Thư viện ảnh hiện tại.');
   await page.goto(`${baseUrl}/trips/t3`, { waitUntil: 'networkidle' });
   if (await page.getByRole('navigation', { name: 'Điều hướng chuyến đi' }).getByRole('link').count() !== 5) throw new Error('Mobile không có đúng 5 mục điều hướng chuyến đi.');
   await page.setViewportSize({ width: 768, height: 900 });
@@ -236,6 +272,25 @@ async function runSmoke() {
     throw new Error('Dữ liệu localStorage cũ chưa được migrate sang IndexedDB.');
   }
   await legacyContext.close();
+
+  const viewerContext = await browser.newContext();
+  const viewerPage = await viewerContext.newPage();
+  await viewerPage.addInitScript((state) => localStorage.setItem('bunbietbay-app-state', JSON.stringify(state)), {
+    version: 4,
+    trips: [{ id: 'viewer-trip', title: 'Viewer trip', location: 'Huế', startDate: '2026-08-01', endDate: '2026-08-03', budget: 3000000, status: 'upcoming', image: '', createdBy: 'owner-user' }],
+    profiles: [{ id: 'viewer-user', email: 'viewer@example.com', displayName: 'Viewer', avatar: '' }, { id: 'owner-user', email: 'owner@example.com', displayName: 'Owner', avatar: '' }],
+    memberships: [{ id: 'viewer-membership', tripId: 'viewer-trip', userId: 'viewer-user', role: 'viewer' }, { id: 'owner-membership', tripId: 'viewer-trip', userId: 'owner-user', role: 'owner' }],
+    invitations: [], activities: [], expenses: [], savedPlaces: [], packingItems: [],
+    photos: [{ id: 'viewer-photo', tripId: 'viewer-trip', url: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==', album: 'Chung', storage: 'embedded', createdAt: '2026-08-01T00:00:00.000Z' }],
+    activityLogs: [], currentTripId: 'viewer-trip', viewerProfileId: 'viewer-user', pinnedTripIds: [],
+  });
+  await viewerPage.goto(`${baseUrl}/photos`, { waitUntil: 'networkidle' });
+  if (await viewerPage.getByRole('button', { name: 'Tải ảnh lên' }).count() !== 0) throw new Error('Viewer vẫn thấy thao tác tải ảnh trong Thư viện ảnh.');
+  await viewerPage.getByRole('button', { name: 'Tất cả ảnh' }).click();
+  await viewerPage.locator('main img[alt="Chung"]').click();
+  const viewerPhotoDialog = viewerPage.getByRole('dialog', { name: 'Viewer trip · Chung' });
+  if (await viewerPhotoDialog.getByRole('button', { name: 'Sửa thông tin' }).count() !== 0 || await viewerPhotoDialog.getByRole('button', { name: 'Xóa ảnh' }).count() !== 0) throw new Error('Viewer vẫn thấy thao tác sửa hoặc xóa ảnh.');
+  await viewerContext.close();
 
   await browser.close();
 

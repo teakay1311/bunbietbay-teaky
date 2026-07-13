@@ -191,9 +191,9 @@ body {
 }
 
 body[data-density='cozy'] {
-  --density-card-padding: 1.5rem;
-  --density-stack-gap: 1.5rem;
-  --density-input-y: 1rem;
+  --density-card-padding: 1.25rem;
+  --density-stack-gap: 1.25rem;
+  --density-input-y: 0.875rem;
   --density-input-x: 1rem;
   --density-button-y: 1rem;
   --density-button-x: 1.25rem;
@@ -201,7 +201,7 @@ body[data-density='cozy'] {
 }
 
 body[data-density='compact'] {
-  --density-card-padding: 1rem;
+  --density-card-padding: 0.875rem;
   --density-stack-gap: 0.75rem;
   --density-input-y: 0.75rem;
   --density-input-x: 0.875rem;
@@ -243,6 +243,38 @@ body[data-density='compact'] main {
 body[data-density='compact'] .density-hero {
   min-height: 0 !important;
   padding: 1rem !important;
+}
+
+main h1 {
+  font-size: 1.5rem !important;
+  line-height: 1.2 !important;
+  letter-spacing: normal !important;
+  text-wrap: balance;
+}
+
+main p {
+  text-wrap: pretty;
+}
+
+main .editorial-shadow,
+main [class*='shadow-['] {
+  box-shadow: var(--shadow-sm) !important;
+}
+
+main [class*='rounded-['] {
+  border-radius: 1rem !important;
+}
+
+main [class*='hover:-translate-y']:hover,
+main .motion-lift:hover,
+main [class*='group-hover:scale'] {
+  transform: none !important;
+}
+
+@media (min-width: 768px) {
+  main h1 {
+    font-size: 1.875rem !important;
+  }
 }
 
 body[data-density='compact'] .density-table th,

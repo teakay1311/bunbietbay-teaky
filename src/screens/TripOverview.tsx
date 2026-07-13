@@ -269,8 +269,8 @@ export function TripOverview() {
           </div>
         )}
       </div>
-      <div className="relative mb-8 flex flex-col items-stretch gap-4 md:mb-12 md:flex-row md:items-end md:gap-6">
-        <div className="w-full md:w-2/3">
+      <div className="relative mb-6">
+        <div className="w-full">
           <p className="mb-2 font-label text-[11px] font-bold uppercase tracking-[0.16em] text-secondary dark:text-gray-300 md:text-xs md:tracking-[0.2em]">Chi tiết chuyến đi</p>
           <h1 className="font-headline text-2xl font-extrabold text-on-surface md:text-5xl md:tracking-tighter">{trip.title}</h1>
           <p className="mt-3 flex max-w-md items-center gap-2 leading-relaxed text-on-surface-variant md:mt-4">
@@ -278,16 +278,6 @@ export function TripOverview() {
             {trip.location}
           </p>
           <div className="mt-4 rounded-xl border border-outline-variant/50 bg-surface-container-low px-4 py-3"><p className="text-sm font-bold text-primary">{phaseCopy[0]}</p><p className="mt-1 text-pretty text-sm text-secondary">{phaseCopy[1]}</p></div>
-        </div>
-        <div className="group relative min-w-0 flex-1 overflow-hidden rounded-2xl border border-outline-variant/30 bg-surface-container-low p-4 text-center editorial-shadow md:min-w-[200px] md:rounded-[2rem] md:p-6">
-          <h2 className="mb-2 font-label text-xs font-bold uppercase tracking-wide text-primary md:mb-3 md:text-sm md:tracking-widest">Ngân sách tổng</h2>
-          <p className="break-words font-headline text-2xl font-bold text-on-surface md:text-3xl">{formatMoney(trip.budget, baseCurrencySymbol)}</p>
-          {trip.budget > 0 && (
-            <div className="mt-4 w-full h-1 bg-surface-variant rounded-full overflow-hidden">
-              <div className="h-full bg-tertiary rounded-full shadow-inner" style={{ width: `${spentPercentage}%` }}></div>
-            </div>
-          )}
-          <p className="font-label text-[10px] mt-2 text-on-surface-variant">Còn lại: {formatMoney(remaining, baseCurrencySymbol)}</p>
         </div>
       </div>
 

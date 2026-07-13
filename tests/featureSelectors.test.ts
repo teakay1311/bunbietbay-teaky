@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { filterAndSortTrips, sumExpensesByTrip } from '../src/features/trips/selectors';
-import { filterAndSortPhotos, groupPhotosByTimeline } from '../src/features/photos/selectors';
+import { buildPhotoTripFolders, filterAndSortGlobalPhotos, filterAndSortPhotos, groupPhotosByTimeline } from '../src/features/photos/selectors';
 import { buildLibraryUsage, filterAndSortLibraryPlaces } from '../src/features/library/selectors';
 import { buildCategoryBudgetRows, calculateCurrencyBalances, filterAndSortExpenses, getExpenseFormMembers } from '../src/features/expenses/selectors';
 import { filterAndSortActivities, getScheduleInsights, groupActivitiesByDate } from '../src/features/schedule/selectors';
@@ -34,6 +34,27 @@ test('photo and library selectors preserve filtering, sorting and source links',
   const places = [{ id: 'l1', notebookId: 'n1', name: 'Cafe', type: 'cafe' as const, rating: 5, createdAt: '2026-01-01', updatedAt: '2026-01-01' }];
   assert.equal(filterAndSortLibraryPlaces({ places, notebookId: 'n1', type: 'cafe', query: 'caf', sortBy: 'ratingDesc' }).length, 1);
   assert.equal(buildLibraryUsage([{ id: 's1', tripId: 't1', name: 'Cafe', type: 'cafe', sourceNotebookPlaceId: 'l1' }]).get('l1')?.has('t1'), true);
+});
+
+test('global photo library derives trip folders and searches Vietnamese metadata without accents', () => {
+  const trips = [trip('t1', 'Đà Nẵng mùa hè', '2026-06-01'), trip('t2', 'Huế', '2026-05-01')];
+  const photos = [
+    { id: 'p1', tripId: 't1', url: 'one.jpg', album: 'Biển', createdAt: '2026-06-02T00:00:00Z', takenOn: '2026-06-01', place: 'Bãi biển Mỹ Khê', tags: ['hoàng hôn'], people: ['Kiên'] },
+    { id: 'p2', tripId: 't1', url: '', album: 'Nhật ký', createdAt: '2026-06-03T00:00:00Z', itemType: 'journal' as const },
+  ];
+  const folders = buildPhotoTripFolders(trips, photos);
+  assert.deepEqual(folders.map((folder) => [folder.trip.id, folder.photoCount]), [['t1', 1], ['t2', 0]]);
+  const result = filterAndSortGlobalPhotos({
+    photos,
+    trips,
+    filters: { query: 'my khe hoang hon', tripId: '', album: '', dateFrom: '', dateTo: '', place: '', tag: '', person: '', sortBy: 'takenDesc' },
+  });
+  assert.deepEqual(result.map((photo) => photo.id), ['p1']);
+  assert.deepEqual(filterAndSortGlobalPhotos({
+    photos,
+    trips,
+    filters: { query: '', tripId: 't1', album: 'Biển', dateFrom: '2026-06-01', dateTo: '2026-06-01', place: 'Bãi biển Mỹ Khê', tag: 'hoàng hôn', person: 'Kiên', sortBy: 'takenDesc' },
+  }).map((photo) => photo.id), ['p1']);
 });
 
 test('expense selectors keep archived participants in currency balances and budget totals', () => {

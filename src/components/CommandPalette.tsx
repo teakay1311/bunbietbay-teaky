@@ -91,6 +91,7 @@ export function CommandPalette() {
     return [
       { id: 'new-trip', label: 'Tạo chuyến đi mới', hint: 'Mở form tạo trip', run: () => navigate('/trips', { state: { openAddTripModal: true } }) },
       { id: 'notebook', label: 'Thư viện địa điểm', hint: 'Mở bộ sưu tập địa điểm', run: () => navigate('/library') },
+      { id: 'photo-library', label: 'Thư viện ảnh', hint: 'Xem ảnh của mọi chuyến đi', run: () => navigate('/photos') },
       { id: 'inbox', label: 'Hộp thư', hint: 'Lời mời cần phản hồi', run: () => navigate('/inbox') },
       { id: 'settings', label: 'Tài khoản', hint: 'Hồ sơ, tùy chỉnh và dữ liệu', run: () => navigate('/account/profile') },
       ...activeTripCommands,

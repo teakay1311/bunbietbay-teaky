@@ -7,16 +7,16 @@ import { useFeedback } from '../context/FeedbackContext';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Modal } from '../components/Modal';
 import { SmartEmptyState } from '../components/SmartEmptyState';
-import { deleteImageFromCloudinary, isCloudinaryConfigured, uploadImageToCloudinary } from '../lib/cloudinary';
+import { isCloudinaryConfigured } from '../lib/cloudinary';
 import { EMBEDDED_PHOTO_WARNING_BYTES, formatBytes, getPhotoStorageSummary, shouldWarnAboutEmbeddedStorage } from '../utils/photoStorage';
 import { getErrorMessage } from '../utils/errorMessage';
-import { compressImage, blobToDataUrl } from '../utils/photoUpload';
 import { formatLocalDate } from '../utils/date';
 import { motion, AnimatePresence } from 'motion/react';
 import { pageStaggerVariants } from '../ui/motion';
 import { SortSelect } from '../components/SortSelect';
 import { type SortOption } from '../utils/listSort';
 import { filterAndSortPhotos, getPhotoAlbums, groupPhotosByTimeline, type PhotoSortKey } from '../features/photos/selectors';
+import { deletePhotoWithStorage, preparePhotoUploads } from '../features/photos/operations';
 
 const PHOTO_SORT_OPTIONS: Array<SortOption<PhotoSortKey>> = [
   { value: 'createdDesc', label: 'Mới nhất' },
@@ -249,48 +249,15 @@ export function TripPhotos() {
     setUploadError(null);
     let didSucceed = false;
     try {
-      const nextPhotos: Array<Omit<Photo, 'id' | 'createdAt'>> = [];
-      for (const file of files) {
-        if (!file.type.startsWith('image/')) continue;
-
-        const compressedImage = await compressImage(file);
-        if (isCloudinaryConfigured) {
-          const uploadedImage = await uploadImageToCloudinary(compressedImage, {
-            folder: `bunbietbay/${trip.id}`,
-            tags: ['bunbietbay-trips', `trip-${trip.id}`],
-          });
-
-          nextPhotos.push({
-            tripId: trip.id,
-            url: uploadedImage.url,
-            album: albumName,
-            storage: 'remote',
-            provider: 'cloudinary',
-            providerPublicId: uploadedImage.publicId,
-            takenOn,
-            place,
-            tags,
-            people,
-            activityId,
-            placeId,
-          });
-          continue;
-        }
-
-        const compressedDataUrl = await blobToDataUrl(compressedImage);
-        nextPhotos.push({
-          tripId: trip.id,
-          url: compressedDataUrl,
-          album: albumName,
-          storage: 'embedded',
-          takenOn,
-          place,
-          tags,
-          people,
-          activityId,
-          placeId,
-        });
-      }
+      const nextPhotos = await preparePhotoUploads(files, trip.id, {
+        album: albumName,
+        takenOn,
+        place,
+        tags,
+        people,
+        activityId,
+        placeId,
+      });
       if (nextPhotos.length > 0) {
         await addPhotos(nextPhotos);
       }
@@ -332,17 +299,7 @@ export function TripPhotos() {
     }
 
     void (async () => {
-      await deletePhoto(photoId);
-      let cloudDeleteFailed = false;
-      if (targetPhoto?.provider === 'cloudinary' && targetPhoto.providerPublicId) {
-        try {
-          const wasDeleted = await deleteImageFromCloudinary(targetPhoto.providerPublicId);
-          if (!wasDeleted) cloudDeleteFailed = true;
-        } catch (cloudError) {
-          console.error('Failed to delete image from Cloudinary', cloudError);
-          cloudDeleteFailed = true;
-        }
-      }
+      const cloudDeleteFailed = targetPhoto ? await deletePhotoWithStorage(targetPhoto, deletePhoto) : false;
       if (cloudDeleteFailed) {
         showToast({
           tone: 'error',
@@ -382,16 +339,7 @@ export function TripPhotos() {
       .filter(Boolean) as Photo[];
     let cloudCleanupFailedCount = 0;
     const deleteResults = await Promise.allSettled(targets.map(async (photo) => {
-      await deletePhoto(photo.id);
-      if (photo.provider === 'cloudinary' && photo.providerPublicId) {
-        try {
-          const wasDeleted = await deleteImageFromCloudinary(photo.providerPublicId);
-          if (!wasDeleted) cloudCleanupFailedCount += 1;
-        } catch (error) {
-          cloudCleanupFailedCount += 1;
-          console.error('Failed to delete image from Cloudinary', error);
-        }
-      }
+      if (await deletePhotoWithStorage(photo, deletePhoto)) cloudCleanupFailedCount += 1;
     }));
     const failedCount = deleteResults.filter((result) => result.status === 'rejected').length;
     if (failedCount > 0) {
@@ -419,16 +367,16 @@ export function TripPhotos() {
 
   const containerVariants = pageStaggerVariants;
   const itemVariants = {
-    hidden: { opacity: 0, scale: 0.95 },
-    show: { opacity: 1, scale: 1, transition: { ease: 'easeOut', duration: 0.2 } }
+    hidden: { opacity: 0, y: 10 },
+    show: { opacity: 1, y: 0, transition: { ease: 'easeOut', duration: 0.18 } }
   } as const;
 
   return (
     <motion.div variants={containerVariants} initial="hidden" animate="show" className="pb-10">
-      <motion.div variants={itemVariants} className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between md:mb-8">
+      <motion.div variants={itemVariants} className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="mb-2 font-label text-[11px] font-bold uppercase tracking-[0.16em] text-secondary dark:text-gray-300 md:text-xs md:tracking-[0.2em]">Kỷ niệm</p>
-          <h1 className="font-headline text-2xl font-extrabold text-primary dark:text-white md:text-4xl md:tracking-tighter">Thư viện ảnh</h1>
+          <p className="mb-1 text-xs font-semibold text-secondary dark:text-gray-300">Kỷ niệm</p>
+          <h1 className="text-balance font-headline text-2xl font-extrabold text-primary dark:text-white md:text-3xl">Thư viện ảnh</h1>
         </div>
         <div className="flex flex-wrap gap-2 sm:gap-3">
           {canEdit && (
@@ -475,7 +423,7 @@ export function TripPhotos() {
         )}
       </AnimatePresence>
 
-      <motion.div variants={itemVariants} className="mb-5 flex flex-col gap-3 md:mb-6 md:flex-row md:items-center md:justify-between">
+      <motion.div variants={itemVariants} className="mb-4 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
         <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-2 md:flex md:max-w-2xl md:gap-3">
           <div className="relative flex-1">
           <Icons.Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-secondary dark:text-gray-300" />
@@ -510,7 +458,7 @@ export function TripPhotos() {
 
       <AnimatePresence>
         {albums.length > 1 && (
-          <motion.div variants={itemVariants} initial="hidden" animate="show" exit={{ opacity: 0, height: 0 }} className="no-scrollbar mb-6 flex gap-2 overflow-x-auto pb-2 md:mb-8 md:gap-4">
+          <motion.div variants={itemVariants} initial="hidden" animate="show" exit={{ opacity: 0 }} className="no-scrollbar mb-4 flex gap-2 overflow-x-auto pb-1">
             {albums.map(album => (
               <button
                 key={album}
@@ -598,6 +546,7 @@ export function TripPhotos() {
             <button
               type="button"
               onClick={() => isSelectionMode ? toggleSelectedPhoto(photo.id) : setSelectedPhotoId(photo.id)}
+              aria-label={photo.itemType === 'journal' ? `Mở nhật ký ${photo.album}` : `Mở ảnh ${photo.album}`}
               className="block h-full w-full text-left bg-surface-container-low"
             >
               {photo.itemType === 'journal' ? (
@@ -606,7 +555,7 @@ export function TripPhotos() {
                   <p className="text-sm font-semibold italic text-on-surface line-clamp-4 relative z-10">"{photo.content}"</p>
                 </div>
               ) : (
-                <img src={photo.url} alt="Trip memory" className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" loading="lazy" decoding="async" />
+                <img src={photo.url} alt="Trip memory" className="size-full object-cover" loading="lazy" decoding="async" />
               )}
             </button>
             {isSelectionMode && (
@@ -632,6 +581,7 @@ export function TripPhotos() {
               {canEdit && (
                 <button
                   onClick={() => handleDeletePhoto(photo.id, photo.storage === 'remote')}
+                  aria-label="Xóa ảnh"
                   className="pointer-events-auto absolute top-3 right-3 p-2 bg-error/90 text-white rounded-lg hover:bg-error transition-colors"
                 >
                   <Icons.Trash2 className="w-4 h-4" />

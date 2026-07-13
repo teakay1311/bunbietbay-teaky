@@ -258,8 +258,8 @@ export function PlacesNotebook() {
 
     return (
         <React.Fragment>
-            <motion.div variants={containerVariants} initial="hidden" animate="show" className="mx-auto mb-24 grid max-w-7xl gap-6 py-2 lg:py-8 xl:grid-cols-[230px_minmax(0,1fr)]">
-                <aside className="hidden self-start rounded-2xl border border-outline-variant/50 bg-surface-container-lowest p-3 xl:block">
+            <motion.div variants={containerVariants} initial="hidden" animate="show" className="mx-auto mb-16 max-w-7xl py-2 lg:py-4">
+                <aside className="hidden">
                     <div className="flex items-center justify-between px-2 py-2">
                         <h2 className="font-headline text-lg font-bold">Bộ sưu tập</h2>
                         {canWriteLibrary && <button type="button" onClick={() => setIsCreateNbOpen(true)} aria-label="Tạo bộ sưu tập" title="Tạo bộ sưu tập" className="flex size-9 items-center justify-center rounded-lg text-primary hover:bg-surface-container-low"><Icons.Plus className="size-5" /></button>}
@@ -288,7 +288,7 @@ export function PlacesNotebook() {
                     </div>
 
                     <div className="flex flex-col items-stretch gap-2 md:items-end md:gap-3">
-                        <div className="flex gap-2 xl:hidden">
+                        <div className="flex gap-2">
                         <select
                             value={activeNotebookId}
                             onChange={e => setActiveNotebookId(e.target.value)}
@@ -329,7 +329,7 @@ export function PlacesNotebook() {
                     </div>
                 </motion.div>
 
-                <div className="sticky top-20 z-20 mb-6 flex flex-col items-start justify-between gap-2 rounded-2xl border border-outline-variant/30 bg-surface p-2 md:static md:mb-10 2xl:flex-row 2xl:items-center">
+                <div className="sticky top-20 z-20 mb-5 flex flex-col items-start justify-between gap-2 rounded-2xl border border-outline-variant/30 bg-surface p-2 md:static 2xl:flex-row 2xl:items-center">
                     <label className="w-full md:hidden"><span className="sr-only">Lọc loại địa điểm</span><select value={activeTab} onChange={(event) => setActiveTab(event.target.value as typeof activeTab)} className="min-h-11 w-full rounded-xl border border-outline-variant bg-surface-container-low px-3 font-semibold"><option value="all">Tất cả loại địa điểm</option><option value="hotel">Khách sạn</option><option value="restaurant">Nhà hàng</option><option value="cafe">Quán Cafe</option><option value="entertainment">Vui chơi</option><option value="other">Khác</option></select></label>
                     <motion.div variants={itemVariants} className="hidden max-w-full gap-2 md:flex">
                         {(['all', 'hotel', 'restaurant', 'cafe', 'entertainment', 'other'] as const).map(tab => {

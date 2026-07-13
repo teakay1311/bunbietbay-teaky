@@ -24,6 +24,7 @@ const TripPacking = lazyWithRetry(() => import('./screens/TripPacking').then((mo
 const TripPhotos = lazyWithRetry(() => import('./screens/TripPhotos').then((module) => ({ default: module.TripPhotos })));
 const Settings = lazyWithRetry(() => import('./screens/Settings').then((module) => ({ default: module.Settings })));
 const PlacesNotebook = lazyWithRetry(() => import('./screens/PlacesNotebook').then((module) => ({ default: module.PlacesNotebook })));
+const GlobalPhotoLibrary = lazyWithRetry(() => import('./screens/GlobalPhotoLibrary').then((module) => ({ default: module.GlobalPhotoLibrary })));
 const Inbox = lazyWithRetry(() => import('./screens/Inbox').then((module) => ({ default: module.Inbox })));
 const TripMore = lazyWithRetry(() => import('./screens/TripMore').then((module) => ({ default: module.TripMore })));
 const TripSettings = lazyWithRetry(() => import('./screens/TripSettings').then((module) => ({ default: module.TripSettings })));
@@ -160,6 +161,7 @@ function AppRoutes() {
         <Route element={<GlobalLayoutWrapper />}>
           <Route path="/trips" element={<MyTrips />} />
           <Route path="/library" element={<PlacesNotebook />} />
+          <Route path="/photos" element={<GlobalPhotoLibrary />} />
           <Route path="/inbox" element={<Inbox />} />
           <Route path="/notebook" element={<LegacyRedirect to="/library" />} />
         </Route>

@@ -100,7 +100,7 @@ export function Login() {
           <div className="relative z-10 flex h-[100%] flex-col justify-start">
             <div className="max-w-xl bg-surface/85 backdrop-blur-3xl p-6 lg:p-8 rounded-[2.5rem] shadow-2xl border border-white/20 dark:border-white/5">
               <p className="font-label text-xs font-extrabold uppercase tracking-[0.35em] text-primary dark:text-white">Bunbietbay & Teakay's Trips</p>
-              <h1 className="mt-5 max-w-xl font-headline text-4xl lg:text-5xl font-black leading-[1.05] tracking-[-0.04em] text-on-surface drop-shadow-sm">
+              <h1 className="mt-4 max-w-xl text-balance font-headline text-2xl font-black leading-tight text-on-surface lg:text-3xl">
                 Hành trình trọn vẹn, kỷ niệm lưu giữ mãi mãi.
               </h1>
               <p className="mt-5 max-w-lg text-base lg:text-lg leading-relaxed text-on-surface-variant font-medium">

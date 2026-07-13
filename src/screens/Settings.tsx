@@ -293,19 +293,19 @@ export function Settings() {
   };
 
   const sectionVariants = {
-    hidden: { opacity: 0, y: 15, scale: 0.98 },
-    visible: { opacity: 1, y: 0, scale: 1, transition: { ease: 'easeOut', duration: 0.2 } },
-    exit: { opacity: 0, y: -10, scale: 0.98, transition: { duration: 0.2 } },
+    hidden: { opacity: 0, y: 10 },
+    visible: { opacity: 1, y: 0, transition: { ease: 'easeOut', duration: 0.18 } },
+    exit: { opacity: 0, transition: { duration: 0.15 } },
   } as const;
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="pb-10">
-      <div className="mb-6 flex flex-col gap-3 md:mb-8">
+      <div className="mb-5 flex flex-col gap-2">
         <p className="font-label text-[11px] font-extrabold uppercase tracking-[0.18em] text-secondary dark:text-gray-300 md:text-xs md:tracking-[0.3em]">Thiết lập hệ thống</p>
         <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
           <div className="max-w-3xl">
             <h1 className="text-balance font-headline text-2xl font-black text-primary dark:text-white md:text-5xl">Tài khoản và tùy chỉnh</h1>
-            <p className="mt-3 hidden text-lg leading-8 text-secondary dark:text-gray-300 md:block">
+            <p className="mt-2 hidden text-sm leading-6 text-secondary dark:text-gray-300 md:block">
               Quản lý hồ sơ cá nhân, giao diện, nhắc việc, dữ liệu và phím tắt theo từng nhóm rõ ràng.
             </p>
           </div>
@@ -349,7 +349,7 @@ export function Settings() {
           </div>
         </aside>
 
-        <div className="space-y-8 min-w-0">
+        <div className="min-w-0 space-y-5">
           <AnimatePresence mode="wait">
             {activeSection === 'account' && (
               <motion.section key="account" variants={sectionVariants} initial="hidden" animate="visible" exit="exit" className="rounded-2xl bg-surface-container-lowest p-4 shadow-[0_12px_28px_rgba(0,0,0,0.05)] md:rounded-[2rem] md:p-8 md:shadow-[0_18px_40px_rgba(0,0,0,0.06)]">
