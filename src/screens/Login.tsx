@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Navigate } from 'react-router-dom';
 import { Icons } from '../components/Icons';
 import { useAuth } from '../context/AuthContext';
+import loginTravelDesktop from '../assets/login-travel-desktop.webp';
+import loginTravelMobile from '../assets/login-travel-mobile.webp';
 
 type AccessMethod = 'password' | 'otp';
 type PasswordMode = 'signin' | 'signup' | 'reset';
@@ -95,10 +97,15 @@ export function Login() {
   return (
     <div className="min-h-dvh bg-surface px-6 py-8 text-on-surface">
       <div className="mx-auto grid min-h-[calc(100dvh-4rem)] max-w-7xl grid-cols-1 overflow-hidden rounded-2xl border border-outline-variant/60 bg-surface-container-lowest shadow-sm lg:grid-cols-[1.12fr_0.88fr]">
-        <section className="relative overflow-hidden px-6 pt-4 pb-10 lg:px-8 lg:pt-6 lg:pb-14 bg-cover bg-center rounded-[2rem] md:rounded-[none] md:rounded-l-[2rem]" style={{ backgroundImage: "url('/login-bg.png')" }}>
+        <section className="relative overflow-hidden rounded-[2rem] bg-surface-container px-6 pb-10 pt-4 md:rounded-none md:rounded-l-[2rem] lg:px-8 lg:pb-14 lg:pt-6">
+          <picture aria-hidden="true">
+            <source media="(max-width: 1023px)" srcSet={loginTravelMobile} />
+            <img src={loginTravelDesktop} alt="" width="1080" height="1200" fetchPriority="high" decoding="async" className="absolute inset-0 size-full object-cover object-center" />
+          </picture>
+          <div aria-hidden="true" className="absolute inset-0 bg-surface/10 dark:bg-[#0b1213]/25" />
           <div className="absolute inset-y-0 right-0 hidden w-px bg-outline-variant/50 lg:block" />
           <div className="relative z-10 flex h-[100%] flex-col justify-start">
-            <div className="max-w-xl rounded-2xl border border-outline-variant/50 bg-surface/95 p-6 shadow-sm lg:p-8">
+            <div className="max-w-xl rounded-2xl border border-[#0b1213]/30 bg-surface/95 p-6 shadow-sm dark:border-[#fff4e6]/30 lg:p-8">
               <p className="font-label text-xs font-extrabold uppercase tracking-[0.35em] text-primary dark:text-white">Bunbietbay & Teakay's Trips</p>
               <h1 className="mt-4 max-w-xl text-balance font-headline text-2xl font-black leading-tight text-on-surface lg:text-3xl">
                 Hành trình trọn vẹn, kỷ niệm lưu giữ mãi mãi.
@@ -112,7 +119,7 @@ export function Login() {
 
         <section className="flex items-center bg-surface-container-low px-6 py-10 lg:px-10">
           <div className="mx-auto w-full max-w-md">
-            <div className="rounded-[2rem] bg-surface-container-lowest p-7 shadow-[0_20px_40px_rgba(0,0,0,0.08)]">
+            <div className="rounded-[2rem] border-2 border-[#0b1213] bg-surface-container-lowest p-7 shadow-[4px_4px_0_rgba(11,18,19,0.14)] dark:border-[#fff4e6] dark:shadow-[4px_4px_0_rgba(255,244,230,0.12)]">
               <div className="mb-5 flex items-start justify-between gap-4">
                 <div>
                   <p className="font-label text-xs font-bold uppercase tracking-[0.3em] text-secondary dark:text-gray-300">Đăng nhập</p>
@@ -131,7 +138,7 @@ export function Login() {
                 </div>
               </div>
 
-              <div className="mb-5 grid grid-cols-2 gap-2 rounded-2xl bg-surface-container-low p-1">
+              <div className="mb-5 grid grid-cols-2 gap-2 rounded-2xl border border-[#0b1213]/45 bg-surface-container-low p-1 dark:border-[#fff4e6]/45">
                 <button
                   type="button"
                   onClick={() => setAccessMethod('password')}
@@ -159,7 +166,7 @@ export function Login() {
                       key={mode}
                       type="button"
                       onClick={() => setPasswordMode(mode)}
-                      className={`rounded-full px-4 py-2 text-sm font-semibold transition ${passwordMode === mode ? 'bg-primary text-on-primary' : 'bg-surface-container-low text-secondary dark:text-gray-300'}`}
+                      className={`rounded-full border px-4 py-2 text-sm font-semibold transition ${passwordMode === mode ? 'border-primary bg-primary text-on-primary' : 'border-[#0b1213]/25 bg-surface-container-lowest text-secondary dark:border-[#fff4e6]/30 dark:text-gray-300'}`}
                     >
                       {label}
                     </button>
@@ -193,7 +200,7 @@ export function Login() {
                     value={email}
                     onChange={(event) => setEmail(event.target.value)}
                     placeholder="you@example.com"
-                    className="density-control w-full rounded-2xl border border-outline-variant/60 bg-surface-container-low text-base text-on-surface outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+                    className="density-control w-full rounded-2xl border border-[#0b1213]/60 bg-surface-container-lowest text-base text-on-surface outline-none transition placeholder:text-secondary/80 focus:border-primary focus:ring-2 focus:ring-primary/30 dark:border-[#fff4e6]/55"
                   />
                 </div>
 
@@ -205,7 +212,7 @@ export function Login() {
                       value={password}
                       onChange={(event) => setPassword(event.target.value)}
                       placeholder="Tối thiểu 6 ký tự"
-                      className="density-control w-full rounded-2xl border border-outline-variant/60 bg-surface-container-low text-base text-on-surface outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+                      className="density-control w-full rounded-2xl border border-[#0b1213]/60 bg-surface-container-lowest text-base text-on-surface outline-none transition placeholder:text-secondary/80 focus:border-primary focus:ring-2 focus:ring-primary/30 dark:border-[#fff4e6]/55"
                     />
                   </div>
                 )}
@@ -218,7 +225,7 @@ export function Login() {
                       value={confirmPassword}
                       onChange={(event) => setConfirmPassword(event.target.value)}
                       placeholder="Nhập lại mật khẩu"
-                      className="density-control w-full rounded-2xl border border-outline-variant/60 bg-surface-container-low text-base text-on-surface outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+                      className="density-control w-full rounded-2xl border border-[#0b1213]/60 bg-surface-container-lowest text-base text-on-surface outline-none transition placeholder:text-secondary/80 focus:border-primary focus:ring-2 focus:ring-primary/30 dark:border-[#fff4e6]/55"
                     />
                   </div>
                 )}
@@ -232,7 +239,7 @@ export function Login() {
                       value={token}
                       onChange={(event) => setToken(event.target.value)}
                       placeholder="123456"
-                      className="density-control w-full rounded-2xl border border-outline-variant/60 bg-surface-container-low text-base text-on-surface outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+                      className="density-control w-full rounded-2xl border border-[#0b1213]/60 bg-surface-container-lowest text-base text-on-surface outline-none transition placeholder:text-secondary/80 focus:border-primary focus:ring-2 focus:ring-primary/30 dark:border-[#fff4e6]/55"
                     />
                   </div>
                 )}
