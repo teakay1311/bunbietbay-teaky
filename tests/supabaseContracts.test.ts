@@ -77,6 +77,15 @@ test('collaboration migration enforces same-trip links and role-dependent viewer
   assert.match(sql, /only trip managers can delete a poll that has votes/);
 });
 
+test('collaboration integrity migration keeps replies in one thread and clears revoked assignments', () => {
+  const sql = readSql('fix_collaboration_integrity.sql');
+  assert.match(sql, /parent_target_type is distinct from new\.target_type/);
+  assert.match(sql, /parent_target_id is distinct from new\.target_id/);
+  assert.match(sql, /update public\.trip_tasks set assignee_id = null/);
+  assert.match(sql, /membership\.revoked_at is null/);
+  assert.match(sql, /trip_memberships_clear_revoked_assignments/);
+});
+
 test('public sharing only exposes an allowlisted security-definer RPC', () => {
   const sql = readSql('add_collaboration_offline_sharing.sql');
   assert.match(sql, /token_hash text not null unique/);

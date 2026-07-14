@@ -192,6 +192,20 @@ test('accepts linked trip entities and rejects cross-trip links', () => {
   assert.throws(() => validateImportedSnapshot(linked), /hoạt động không hợp lệ/i);
 });
 
+test('rejects replies linked to a different comment target', () => {
+  const linked = structuredClone(validSnapshot);
+  linked.activities.push(
+    { id: 'activity-1', tripId: 't1', date: '2026-01-02', time: '09:00', title: 'Điểm một', location: 'A', note: '', type: 'other' },
+    { id: 'activity-2', tripId: 't1', date: '2026-01-02', time: '10:00', title: 'Điểm hai', location: 'B', note: '', type: 'other' },
+  );
+  linked.comments.push(
+    { id: 'comment-1', tripId: 't1', targetType: 'activity', targetId: 'activity-1', authorId: 'm1', body: 'Gốc', mentionedUserIds: [], createdAt: '2026-01-02T09:00:00.000Z', updatedAt: '2026-01-02T09:00:00.000Z' },
+    { id: 'comment-2', tripId: 't1', targetType: 'activity', targetId: 'activity-2', parentId: 'comment-1', authorId: 'm1', body: 'Sai luồng', mentionedUserIds: [], createdAt: '2026-01-02T10:00:00.000Z', updatedAt: '2026-01-02T10:00:00.000Z' },
+  );
+
+  assert.throws(() => validateImportedSnapshot(linked), /phản hồi bình luận không cùng luồng/i);
+});
+
 test('duplicates active memberships with the creator as owner', () => {
   const roles = buildDuplicatedMembershipRoles([
     { id: 'tm1', tripId: 't1', userId: 'old-owner', role: 'owner' },

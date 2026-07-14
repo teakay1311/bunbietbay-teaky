@@ -217,7 +217,10 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
   const assertCommentTarget = useCallback((input: CommentInput) => {
     const sources = { activity: snapshot.activities, expense: snapshot.expenses, place: snapshot.savedPlaces, photo: snapshot.photos, task: snapshot.tasks, poll: snapshot.polls };
     if (sources[input.targetType].find((item) => item.id === input.targetId)?.tripId !== input.tripId) throw new Error('Nội dung bình luận phải thuộc cùng chuyến đi.');
-    if (input.parentId && snapshot.comments.find((item) => item.id === input.parentId)?.parentId) throw new Error('Bình luận chỉ hỗ trợ một cấp trả lời.');
+    if (input.parentId) {
+      const parent = snapshot.comments.find((item) => item.id === input.parentId);
+      if (!parent || parent.tripId !== input.tripId || parent.targetType !== input.targetType || parent.targetId !== input.targetId || parent.parentId) throw new Error('Bình luận trả lời phải thuộc cùng một luồng và chỉ hỗ trợ một cấp.');
+    }
     const memberIds = new Set(trips.find((trip) => trip.id === input.tripId)?.members.map((member) => member.id));
     if ((input.mentionedUserIds ?? []).some((memberId) => !memberIds.has(memberId))) throw new Error('Chỉ có thể nhắc tên thành viên đang hoạt động.');
   }, [snapshot, trips]);
@@ -234,8 +237,9 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
 
   const editComment = useCallback(async (commentId: string, body: string, mentionedUserIds: string[] = []) => {
     const comment = snapshot.comments.find((item) => item.id === commentId);
-    const trip = trips.find((item) => item.id === comment?.tripId);
-    if (!comment || !(comment.authorId === viewerId || trip?.permissions.canManageMembers)) throw new Error('Bạn không có quyền sửa bình luận.');
+    if (!comment || comment.authorId !== viewerId) throw new Error('Bạn chỉ có thể sửa bình luận của mình.');
+    const memberIds = new Set(trips.find((trip) => trip.id === comment.tripId)?.members.map((member) => member.id));
+    if (mentionedUserIds.some((memberId) => !memberIds.has(memberId))) throw new Error('Chỉ có thể nhắc tên thành viên đang hoạt động.');
     const payload = { body: body.trim(), mentioned_user_ids: mentionedUserIds };
     if (!payload.body) throw new Error('Bình luận không được để trống.');
     await commit({ remote: async () => { const { error } = await supabase!.from('trip_comments').update(payload).eq('id', commentId); if (error) throw error; }, local: () => updatePersistedState((state) => ({ ...state, comments: state.comments.map((item) => item.id === commentId ? { ...item, body: payload.body, mentionedUserIds, updatedAt: now() } : item) })), offline: { entityType: 'comment', entityId: commentId, tripId: comment.tripId, action: 'update', payload, restorePayload: { id: comment.id, trip_id: comment.tripId, target_type: comment.targetType, target_id: comment.targetId, parent_id: comment.parentId, author_id: comment.authorId, body: payload.body, mentioned_user_ids: mentionedUserIds, created_at: comment.createdAt, updated_at: now() }, baseUpdatedAt: comment.updatedAt } });

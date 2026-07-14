@@ -35,6 +35,7 @@ This repo now supports 2 runtime modes:
    - `supabase/add_preferences_and_notebook_permissions.sql`
    - `supabase/protect_owner_memberships.sql`
    - `supabase/accept_invitation_function.sql`
+   - `supabase/fix_collaboration_integrity.sql`
 3. Copy `.env.example` to `.env`.
 4. Set:
    - `VITE_SUPABASE_URL`
@@ -61,6 +62,7 @@ Do not run `schema.sql` again on a database that already contains trips.
    - `supabase/add_preferences_and_notebook_permissions.sql`
    - `supabase/protect_owner_memberships.sql`
    - `supabase/accept_invitation_function.sql`
+   - `supabase/fix_collaboration_integrity.sql`
 4. Confirm existing memberships have `revoked_at is null`, then reload the PostgREST schema cache if the API still reports a missing column.
 5. Reload the web app and sign in again. Keep additive columns if the frontend must be rolled back.
 

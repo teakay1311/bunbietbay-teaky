@@ -586,6 +586,10 @@ export function validateImportedSnapshot(state: Partial<PersistedAppState>): ass
   snapshot.comments.forEach((comment) => {
     const target = targetMaps[comment.targetType].get(comment.targetId);
     if (!target || target.tripId !== comment.tripId || !membershipKeys.has(`${comment.tripId}:${comment.authorId}`) || comment.mentionedUserIds.some((userId) => !membershipKeys.has(`${comment.tripId}:${userId}`))) throw new Error('Backup chứa bình luận không hợp lệ.');
+    if (comment.parentId) {
+      const parent = snapshot.comments.find((item) => item.id === comment.parentId);
+      if (!parent || parent.parentId || parent.tripId !== comment.tripId || parent.targetType !== comment.targetType || parent.targetId !== comment.targetId) throw new Error('Backup chứa phản hồi bình luận không cùng luồng hợp lệ.');
+    }
   });
   snapshot.notifications.forEach((notification) => {
     assertTripLink(notification.tripId, 'thông báo');

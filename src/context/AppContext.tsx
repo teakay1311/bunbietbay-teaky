@@ -704,6 +704,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       withLocalUpdate((currentState) => ({
         ...currentState,
         memberships: currentState.memberships.map((membership) => membership.id === membershipId ? { ...membership, revokedAt } : membership),
+        tasks: currentState.tasks.map((task) => task.tripId === membership.tripId && task.assigneeId === membership.userId ? { ...task, assigneeId: undefined, updatedAt: revokedAt } : task),
       }));
     },
     addExpense: async (expense) => {

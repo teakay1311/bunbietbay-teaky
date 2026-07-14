@@ -441,6 +441,24 @@ async function runSmoke() {
   if (await viewerPhotoDialog.getByRole('button', { name: 'Sửa thông tin' }).count() !== 0 || await viewerPhotoDialog.getByRole('button', { name: 'Xóa ảnh' }).count() !== 0) throw new Error('Viewer vẫn thấy thao tác sửa hoặc xóa ảnh.');
   await viewerContext.close();
 
+  const moderatorContext = await browser.newContext();
+  const moderatorPage = await moderatorContext.newPage();
+  await moderatorPage.addInitScript((state) => localStorage.setItem('bunbietbay-app-state', JSON.stringify(state)), {
+    version: 7,
+    trips: [{ id: 'moderated-trip', title: 'Moderated trip', location: 'Huế', startDate: '2026-08-01', endDate: '2026-08-03', budget: 3000000, status: 'upcoming', image: '', createdBy: 'moderator' }],
+    profiles: [{ id: 'moderator', email: 'moderator@example.com', displayName: 'Moderator', avatar: '' }, { id: 'author', email: 'author@example.com', displayName: 'Author', avatar: '' }],
+    memberships: [{ id: 'moderator-membership', tripId: 'moderated-trip', userId: 'moderator', role: 'owner' }, { id: 'author-membership', tripId: 'moderated-trip', userId: 'author', role: 'editor' }],
+    activities: [{ id: 'moderated-activity', tripId: 'moderated-trip', date: '2026-08-01', time: '09:00', title: 'Hoạt động có bình luận', location: 'Huế', note: '', type: 'other' }],
+    comments: [{ id: 'other-comment', tripId: 'moderated-trip', targetType: 'activity', targetId: 'moderated-activity', authorId: 'author', body: 'Nội dung của tác giả', mentionedUserIds: [], createdAt: '2026-08-01T09:00:00.000Z', updatedAt: '2026-08-01T09:00:00.000Z' }],
+    currentTripId: 'moderated-trip', viewerProfileId: 'moderator',
+  });
+  await moderatorPage.goto(`${baseUrl}/trips/moderated-trip/plan?tab=itinerary`, { waitUntil: 'networkidle' });
+  const moderatedActivity = moderatorPage.locator('article').filter({ hasText: 'Hoạt động có bình luận' }).first();
+  await moderatedActivity.getByRole('button', { name: /bình luận/i }).click();
+  if (await moderatedActivity.getByRole('button', { name: 'Sửa bình luận' }).count() !== 0) throw new Error('Owner/Admin vẫn có thể sửa nội dung bình luận của người khác.');
+  await moderatedActivity.getByRole('button', { name: 'Xóa bình luận' }).waitFor();
+  await moderatorContext.close();
+
   await browser.close();
 
   if (runtimeErrors.length > 0) {
