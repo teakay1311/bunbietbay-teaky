@@ -1,5 +1,5 @@
 import { Suspense, useEffect } from 'react';
-import { BrowserRouter, HashRouter, Navigate, Outlet, Route, Routes, useLocation, useParams } from 'react-router-dom';
+import { BrowserRouter, HashRouter, Link, Navigate, Outlet, Route, Routes, useLocation, useParams } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { CommandPalette } from './components/CommandPalette';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -15,6 +15,7 @@ import { lazyWithRetry } from './utils/lazyWithRetry';
 import { TripSectionTabs } from './components/TripSectionTabs';
 
 const Login = lazyWithRetry(() => import('./screens/Login').then((module) => ({ default: module.Login })));
+const ResetPassword = lazyWithRetry(() => import('./screens/ResetPassword').then((module) => ({ default: module.ResetPassword })));
 const MyTrips = lazyWithRetry(() => import('./screens/MyTrips').then((module) => ({ default: module.MyTrips })));
 const TripSchedule = lazyWithRetry(() => import('./screens/TripSchedule').then((module) => ({ default: module.TripSchedule })));
 const TripOverview = lazyWithRetry(() => import('./screens/TripOverview').then((module) => ({ default: module.TripOverview })));
@@ -123,6 +124,42 @@ function PublicLoginRoute() {
   return <Login />;
 }
 
+function PublicAuthCallbackRoute() {
+  const { isConfigured, session, isAuthLoading } = useAuth();
+  const location = useLocation();
+
+  if (isAuthLoading) {
+    return <BootLoadingFallback />;
+  }
+
+  if (!isConfigured) {
+    return <Navigate to="/trips" replace />;
+  }
+
+  if (session) {
+    return <Navigate to="/trips" replace />;
+  }
+
+  const queryParams = new URLSearchParams(location.search);
+  const hashParams = new URLSearchParams(location.hash.replace(/^#/, ''));
+  const errorDescription = queryParams.get('error_description') || hashParams.get('error_description');
+
+  return (
+    <main className="flex min-h-dvh items-center justify-center bg-surface px-6 py-10 text-on-surface">
+      <section className="w-full max-w-md rounded-[2rem] border-2 border-[#0b1213] bg-surface-container-lowest p-7 shadow-[4px_4px_0_rgba(11,18,19,0.14)] dark:border-[#fff4e6] sm:p-8">
+        <p className="font-label text-xs font-bold uppercase tracking-[0.3em] text-secondary dark:text-gray-300">Bunbietbay Trips</p>
+        <h1 className="mt-3 font-headline text-3xl font-black tracking-[-0.03em]">Liên kết không còn hiệu lực</h1>
+        <p className="mt-4 text-on-surface-variant">
+          {errorDescription || 'Không thể xác nhận liên kết email này. Liên kết có thể đã hết hạn hoặc đã được sử dụng.'}
+        </p>
+        <Link to="/login" className="density-button mt-6 flex w-full items-center justify-center rounded-2xl bg-slate-950 font-headline text-lg font-bold text-white transition hover:opacity-95">
+          Quay lại đăng nhập
+        </Link>
+      </section>
+    </main>
+  );
+}
+
 function GlobalLayoutWrapper() {
   return (
     <Layout>
@@ -159,6 +196,8 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<Suspense fallback={<BootLoadingFallback />}><PublicLoginRoute /></Suspense>} />
+      <Route path="/auth/callback" element={<PublicAuthCallbackRoute />} />
+      <Route path="/reset-password" element={<Suspense fallback={<BootLoadingFallback />}><ResetPassword /></Suspense>} />
       <Route path="/share/:token" element={<Suspense fallback={<BootLoadingFallback />}><PublicTripShare /></Suspense>} />
       <Route element={<ProtectedRoutes />}>
         <Route path="/" element={<Navigate to="/trips" replace />} />

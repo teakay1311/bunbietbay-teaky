@@ -43,6 +43,14 @@ function isLocalHost() {
   return window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 }
 
+function getAuthRedirectUrl(path: string) {
+  if (typeof window === 'undefined' || window.location.origin === 'null') {
+    return undefined;
+  }
+
+  return new URL(path, window.location.origin).toString();
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -232,6 +240,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { data, error } = await supabase.auth.signUp({
         email: normalizedEmail,
         password,
+        options: {
+          emailRedirectTo: getAuthRedirectUrl('/auth/callback'),
+        },
       });
 
       if (error) {
@@ -245,7 +256,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setAuthNotice(
         data.session
           ? 'Tài khoản đã được tạo và bạn đã được đăng nhập.'
-          : 'Tài khoản đã được tạo. Nếu dự án đang bật xác minh email, hãy mở email một lần để kích hoạt tài khoản.',
+          : 'Tài khoản đã được tạo. Hãy mở liên kết xác nhận email để kích hoạt tài khoản và quay lại ứng dụng.',
       );
     },
     sendLoginCode: async (email: string) => {
@@ -258,6 +269,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         email: normalizedEmail,
         options: {
           shouldCreateUser: true,
+          emailRedirectTo: getAuthRedirectUrl('/auth/callback'),
         },
       });
 
@@ -298,7 +310,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       const normalizedEmail = email.trim().toLowerCase();
-      const redirectTo = typeof window === 'undefined' ? undefined : `${window.location.origin}/login`;
+      const redirectTo = getAuthRedirectUrl('/reset-password');
       const { error } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
         redirectTo,
       });
@@ -310,7 +322,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       setAuthError(null);
-      setAuthNotice('Email đặt lại mật khẩu đã được gửi. Sau khi mở liên kết, bạn có thể đổi mật khẩu trong ứng dụng.');
+      setAuthNotice('Email đặt lại mật khẩu đã được gửi. Hãy mở liên kết để quay lại ứng dụng và đặt mật khẩu mới.');
     },
     signOut: async () => {
       if (!supabase) {

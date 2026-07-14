@@ -86,6 +86,14 @@ async function runSmoke() {
   if (await page.locator('a button, button a').count() > 0) throw new Error('Thẻ chuyến đi còn lồng control tương tác bên trong liên kết.');
   await page.getByRole('combobox', { name: 'Lọc chuyến đi theo trạng thái' }).waitFor();
 
+  await page.goto(`${baseUrl}/reset-password`, { waitUntil: 'networkidle' });
+  await page.getByText('Liên kết đặt lại mật khẩu không hợp lệ hoặc đã hết hạn.', { exact: false }).waitFor();
+  await page.getByRole('link', { name: 'Quay lại đăng nhập' }).waitFor();
+  await page.goto(`${baseUrl}/auth/callback#error_description=Link%20expired`, { waitUntil: 'networkidle' });
+  await page.getByRole('heading', { name: 'Liên kết không còn hiệu lực' }).waitFor();
+  await page.getByText('Link expired', { exact: true }).waitFor();
+  await page.goto(`${baseUrl}/trips`, { waitUntil: 'networkidle' });
+
   await page.getByRole('link', { name: 'Mở chuyến đi Mùa Thu Tại Đà Lạt' }).click();
   await page.waitForURL('**/trips/t3');
   await page.waitForSelector('text=Đà Lạt');
