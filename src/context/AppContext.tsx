@@ -229,7 +229,8 @@ function queueOfflineWorkspaceChanges(before: PersistedAppState, after: Persiste
 }
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const { session, userEmail, profile } = useAuth();
+  const { session: authSession, userEmail, profile, isPasswordRecovery } = useAuth();
+  const session = isPasswordRecovery ? null : authSession;
   const [workspaceState, setWorkspaceState] = useState<PersistedAppState>(DEFAULT_LOCAL_WORKSPACE);
   const [isHydrated, setIsHydrated] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);

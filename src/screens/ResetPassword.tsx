@@ -1,15 +1,24 @@
 import { useState, type FormEvent } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Icons } from '../components/Icons';
 import { useAuth } from '../context/AuthContext';
 
 export function ResetPassword() {
-  const { session, isAuthLoading, authError, clearAuthFeedback, updatePassword } = useAuth();
+  const {
+    session,
+    isAuthLoading,
+    isPasswordRecovery,
+    authError,
+    clearAuthFeedback,
+    updatePassword,
+    signOut,
+    cancelPasswordRecovery,
+  } = useAuth();
+  const navigate = useNavigate();
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [localError, setLocalError] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isComplete, setIsComplete] = useState(false);
+  const [stage, setStage] = useState<'editing' | 'submitting' | 'signout-error' | 'complete'>('editing');
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -26,16 +35,46 @@ export function ResetPassword() {
       return;
     }
 
-    setIsSubmitting(true);
+    setStage('submitting');
     try {
       await updatePassword(password);
       setPassword('');
       setConfirmPassword('');
-      setIsComplete(true);
+      try {
+        await signOut();
+        setStage('complete');
+      } catch {
+        setLocalError('Mật khẩu đã được đổi nhưng chưa thể đăng xuất mọi thiết bị. Hãy thử lại thao tác đăng xuất.');
+        setStage('signout-error');
+      }
     } catch {
       // AuthContext already exposes localized feedback for auth failures.
-    } finally {
-      setIsSubmitting(false);
+      setStage('editing');
+    }
+  };
+
+  const retrySignOut = async () => {
+    setLocalError(null);
+    clearAuthFeedback();
+    setStage('submitting');
+    try {
+      await signOut();
+      setStage('complete');
+    } catch {
+      setLocalError('Vẫn chưa thể đăng xuất mọi thiết bị. Vui lòng kiểm tra kết nối và thử lại.');
+      setStage('signout-error');
+    }
+  };
+
+  const cancelRecovery = async () => {
+    setLocalError(null);
+    clearAuthFeedback();
+    setStage('submitting');
+    try {
+      await cancelPasswordRecovery();
+      navigate('/login', { replace: true });
+    } catch {
+      setStage('editing');
     }
   };
 
@@ -54,22 +93,22 @@ export function ResetPassword() {
           <div>
             <p className="font-label text-xs font-bold uppercase tracking-[0.3em] text-secondary dark:text-gray-300">Bunbietbay Trips</p>
             <h1 className="mt-3 font-headline text-3xl font-black tracking-[-0.03em]">
-              {isComplete ? 'Mật khẩu đã được đổi' : 'Đặt mật khẩu mới'}
+              {stage === 'complete' ? 'Mật khẩu đã được đổi' : 'Đặt mật khẩu mới'}
             </h1>
           </div>
           <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary dark:text-white">
-            {isComplete ? <Icons.Check className="h-6 w-6" /> : <Icons.Lock className="h-6 w-6" />}
+            {stage === 'complete' ? <Icons.Check className="h-6 w-6" /> : <Icons.Lock className="h-6 w-6" />}
           </div>
         </div>
 
-        {isComplete ? (
+        {stage === 'complete' ? (
           <div>
-            <p className="text-on-surface-variant">Bạn có thể tiếp tục sử dụng ứng dụng với mật khẩu mới.</p>
-            <Link to="/trips" className="density-button mt-6 flex w-full items-center justify-center rounded-2xl bg-slate-950 font-headline text-lg font-bold text-white transition hover:opacity-95">
-              Vào ứng dụng
+            <p className="text-on-surface-variant">Mọi phiên đăng nhập đã được thu hồi. Hãy đăng nhập lại bằng mật khẩu mới.</p>
+            <Link to="/login" className="density-button mt-6 flex w-full items-center justify-center rounded-2xl bg-slate-950 font-headline text-lg font-bold text-white transition hover:opacity-95">
+              Đăng nhập bằng mật khẩu mới
             </Link>
           </div>
-        ) : !session ? (
+        ) : !session || !isPasswordRecovery ? (
           <div>
             <div className="rounded-2xl bg-error-container px-4 py-3 text-sm font-medium text-on-error-container">
               Liên kết đặt lại mật khẩu không hợp lệ hoặc đã hết hạn. Hãy yêu cầu một email mới.
@@ -77,6 +116,19 @@ export function ResetPassword() {
             <Link to="/login" className="density-button mt-6 flex w-full items-center justify-center rounded-2xl bg-slate-950 font-headline text-lg font-bold text-white transition hover:opacity-95">
               Quay lại đăng nhập
             </Link>
+          </div>
+        ) : stage === 'signout-error' ? (
+          <div>
+            <div className="rounded-2xl bg-error-container px-4 py-3 text-sm font-medium text-on-error-container">
+              {localError || authError || 'Không thể đăng xuất mọi thiết bị.'}
+            </div>
+            <button
+              type="button"
+              onClick={() => { void retrySignOut(); }}
+              className="density-button mt-6 w-full rounded-2xl bg-slate-950 font-headline text-lg font-bold text-white transition hover:opacity-95"
+            >
+              Thử đăng xuất lại
+            </button>
           </div>
         ) : (
           <form className="space-y-4" onSubmit={(event) => { void handleSubmit(event); }}>
@@ -114,10 +166,19 @@ export function ResetPassword() {
 
             <button
               type="submit"
-              disabled={isSubmitting || !password || !confirmPassword}
+              disabled={stage === 'submitting' || !password || !confirmPassword}
               className="density-button w-full rounded-2xl bg-slate-950 font-headline text-lg font-bold text-white transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {isSubmitting ? 'Đang cập nhật…' : 'Lưu mật khẩu mới'}
+              {stage === 'submitting' ? 'Đang cập nhật và đăng xuất…' : 'Lưu mật khẩu mới'}
+            </button>
+
+            <button
+              type="button"
+              disabled={stage === 'submitting'}
+              onClick={() => { void cancelRecovery(); }}
+              className="density-button w-full rounded-2xl border border-outline-variant/60 bg-surface-container-low font-semibold text-on-surface transition hover:border-primary disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Hủy khôi phục
             </button>
           </form>
         )}

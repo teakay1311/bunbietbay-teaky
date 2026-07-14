@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
 import type { UserProfile } from '../domain/models';
@@ -12,6 +12,7 @@ type AuthContextType = {
   isConfigured: boolean;
   requiresAuth: boolean;
   isAuthLoading: boolean;
+  isPasswordRecovery: boolean;
   isCodeSent: boolean;
   session: Session | null;
   userEmail: string | null;
@@ -25,6 +26,7 @@ type AuthContextType = {
   sendLoginCode: (email: string) => Promise<void>;
   verifyLoginCode: (email: string, token: string) => Promise<void>;
   sendPasswordReset: (email: string) => Promise<void>;
+  cancelPasswordRecovery: () => Promise<void>;
   signOut: () => Promise<void>;
   updatePassword: (password: string) => Promise<void>;
   updateMyProfile: (updates: Partial<UserProfile>) => Promise<void>;
@@ -34,6 +36,31 @@ type AuthContextType = {
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+const PASSWORD_RECOVERY_STORAGE_KEY = 'bunbietbay-password-recovery-user-id';
+
+function hasPasswordRecoveryInUrl() {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
+  const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+  const queryParams = new URLSearchParams(window.location.search);
+  return hashParams.get('type') === 'recovery' || queryParams.get('type') === 'recovery';
+}
+
+function readPasswordRecoveryUserId() {
+  return typeof window === 'undefined' ? null : window.localStorage.getItem(PASSWORD_RECOVERY_STORAGE_KEY);
+}
+
+function storePasswordRecoveryUserId(userId: string) {
+  window.localStorage.setItem(PASSWORD_RECOVERY_STORAGE_KEY, userId);
+}
+
+function clearPasswordRecoveryMarker() {
+  if (typeof window !== 'undefined') {
+    window.localStorage.removeItem(PASSWORD_RECOVERY_STORAGE_KEY);
+  }
+}
 
 function isLocalHost() {
   if (typeof window === 'undefined') {
@@ -52,10 +79,14 @@ function getAuthRedirectUrl(path: string) {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const recoveryFromUrlRef = useRef(hasPasswordRecoveryInUrl());
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [pendingInvitations, setPendingInvitations] = useState<PendingInvitation[]>([]);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
+  const [isPasswordRecovery, setIsPasswordRecovery] = useState(
+    () => recoveryFromUrlRef.current || Boolean(readPasswordRecoveryUserId()),
+  );
   const [isCodeSent, setIsCodeSent] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const [authNotice, setAuthNotice] = useState<string | null>(null);
@@ -82,7 +113,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [authModeOverride, isConfigured]);
 
   const refreshAuthData = useCallback(async () => {
-    if (!session) {
+    if (!session || isPasswordRecovery) {
       setProfile(null);
       setPendingInvitations([]);
       return;
@@ -112,7 +143,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       throw error;
     }
-  }, [session]);
+  }, [isPasswordRecovery, session]);
 
   const clearAuthFeedback = useCallback(() => {
     setAuthError(null);
@@ -121,6 +152,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!supabase) {
+      recoveryFromUrlRef.current = false;
+      clearPasswordRecoveryMarker();
+      setIsPasswordRecovery(false);
       setIsAuthLoading(false);
       return;
     }
@@ -136,11 +170,44 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      setSession(data.session ?? null);
+      const nextSession = data.session ?? null;
+      const storedRecoveryUserId = readPasswordRecoveryUserId();
+      const shouldResumeRecovery = Boolean(nextSession) && (
+        recoveryFromUrlRef.current || storedRecoveryUserId === nextSession?.user.id
+      );
+
+      if (shouldResumeRecovery && nextSession) {
+        storePasswordRecoveryUserId(nextSession.user.id);
+        setIsPasswordRecovery(true);
+      } else {
+        clearPasswordRecoveryMarker();
+        setIsPasswordRecovery(false);
+      }
+
+      setSession(nextSession);
       setIsAuthLoading(false);
     });
 
-    const { data } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+    const { data } = supabase.auth.onAuthStateChange((event, nextSession) => {
+      if (event === 'PASSWORD_RECOVERY' && nextSession) {
+        recoveryFromUrlRef.current = true;
+        storePasswordRecoveryUserId(nextSession.user.id);
+        setIsPasswordRecovery(true);
+      } else if (event === 'SIGNED_OUT' || !nextSession) {
+        recoveryFromUrlRef.current = false;
+        clearPasswordRecoveryMarker();
+        setIsPasswordRecovery(false);
+      } else {
+        const storedRecoveryUserId = readPasswordRecoveryUserId();
+        if (storedRecoveryUserId && storedRecoveryUserId !== nextSession.user.id) {
+          recoveryFromUrlRef.current = false;
+          clearPasswordRecoveryMarker();
+          setIsPasswordRecovery(false);
+        } else if (storedRecoveryUserId === nextSession.user.id) {
+          setIsPasswordRecovery(true);
+        }
+      }
+
       setSession(nextSession);
       setIsCodeSent(false);
       setAuthError(null);
@@ -155,7 +222,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (!session) {
+    if (!session || isPasswordRecovery) {
       setProfile(null);
       setPendingInvitations([]);
       return;
@@ -196,12 +263,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isSubscribed = false;
       void client.removeChannel(channel);
     };
-  }, [refreshAuthData, session]);
+  }, [isPasswordRecovery, refreshAuthData, session]);
 
   const contextValue = useMemo<AuthContextType>(() => ({
     isConfigured,
     requiresAuth,
     isAuthLoading,
+    isPasswordRecovery,
     isCodeSent,
     session,
     userEmail: session?.user.email ?? null,
@@ -324,17 +392,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setAuthError(null);
       setAuthNotice('Email đặt lại mật khẩu đã được gửi. Hãy mở liên kết để quay lại ứng dụng và đặt mật khẩu mới.');
     },
+    cancelPasswordRecovery: async () => {
+      if (!supabase) {
+        clearPasswordRecoveryMarker();
+        setIsPasswordRecovery(false);
+        return;
+      }
+
+      const { error } = await supabase.auth.signOut({ scope: 'local' });
+      if (error) {
+        setAuthError('Không thể hủy phiên khôi phục mật khẩu.');
+        throw error;
+      }
+
+      recoveryFromUrlRef.current = false;
+      clearPasswordRecoveryMarker();
+      setIsPasswordRecovery(false);
+      setSession(null);
+      setProfile(null);
+      setPendingInvitations([]);
+      setAuthError(null);
+      setAuthNotice(null);
+    },
     signOut: async () => {
       if (!supabase) {
         return;
       }
 
-      const { error } = await supabase.auth.signOut();
+      const { error } = await supabase.auth.signOut({ scope: 'global' });
       if (error) {
         setAuthError('Không thể đăng xuất tài khoản.');
         throw error;
       }
 
+      recoveryFromUrlRef.current = false;
+      clearPasswordRecoveryMarker();
+      setIsPasswordRecovery(false);
       setSession(null);
       setProfile(null);
       setPendingInvitations([]);
@@ -429,7 +522,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await refreshAuthData();
     },
     refreshAuthData,
-  }), [authError, authNotice, clearAuthFeedback, isAuthLoading, isCodeSent, isConfigured, pendingInvitations, profile, refreshAuthData, requiresAuth, session]);
+  }), [authError, authNotice, clearAuthFeedback, isAuthLoading, isCodeSent, isConfigured, isPasswordRecovery, pendingInvitations, profile, refreshAuthData, requiresAuth, session]);
 
   return (
     <AuthContext.Provider value={contextValue}>

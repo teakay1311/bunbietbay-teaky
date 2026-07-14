@@ -184,7 +184,8 @@ function getNotificationPermission(): NotificationPermission | 'unsupported' {
 }
 
 export function SettingsProvider({ children }: { children: ReactNode }) {
-  const { session } = useAuth();
+  const { session: authSession, isPasswordRecovery } = useAuth();
+  const session = isPasswordRecovery ? null : authSession;
   const [themeMode, setThemeMode] = useState<ThemeMode>(() => localStorage.getItem('themeMode') as ThemeMode || 'system');
   const [themePresetId, setThemePresetId] = useState(() => localStorage.getItem('themePresetId') || THEME_PRESETS[0].id);
   const [language, setLanguage] = useState<Language>('vi');

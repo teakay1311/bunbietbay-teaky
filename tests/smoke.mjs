@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { setTimeout as delay } from 'node:timers/promises';
 import process from 'node:process';
@@ -6,6 +7,39 @@ import { chromium } from 'playwright';
 
 const host = '127.0.0.1';
 let baseUrl = process.env.SMOKE_BASE_URL ?? '';
+
+function getSupabaseUrl() {
+  if (process.env.VITE_SUPABASE_URL) return process.env.VITE_SUPABASE_URL;
+  try {
+    const env = readFileSync(new URL('../.env', import.meta.url), 'utf8');
+    return env.match(/^VITE_SUPABASE_URL=(.+)$/m)?.[1]?.trim().replace(/^['"]|['"]$/g, '') ?? '';
+  } catch {
+    return '';
+  }
+}
+
+function createSmokeRecoverySession() {
+  const now = Math.floor(Date.now() / 1000);
+  const encode = (value) => Buffer.from(JSON.stringify(value)).toString('base64url');
+  const accessToken = `${encode({ alg: 'HS256', typ: 'JWT' })}.${encode({ aud: 'authenticated', exp: now + 3600, role: 'authenticated', sub: 'recovery-user', email: 'recovery@example.com' })}.smoke`;
+  return {
+    access_token: accessToken,
+    refresh_token: 'smoke-recovery-refresh-token',
+    token_type: 'bearer',
+    expires_in: 3600,
+    expires_at: now + 3600,
+    user: {
+      id: 'recovery-user',
+      aud: 'authenticated',
+      role: 'authenticated',
+      email: 'recovery@example.com',
+      app_metadata: { provider: 'email', providers: ['email'] },
+      user_metadata: {},
+      identities: [],
+      created_at: new Date().toISOString(),
+    },
+  };
+}
 
 async function getFreePort() {
   return new Promise((resolve, reject) => {
@@ -92,6 +126,64 @@ async function runSmoke() {
   await page.goto(`${baseUrl}/auth/callback#error_description=Link%20expired`, { waitUntil: 'networkidle' });
   await page.getByRole('heading', { name: 'Liên kết không còn hiệu lực' }).waitFor();
   await page.getByText('Link expired', { exact: true }).waitFor();
+
+  const supabaseUrl = getSupabaseUrl();
+  if (supabaseUrl) {
+    const projectRef = new URL(supabaseUrl).hostname.split('.')[0];
+    const recoveryContext = await browser.newContext();
+    await recoveryContext.addInitScript(({ storageKey, session }) => {
+      localStorage.setItem(storageKey, JSON.stringify(session));
+      localStorage.setItem('bunbietbay-password-recovery-user-id', session.user.id);
+    }, { storageKey: `sb-${projectRef}-auth-token`, session: createSmokeRecoverySession() });
+    const recoveryPage = await recoveryContext.newPage();
+    await recoveryPage.goto(`${baseUrl}/trips`, { waitUntil: 'networkidle' });
+    await recoveryPage.waitForURL('**/reset-password');
+    await recoveryPage.getByLabel('Mật khẩu mới', { exact: true }).waitFor();
+    await recoveryPage.goto(`${baseUrl}/photos`, { waitUntil: 'networkidle' });
+    await recoveryPage.waitForURL('**/reset-password');
+    await recoveryPage.reload({ waitUntil: 'networkidle' });
+    await recoveryPage.getByLabel('Mật khẩu mới', { exact: true }).fill('123456');
+    await recoveryPage.getByLabel('Xác nhận mật khẩu', { exact: true }).fill('654321');
+    await recoveryPage.getByRole('button', { name: 'Lưu mật khẩu mới' }).click();
+    await recoveryPage.getByText('Xác nhận mật khẩu chưa khớp.', { exact: true }).waitFor();
+    await recoveryPage.getByRole('button', { name: 'Hủy khôi phục' }).click();
+    await recoveryPage.waitForURL('**/login');
+    await recoveryContext.close();
+
+    const completionContext = await browser.newContext();
+    const completionSession = createSmokeRecoverySession();
+    await completionContext.addInitScript(({ storageKey, session }) => {
+      localStorage.setItem(storageKey, JSON.stringify(session));
+      localStorage.setItem('bunbietbay-password-recovery-user-id', session.user.id);
+    }, { storageKey: `sb-${projectRef}-auth-token`, session: completionSession });
+    const completionPage = await completionContext.newPage();
+    let updateAttempts = 0;
+    let logoutAttempts = 0;
+    await completionPage.route('**/auth/v1/user', (route) => {
+      updateAttempts += 1;
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ user: completionSession.user }) });
+    });
+    await completionPage.route('**/auth/v1/logout?scope=global', (route) => {
+      logoutAttempts += 1;
+      return logoutAttempts === 1
+        ? route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ message: 'smoke logout failure' }) })
+        : route.fulfill({ status: 204, body: '' });
+    });
+    await completionPage.goto(`${baseUrl}/`, { waitUntil: 'networkidle' });
+    await completionPage.waitForURL('**/reset-password');
+    await completionPage.getByLabel('Mật khẩu mới', { exact: true }).fill('123456');
+    await completionPage.getByLabel('Xác nhận mật khẩu', { exact: true }).fill('123456');
+    await completionPage.getByRole('button', { name: 'Lưu mật khẩu mới' }).click();
+    await completionPage.getByRole('button', { name: 'Thử đăng xuất lại' }).waitFor();
+    await completionPage.getByRole('button', { name: 'Thử đăng xuất lại' }).click();
+    await completionPage.getByRole('link', { name: 'Đăng nhập bằng mật khẩu mới' }).waitFor();
+    if (updateAttempts !== 1) throw new Error('Thử lại đăng xuất đã cập nhật mật khẩu thêm lần nữa.');
+    if (logoutAttempts !== 2) throw new Error('Luồng recovery không thử lại đúng thao tác đăng xuất global.');
+    const recoveryMarker = await completionPage.evaluate(() => localStorage.getItem('bunbietbay-password-recovery-user-id'));
+    if (recoveryMarker !== null) throw new Error('Recovery marker chưa được xóa sau khi đăng xuất thành công.');
+    await completionContext.close();
+  }
+
   await page.goto(`${baseUrl}/trips`, { waitUntil: 'networkidle' });
 
   await page.getByRole('link', { name: 'Mở chuyến đi Mùa Thu Tại Đà Lạt' }).click();

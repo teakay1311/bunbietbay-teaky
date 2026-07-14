@@ -40,7 +40,8 @@ type NotebookActions = Omit<NotebookContextType, 'notebooks' | 'notebookMembers'
 const NotebookContext = createContext<NotebookContextType | undefined>(undefined);
 
 export function NotebookProvider({ children }: { children: React.ReactNode }) {
-    const { session, userEmail, profile } = useAuth();
+    const { session: authSession, userEmail, profile, isPasswordRecovery } = useAuth();
+    const session = isPasswordRecovery ? null : authSession;
     const [notebooks, setNotebooks] = useState<CalculatedNotebook[]>([]);
     const [notebookMembers, setNotebookMembers] = useState<NotebookMember[]>([]);
     const [notebookPlaces, setNotebookPlaces] = useState<NotebookPlace[]>([]);

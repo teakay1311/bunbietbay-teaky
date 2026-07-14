@@ -240,6 +240,21 @@ function AppRoutes() {
   );
 }
 
+function PasswordRecoveryGate() {
+  const { isAuthLoading, isPasswordRecovery } = useAuth();
+  const location = useLocation();
+
+  if (isAuthLoading) {
+    return <BootLoadingFallback />;
+  }
+
+  if (isPasswordRecovery && location.pathname !== '/reset-password') {
+    return <Navigate to="/reset-password" replace />;
+  }
+
+  return <AppRoutes />;
+}
+
 function GlobalExperienceEffects() {
   useKeyboardShortcuts();
   useTripReminders();
@@ -281,7 +296,7 @@ function AppShell() {
 
   return (
     <Router>
-      <AppRoutes />
+      <PasswordRecoveryGate />
     </Router>
   );
 }
